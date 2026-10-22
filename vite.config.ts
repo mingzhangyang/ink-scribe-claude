@@ -47,25 +47,27 @@ function pdfjsCmaps(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   // `vite --mode mock`：不连接 Cloudflare 远程绑定，Worker 使用本地启发式整理器与示例插图（AI_MOCK），
   // 便于在没有 Cloudflare 账号或离线时开发和测试界面。切勿用该模式构建生产产物。
   const mockAi = mode === "mock";
+  // 本地开发与 mock 构建中的分享链接应指向本机，而不是线上域名
+  const localLinks = command === "serve" || mockAi;
   return {
     plugins: [
       stripWoffFallback(),
       pdfjsCmaps(),
       react(),
-      cloudflare(
-        mockAi
-          ? {
-              remoteBindings: false,
-              config: (config) => ({
-                vars: { ...config.vars, AI_MOCK: "true", DOODLE_API_ENABLED: "true", THUMBNAILS_ENABLED: "false" },
-              }),
-            }
-          : {},
-      ),
+      cloudflare({
+        ...(mockAi ? { remoteBindings: false } : {}),
+        config: (config) => ({
+          vars: {
+            ...config.vars,
+            ...(localLinks ? { PUBLIC_BASE_URL: "" } : {}),
+            ...(mockAi ? { AI_MOCK: "true", DOODLE_API_ENABLED: "true" } : {}),
+          },
+        }),
+      }),
     ],
     build: {
       // 中文手写字体按 unicode-range 切片，单个分片通常小于 100KB，无需内联
