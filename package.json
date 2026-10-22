@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "墨语笔记 · InkScribe — AI 手写笔记工作室（Cloudflare Workers + Workers AI）",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "dev:mock": "vite --mode mock",
@@ -13,7 +16,6 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "cf-typegen": "wrangler types --env-interface Env worker/worker-configuration.d.ts",
     "eval:models": "node --experimental-strip-types scripts/eval-models.ts"
   },
   "dependencies": {

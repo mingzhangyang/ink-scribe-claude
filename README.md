@@ -1,0 +1,118 @@
+# 墨语笔记 · InkScribe
+
+把粘贴的散乱文本或文章，通过 AI 重构为具有手写质感、主次分明的**单页手写笔记**：康奈尔结构 + 手账美学，支持中英文手写字体、多种纸张纹理、荧光笔重点、手绘插图与贴纸，并可导出高清图片或复制到剪贴板。
+
+- **前端**：Vite + React + TypeScript，纯客户端排版、贴纸编辑与图片导出
+- **服务端**：Cloudflare Worker（同时托管静态资源与 `/api/*`），不依赖 Node.js / Express 常驻服务
+- **AI**：只通过 Cloudflare Workers AI binding 调用，模型 ID 与调用参数全部配置化
+
+## 功能
+
+| 模块 | 说明 |
+| --- | --- |
+| 输入 | 中英文文本，模板：通用整理 / 读书摘抄 / 会议纪要 / 课程总结 / 思想碎片；输出语言（跟随原文 / 中文 / English）；详略（精简 / 标准 / 详细） |
+| AI 整理 | `POST /api/structure` 返回经过校验的 `NoteStructure`（标题、线索、段落、重点词、总结、插图建议） |
+| 版式 | 混合康奈尔手账（默认）、经典康奈尔、自由手账、简约手札 |
+| 纸张 | 方格纸、横线本、点阵纸、象牙白纸、纹理纸、牛皮纸、复古羊皮纸；页面 A4 / 3:4 / 1:1 / 长图 |
+| 字体与墨水 | 5 款中文手写字体 + 4 款英文手写字体（均为 OFL），字号 / 行距 / 字距；碳素黑、钢笔蓝、复古棕、黛绿、波尔多红；三种荧光笔色 |
+| 自然手写感 | 逐字基线浮动、墨色深浅、段落微旋转，幅度可调且可复现（同一笔记预览与导出一致）；“换一种笔迹” |
+| 插图与贴纸 | 20 个内置手绘插图（受控 SVG 生成器绘制）；和纸胶带、便利贴、回形针、星星、咖啡渍；拖拽、缩放、旋转、删除、层级调整、键盘微调 |
+| AI 插图（可选） | `POST /api/doodle` 只返回受限图元规格（线、箭头、圆、矩形、折线），经校验后由本地生成器绘制，默认关闭 |
+| 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
+| 溢出处理 | 自动检测文字超出页面，一键缩小字号或切换为长图 |
+| 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
+| 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
+
+## 快速开始
+
+需要 Node.js 22+。
+
+```bash
+npm install
+
+# 无需 Cloudflare 账号：Worker 使用本地启发式整理器和示例插图（AI_MOCK）
+npm run dev:mock
+
+# 连接真实 Workers AI（需要先 `npx wrangler login`，AI binding 始终在远端执行并计费）
+npm run dev
+```
+
+打开终端输出的地址（默认 <http://localhost:5173>）。
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run dev` / `npm run dev:mock` | 本地开发（Vite + Cloudflare Vite 插件，在 workerd 中运行 Worker） |
+| `npm run build` | 构建前端静态资源（`dist/client`）与 Worker（`dist/ink_scribe`） |
+| `npm run preview` | 构建后在本地 workerd 中预览生产产物 |
+| `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
+| `npm run typecheck` | TypeScript 项目引用全量类型检查 |
+| `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
+| `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
+
+> ⚠️ 不要用 `vite build --mode mock` 构建要部署的产物：mock 模式会把 `AI_MOCK=true` 写入生成的 Worker 配置。
+
+## 架构
+
+```text
+Browser ── 输入 / 画布 / 样式 / 贴纸 / 导出（客户端完成排版与图片渲染）
+   │ HTTPS JSON（同源）
+   ▼
+Cloudflare Worker ── 静态资源 + SPA 回退；/api/structure、/api/doodle、/api/config
+   │  校验 · 来源检查 · 限流 · 超时 · 修复重试 · 只记录元数据的日志与指标
+   ▼ AI binding
+Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
+```
+
+```text
+shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、选项枚举、本地整理器
+worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志
+src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
+scripts/     模型评测脚本与评测集
+tests/       Vitest 单元测试
+docs/        API、部署、模型评测、字体与导出说明
+```
+
+## 配置
+
+所有配置都在 [`wrangler.jsonc`](wrangler.jsonc) 的 `vars` 中（字符串），修改模型无需改代码：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `AI_MODEL` | `@cf/qwen/qwen3-30b-a3b-fp8` | 结构化整理使用的模型（暂定默认，需按评测结果确认） |
+| `AI_DOODLE_MODEL` | 同 `AI_MODEL` | AI 插图使用的模型 |
+| `AI_API_STYLE` | 按模型 | `messages`（Chat 风格）或 `responses`（OpenAI Responses 风格） |
+| `AI_RESPONSE_FORMAT` | 按模型 | `json_schema` / `openai_json_schema` / `json_object` / `none` |
+| `AI_EXTRA_PARAMS` | 按模型 | 合并进模型输入的 JSON，例如 `{"reasoning_effort":"low"}` |
+| `AI_TEMPERATURE` | `0.3` | 采样温度 |
+| `AI_MAX_OUTPUT_TOKENS` | `2048` | 输出 token 上限（插图接口最多 1200） |
+| `AI_TIMEOUT_MS` | `45000` | 单次模型调用超时 |
+| `AI_MAX_RETRIES` | `1` | 输出不合规或上游繁忙时的修复/重试次数（仅在前一半时间预算内重试） |
+| `AI_GATEWAY_ID` | 空 | 可选，经 AI Gateway 调用（默认关闭网关正文日志） |
+| `MAX_INPUT_CHARS` | `12000` | 原文最大字数 |
+| `MAX_BODY_BYTES` | `65536` | 请求体字节上限（流式读取时强制执行） |
+| `RATE_LIMIT_PER_MINUTE` | `12` | 未配置 Rate Limiting 绑定时的单实例内存限流阈值 |
+| `DOODLE_API_ENABLED` | `false` | 是否启用 `/api/doodle` |
+| `DOODLE_CACHE_TTL_SECONDS` | `86400` | AI 插图缓存时长（只缓存校验后的图元，缓存键为哈希） |
+| `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
+
+“按模型”的默认值来自 [`worker/config.ts`](worker/config.ts) 中的 `MODEL_PROFILES`，覆盖了 Qwen、Llama、Mistral、Gemma、GLM、DeepSeek、gpt-oss 等候选模型的调用约定。
+
+## 安全与隐私
+
+- 浏览器从不直接调用模型，也不接触任何凭据。
+- 原文只用于本次请求：服务端不持久化，日志与 Analytics Engine 指标只记录长度、耗时、token 数、错误码等元数据（有单元测试保证日志不含原文）。
+- 模型输出经过严格规范化：只保留契约字段、清理 HTML/控制字符、限制长度与数量，重点词必须逐字出现在正文中。
+- 插图只接受受限图元规格；SVG 由本地生成器以 React 元素渲染，不使用 `innerHTML`，不允许脚本、事件处理器、外部资源或 URL。
+- AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
+- 本机只保存外观偏好（localStorage），不保存原文与笔记。
+
+## 文档
+
+- [API 与数据契约](docs/api.md)
+- [部署与运维](docs/deployment.md)
+- [Workers AI 模型选择与评测](docs/model-evaluation.md)
+- [字体、导出与浏览器兼容](docs/fonts-and-export.md)
+
+## 许可证说明
+
+手写字体均使用 SIL Open Font License 1.1（霞鹜文楷屏幕阅读版、龙藏体、马善政楷书、站酷快乐体、志莽行书、Kalam、Caveat、Patrick Hand、Indie Flower），随静态资源一起分发，详见 [docs/fonts-and-export.md](docs/fonts-and-export.md)。

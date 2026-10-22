@@ -1,0 +1,5 @@
+{
+  "_comment": "单位：美元 / 百万 token。请以 Cloudflare Workers AI 定价页的当前价格替换示例数值后使用。",
+  "@cf/qwen/qwen3-30b-a3b-fp8": { "input": 0, "output": 0 },
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { "input": 0, "output": 0 }
+}
