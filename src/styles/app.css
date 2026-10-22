@@ -76,16 +76,10 @@ textarea {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  background: var(--paper-ui);
-  color: #1e3a8a;
-  font-family: "LXGW WenKai Screen", serif;
-  font-size: 24px;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08);
+  flex: none;
 }
 
 .brand h1 {
@@ -1138,4 +1132,38 @@ a.brand {
 .gallery-loading,
 .gallery-more {
   align-self: center;
+}
+
+/* 服务端写在 #root 中的正文（给搜索引擎与 AI 爬虫），脚本加载后由 React 替换 */
+.ssr {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  line-height: 1.7;
+}
+
+.ssr h1 {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+
+.ssr h2 {
+  font-size: 18px;
+  margin: 24px 0 8px;
+}
+
+.ssr a {
+  color: var(--gold);
+}
+
+.ssr-lead,
+.ssr-meta,
+.ssr dd,
+.ssr-list p,
+.ssr-list small {
+  color: var(--muted);
+}
+
+.ssr-list {
+  padding-left: 1.2em;
 }

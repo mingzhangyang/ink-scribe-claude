@@ -18,7 +18,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route.name === "editor") document.title = "墨语笔记 · InkScribe";
+    if (route.name === "editor") document.title = "墨语笔记 InkScribe · 把文字变成一页手写笔记";
   }, [route.name]);
 
   useEffect(() => {
@@ -31,9 +31,7 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <a className="brand" {...linkProps("/")}>
-          <span className="brand-mark" aria-hidden="true">
-            墨
-          </span>
+          <img className="brand-mark" src="/logo.svg" alt="" width={38} height={38} />
           <div>
             <h1>墨语笔记</h1>
             <p>InkScribe · 把文字变成一页手写笔记</p>

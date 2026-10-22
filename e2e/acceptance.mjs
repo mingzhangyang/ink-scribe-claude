@@ -488,6 +488,7 @@ if (process.env.E2E_API_KEY) {
 
   const html = await (await p7.request.get(note.url)).text();
   check("V3", "分享链接的 HTML 带有标题与 Open Graph 信息", html.includes(`<title>${title} · 墨语笔记</title>`) && html.includes(`og:title" content="${title}"`));
+  check("V3b", "分享链接的 HTML 直接包含笔记正文与 Article 结构化数据", html.includes(`<h1>${title}</h1>`) && html.includes("<li>列表项</li>") && html.includes('"@type":"Article"') && html.includes(`<link rel="canonical" href="${note.url}"`));
 
   await p7.goto(note.url, { waitUntil: "networkidle" });
   await p7.waitForSelector(".note-page");
@@ -531,6 +532,45 @@ if (process.env.E2E_API_KEY) {
   check("V9", "删除后链接显示“不存在”", removed.status() === 204 && goneText.includes("不存在"), `DELETE ${removed.status()}；${goneText}`);
   check("V10", "发布与查看流程无脚本错误", p7.errors.length === 0, p7.errors.join("; "));
   await c7.close();
+}
+
+// ---------- S. SEO 与 GEO ----------
+{
+  const { page: p8, context: c8 } = await newPage();
+  const home = await (await p8.request.get(URL)).text();
+  check(
+    "S1",
+    "首页 HTML 带有 canonical、OG 图、JSON-LD 与可读正文",
+    home.includes(`<link rel="canonical" href="${URL}"`) && home.includes(`og:image" content="${URL}og-image.jpg"`) && home.includes('"@type":"WebApplication"') && home.includes('"@type":"FAQPage"') && /<div id="root"><main class="ssr">\s*<h1>/.test(home),
+  );
+  await p8.goto(URL, { waitUntil: "networkidle" });
+  const hydrated = await p8.evaluate(() => ({ ssr: document.querySelectorAll(".ssr").length, app: document.querySelectorAll(".input-panel").length }));
+  check("S2", "脚本加载后由应用替换服务端正文", hydrated.ssr === 0 && hydrated.app === 1, JSON.stringify(hydrated));
+
+  const gallery = await (await p8.request.get(`${URL}gallery`)).text();
+  check("S3", "图库 HTML 带有标题、canonical 与 CollectionPage", gallery.includes("<title>图库 · 墨语笔记 InkScribe</title>") && gallery.includes(`<link rel="canonical" href="${URL}gallery"`) && gallery.includes('"@type":"CollectionPage"'));
+
+  const robots = await p8.request.get(`${URL}robots.txt`);
+  const sitemap = await p8.request.get(`${URL}sitemap.xml`);
+  const sitemapText = await sitemap.text();
+  check(
+    "S4",
+    "robots.txt 指向站点地图，sitemap.xml 可解析",
+    (await robots.text()).includes(`Sitemap: ${URL}sitemap.xml`) && sitemap.headers()["content-type"]?.includes("xml") && sitemapText.includes(`<loc>${URL}gallery</loc>`),
+  );
+
+  const assets = {};
+  for (const [file, type] of [["favicon.ico", "image/"], ["favicon.svg", "image/svg+xml"], ["logo.svg", "image/svg+xml"], ["apple-touch-icon.png", "image/png"], ["icon-512.png", "image/png"], ["og-image.jpg", "image/jpeg"], ["site.webmanifest", ""]]) {
+    const res = await p8.request.get(`${URL}${file}`);
+    assets[file] = res.ok() && (res.headers()["content-type"] ?? "").startsWith(type) ? "ok" : `${res.status()} ${res.headers()["content-type"]}`;
+  }
+  const manifest = await (await p8.request.get(`${URL}site.webmanifest`)).json().catch(() => ({}));
+  check("S5", "图标、OG 图与 Web App Manifest 可访问", Object.values(assets).every((v) => v === "ok") && manifest.icons?.length === 3, JSON.stringify(assets));
+
+  const llms = await (await p8.request.get(`${URL}llms.txt`)).text();
+  check("S6", "llms.txt 介绍产品、页面与 API", llms.includes("## 页面") && llms.includes("/api/v1/notes"));
+  check("S7", "SEO 页面无脚本错误", p8.errors.length === 0, p8.errors.join("; "));
+  await c8.close();
 }
 
 // ---------- Q. 移动端 ----------

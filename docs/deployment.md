@@ -1,6 +1,6 @@
 # 部署与运维
 
-前端静态资源与 API 一起部署为**一个** Cloudflare Worker：Vite 构建 `dist/client`（静态资源），Cloudflare Vite 插件同时构建 Worker（`dist/ink_scribe`，含生成的 `wrangler.json`）。`/api/*` 请求先交给 Worker（`run_worker_first`），其余路径由 Workers Static Assets 直接返回，未命中时回退到 `index.html`（SPA）。
+前端静态资源与 API 一起部署为**一个** Cloudflare Worker：Vite 构建 `dist/client`（静态资源），Cloudflare Vite 插件同时构建 Worker（`dist/ink_scribe`，含生成的 `wrangler.json`）。`/api/*`、需要注入 SEO 信息的页面（`/`、`/gallery`、`/n/*`）以及 `/llms.txt`、`/robots.txt`、`/sitemap.xml` 先交给 Worker（`run_worker_first`），其余路径由 Workers Static Assets 直接返回，未命中时回退到 `index.html`（SPA）。
 
 ## 前置条件
 
@@ -85,6 +85,7 @@ GROUP BY model
 - [ ] 创建 D1 并执行 `npm run db:migrate:remote`；确认 `https://ink-scribe.orangely.xyz` 可访问；用 `npm run keys -- create --remote` 发放密钥，按 [publishing.md](publishing.md) 发布一条测试笔记，确认链接可打开、出现在图库
 - [ ] 根据预算决定是否开启 `DOODLE_API_ENABLED`、`METRICS` 与 AI Gateway
 - [ ] 在 Chrome、Safari、Firefox 上各导出一次 PNG/JPG 并测试“复制到剪贴板”
+- [ ] 在 Google Search Console、Bing Webmaster Tools 提交 `sitemap.xml`，检查结构化数据与链接预览，见 [seo.md](seo.md)
 
 ## 故障排查
 

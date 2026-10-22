@@ -178,6 +178,15 @@ export async function listNotes(
   return { rows, nextCursor: results.length > limit ? encodeCursor(rows[rows.length - 1]) : null };
 }
 
+/** 站点地图用：最近的公开笔记 id 与更新时间。 */
+export async function listPublicNoteDates(db: D1Database, limit: number): Promise<Array<{ id: string; updatedAt: string }>> {
+  const { results } = await db
+    .prepare("SELECT id, updated_at FROM notes WHERE visibility = 'public' ORDER BY created_at DESC, id DESC LIMIT ?")
+    .bind(limit)
+    .all<{ id: string; updated_at: number }>();
+  return results.map((row) => ({ id: row.id, updatedAt: iso(row.updated_at) }));
+}
+
 // ---------- 幂等 ----------
 
 export async function findIdempotent(db: D1Database, apiKeyId: string, key: string): Promise<{ noteId: string; requestHash: string } | null> {

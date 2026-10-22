@@ -53,7 +53,7 @@ export function GalleryPage() {
   }
 
   useEffect(() => {
-    document.title = "图库 · 墨语笔记";
+    document.title = "图库 · 墨语笔记 InkScribe";
     // 筛选条件变化时重新加载第一页
     void load(true);
   }, [template, language]);

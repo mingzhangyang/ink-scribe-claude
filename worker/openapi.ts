@@ -1,3 +1,4 @@
+import type { PublishedNoteSummary } from "../shared/api.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS } from "../shared/appearance.ts";
 import { DETAILS, LANGUAGES, STYLES, TEMPLATES } from "../shared/options.ts";
@@ -183,10 +184,21 @@ export const OPENAPI_SPEC = {
   },
 } as const;
 
-export function llmsTxt(origin: string): string {
+export function llmsTxt(origin: string, recent: PublishedNoteSummary[] = []): string {
+  const notes = recent.length
+    ? `\n## 最近的公开笔记\n\n${recent.map((note) => `- [${note.title.replace(/[[\]]/g, "")}](${note.url})：${note.summary.replace(/\s+/g, " ")}`).join("\n")}\n`
+    : "";
   return `# 墨语笔记 InkScribe
 
 > 把文字整理为手写风格的单页笔记（康奈尔结构 + 手账排版），返回可以直接发给用户查看的链接。
+
+墨语笔记是一个在线工具（${origin}）：用户粘贴文字或上传 TXT、Markdown、HTML、DOCX、PDF 文件，Workers AI 把内容整理为标题、线索关键词、分节要点与总结，再以手写字体排版在纸张上，可添加贴纸与插图，并导出 1x/2x/3x 的 PNG/JPG 图片。无需注册；原文不会被保存，服务端日志只记录元数据。
+
+## 页面
+
+- [编辑器](${origin}/)：粘贴文字、整理、排版与导出
+- [图库](${origin}/gallery)：公开的笔记
+- 笔记查看页：\`${origin}/n/<id>\`，HTML 中包含笔记全文（标题、线索、分节与总结）
 
 ## 给 AI agent 的用法
 
@@ -212,5 +224,6 @@ curl -X POST ${origin}/api/v1/notes \\
 
 - [OpenAPI 规范](${origin}/api/v1/openapi.json)
 - [图库](${origin}/gallery)
-`;
+- [站点地图](${origin}/sitemap.xml)
+${notes}`;
 }

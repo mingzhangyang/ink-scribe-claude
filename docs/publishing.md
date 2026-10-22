@@ -15,7 +15,7 @@ npm run deploy
 npm run keys -- create --name "我的发布脚本" --remote   # 密钥只显示一次
 ```
 
-- 不生成预览图：图库以标题与摘要的文字卡片展示，链接预览显示标题与摘要；查看页可在浏览器中下载高清图片。
+- 不为每条笔记生成预览图：图库以标题与摘要的文字卡片展示，链接预览显示标题、摘要与统一的站点分享图；查看页可在浏览器中下载高清图片。
 - 返回的链接使用 `PUBLIC_BASE_URL`（默认 `https://ink-scribe.orangely.xyz`）；更换域名时同时修改它与 `wrangler.jsonc` 中的 `routes`。本地开发与 mock 构建中该值会被清空，链接指向本机。
 - 本地开发：`npm run db:migrate` 创建本地表，`npm run keys -- create --name 本地` 生成本地密钥。
 
@@ -77,7 +77,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 - 密钥放在环境变量（如 `INKSCRIBE_API_KEY`）中，不要回显；
 - 默认使用 `unlisted`，只有用户明确要求公开时才用 `public`；
 - 每次发布带上 `Idempotency-Key`（例如任务 ID），网络重试不会产生重复笔记；
-- 把返回的 `url` 发给用户。链接发到聊天工具里会显示标题和摘要（服务端注入的 Open Graph 信息）。
+- 把返回的 `url` 发给用户。链接发到聊天工具里会显示标题、摘要和站点分享图（服务端注入的 Open Graph 信息），页面 HTML 中也直接包含笔记全文，便于搜索引擎与 AI 读取（见 [seo.md](seo.md)）。
 
 ## 密钥管理
 

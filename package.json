@@ -20,7 +20,8 @@
     "test:e2e": "node e2e/run.mjs",
     "keys": "node --experimental-strip-types scripts/api-keys.ts",
     "db:migrate": "wrangler d1 migrations apply ink-scribe --local",
-    "db:migrate:remote": "wrangler d1 migrations apply ink-scribe --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply ink-scribe --remote",
+    "brand": "node scripts/brand/generate.mjs"
   },
   "dependencies": {
     "@fontsource/caveat": "^5.3.0",

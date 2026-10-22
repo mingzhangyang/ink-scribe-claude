@@ -24,6 +24,7 @@
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
 | 发布与分享 | 用 API 密钥调用 `POST /api/v1/notes`（传原文或已整理的结构），返回查看链接 `/n/<id>`；链接带标题与摘要的 Open Graph 信息。详见 [docs/publishing.md](docs/publishing.md) |
 | 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
+| SEO 与 GEO | 首页、图库与笔记查看页由 Worker 注入标题、canonical、Open Graph、JSON-LD 和可读正文；提供 `robots.txt`、`sitemap.xml` 与 `llms.txt`；标志、图标与 OG 图由代码生成（`npm run brand`）。详见 [docs/seo.md](docs/seo.md) |
 | 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
 
 ## 快速开始
@@ -64,7 +65,8 @@ Browser ── 输入 / 画布 / 样式 / 贴纸 / 导出（客户端完成排�
    │ HTTPS JSON（同源）
    ▼
 Cloudflare Worker ── 静态资源 + SPA 回退；/api/structure、/api/doodle、/api/config；
-   │                   发布接口 /api/v1/notes、查看页 /n/:id（注入 Open Graph）、图库 /api/gallery
+   │                   发布接口 /api/v1/notes、图库 /api/gallery；
+   │                   首页、图库与查看页 /n/:id 注入 SEO 信息与正文，robots.txt、sitemap.xml、llms.txt
    └── D1：已发布的笔记与 API 密钥（哈希）
    │  校验 · 来源检查 · 限流 · 超时 · 修复重试 · 只记录元数据的日志与指标
    ▼ AI binding
@@ -74,10 +76,10 @@ Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
 ```text
 shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、选项枚举、本地整理器
 worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志、
-             发布接口与存储（D1）、分享页元信息
+             发布接口与存储（D1）、页面 SEO 信息与站点地图
 migrations/  D1 数据库迁移
 src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
-scripts/     模型评测脚本与评测集
+scripts/     模型评测脚本与评测集、API 密钥管理、品牌资源生成（scripts/brand）
 tests/       Vitest 单元测试
 e2e/         Playwright 浏览器验收测试
 docs/        API、部署、模型评测、字体与导出说明
@@ -127,6 +129,7 @@ docs/        API、部署、模型评测、字体与导出说明
 - [API 与数据契约](docs/api.md)
 - [发布接口、查看页与图库](docs/publishing.md)
 - [部署与运维](docs/deployment.md)
+- [品牌资源、SEO 与 GEO](docs/seo.md)
 - [Workers AI 模型选择与评测](docs/model-evaluation.md)
 - [字体、导出与浏览器兼容](docs/fonts-and-export.md)
 
