@@ -39,6 +39,32 @@ export function errorResponse(error: AppError, requestId: string, extraHeaders: 
 }
 
 /** 只接受 JSON 请求体，并在读取过程中强制执行字节上限（不信任 Content-Length）。 */
+/**
+ * 在未读取请求体就返回（鉴权失败、限流、方法不允许等）时丢弃请求体。
+ * 留着没读的请求体会让本地预览（Vite 插件经 keep-alive 连接转发给 workerd）的下一个请求
+ * 偶发 “fetch failed”。最多读取 maxBytes，超出部分直接取消，不为过大的请求体付出额外开销。
+ */
+export async function discardUnreadBody(request: Request, maxBytes: number): Promise<void> {
+  if (!request.body || request.bodyUsed) return;
+  const reader = request.body.getReader();
+  try {
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return;
+      }
+    }
+  } catch {
+    // 客户端中途断开等情况：没有需要处理的内容
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function readJsonBody(request: Request, maxBytes: number): Promise<unknown> {
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!/^application\/json\b/i.test(contentType.trim())) {

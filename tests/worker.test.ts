@@ -313,6 +313,15 @@ describe("POST /api/doodle", () => {
 });
 
 describe("routing", () => {
+  it("drains request bodies it rejects without reading", async () => {
+    // 未读的请求体会让本地预览中复用的 keep-alive 连接出错（下一个请求 “fetch failed”）
+    const env = makeEnv(async () => ({}));
+    const request = post("/api/config", { unused: true });
+    const { response } = await call(request, env);
+    expect(response.status).toBe(405);
+    expect(request.bodyUsed).toBe(true);
+  });
+
   it("serves public config", async () => {
     const env = makeEnv(async () => ({}), { DOODLE_API_ENABLED: "true", MAX_INPUT_CHARS: "5000" });
     const { response, body } = await call(new Request("https://ink.example/api/config"), env);

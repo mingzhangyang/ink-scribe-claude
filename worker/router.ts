@@ -2,7 +2,7 @@ import type { PublicConfig } from "../shared/api.ts";
 import { upstreamErrorCode } from "./ai.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
 import type { Env } from "./env.ts";
-import { AppError, assertAllowedOrigin, errorResponse, jsonResponse } from "./http.ts";
+import { AppError, assertAllowedOrigin, discardUnreadBody, errorResponse, jsonResponse } from "./http.ts";
 import { logEvent, logRequest, recordMetrics, type RequestLog } from "./log.ts";
 import { OPENAPI_SPEC } from "./openapi.ts";
 import { enforceRateLimit } from "./rate-limit.ts";
@@ -167,7 +167,9 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
   }
   return finish(response, errorCode);
 
-  function finish(res: Response, code?: string): Response {
+  async function finish(res: Response, code?: string): Promise<Response> {
+    // 鉴权失败、限流等提前返回时请求体还没读，先丢弃（见 discardUnreadBody）
+    await discardUnreadBody(request, config.maxBodyBytes);
     const entry: RequestLog = {
       ...log,
       requestId,
