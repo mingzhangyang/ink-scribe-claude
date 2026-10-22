@@ -85,6 +85,8 @@ export const MAX_STICKERS = 40;
 export function normalizeStickers(input: unknown): StickerItem[] {
   if (!Array.isArray(input)) return [];
   const result: StickerItem[] = [];
+  // ID 用作 React key 与编辑操作的目标，重复时重新生成
+  const seen = new Set<string>();
   for (const raw of input.slice(0, MAX_STICKERS)) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const r = raw as Record<string, unknown>;
@@ -93,13 +95,14 @@ export function normalizeStickers(input: unknown): StickerItem[] {
     const num = (value: unknown, min: number, max: number, fallback: number) =>
       typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     const item: StickerItem = {
-      id: typeof r.id === "string" && /^[\w-]{1,40}$/.test(r.id) ? r.id : newStickerId(),
+      id: typeof r.id === "string" && /^[\w-]{1,40}$/.test(r.id) && !seen.has(r.id) ? r.id : newStickerId(),
       type,
       x: Math.round(num(r.x, -40, 880, 420)),
       y: Math.round(num(r.y, -40, 4000, 420)),
       rotation: Math.round(num(r.rotation, -180, 180, 0) * 10) / 10,
       scale: Math.round(num(r.scale, 0.3, 3, 1) * 100) / 100,
     };
+    seen.add(item.id);
     if (type === "custom-doodle") {
       if (typeof r.variant === "string" && isDoodleTheme(r.variant)) item.variant = r.variant;
       const doodle = normalizeDoodleSpec(r.doodle);

@@ -142,4 +142,6 @@
 | 504 | `AI_TIMEOUT` | 模型调用超时 |
 | 500 | `INTERNAL_ERROR` | 未预期的错误 |
 
+`ALLOWED_ORIGINS` 中的来源可以从浏览器跨源调用 `/api/structure` 与 `/api/doodle`：Worker 响应 `OPTIONS` 预检（允许 `POST` 与 `Content-Type` 头），并在所有响应（包括错误）中带上 `Access-Control-Allow-Origin` 与 `Vary: Origin`。同源请求不带 CORS 头；发布接口 `/api/v1/*` 面向服务端调用，不提供 CORS。
+
 前端额外使用 `NETWORK_ERROR`、`CLIENT_TIMEOUT`（120 秒）表示客户端侧错误，并在 AI 相关错误时提供“本地快速排版”兜底。

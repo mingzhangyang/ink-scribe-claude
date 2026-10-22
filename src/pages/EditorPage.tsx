@@ -29,13 +29,15 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
   }, []);
 
   async function requestMainDoodle() {
-    const { note, setAiDoodle } = useNoteStore.getState();
+    const { note, noteSerial } = useNoteStore.getState();
     const concept = (note?.doodlePrompt || note?.title || "").slice(0, 80);
     if (!concept) return;
     onToast("AI 正在绘制插图…");
     try {
       const result = await generateDoodle(concept);
-      setAiDoodle(result.doodle);
+      // 等待期间用户可能已生成或载入了另一条笔记，此时丢弃结果
+      if (useNoteStore.getState().noteSerial !== noteSerial) return;
+      useNoteStore.getState().setAiDoodle(result.doodle);
       onToast("插图已更新");
     } catch (error) {
       onToast(error instanceof ApiRequestError ? error.detail.message : "插图生成失败");

@@ -29,6 +29,8 @@ type State = {
   stickers: StickerItem[];
   selectedStickerId: string | null;
   aiDoodle: DoodleSpec | null;
+  /** 每次生成或载入一条新笔记时递增，用于丢弃针对旧笔记的异步结果（如 AI 插图）。 */
+  noteSerial: number;
 
   setInput: (patch: Partial<InputState>) => void;
   setSettings: (patch: Partial<Settings>) => void;
@@ -63,6 +65,7 @@ export const useNoteStore = create<State>()(
       stickers: [],
       selectedStickerId: null,
       aiDoodle: null,
+      noteSerial: 0,
 
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
@@ -76,21 +79,23 @@ export const useNoteStore = create<State>()(
           status: "idle",
           error: null,
           aiDoodle: null,
+          noteSerial: s.noteSerial + 1,
           selectedStickerId: null,
           settings: { ...s.settings, seed: Math.floor(Math.random() * 100_000) },
         })),
       loadShared: ({ note, settings, stickers, doodle }) =>
-        set({
+        set((s) => ({
           note,
           settings,
           stickers,
           aiDoodle: doodle,
+          noteSerial: s.noteSerial + 1,
           meta: null,
           source: "shared",
           status: "idle",
           error: null,
           selectedStickerId: null,
-        }),
+        })),
       setError: (error) => set({ status: "error", error }),
       clearError: () => set({ status: "idle", error: null }),
       updateNote: (updater) => set((s) => (s.note ? { note: updater(s.note) } : {})),

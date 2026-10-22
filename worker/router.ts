@@ -111,12 +111,30 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
   let response: Response;
   let errorCode: string | undefined;
   let routeName = url.pathname;
+  // ALLOWED_ORIGINS 中的跨源来源调用 AI 接口时，响应（含错误）需要带上 CORS 头
+  let corsOrigin: string | null = null;
 
   try {
     const route = ROUTES.find((r) => r.pattern.test(url.pathname));
     if (!route) throw new AppError(404, "NOT_FOUND", "接口不存在。");
     routeName = route.name;
     const params = (url.pathname.match(route.pattern)?.groups ?? {}) as Record<string, string>;
+    if (route.access === "ai") {
+      const requestOrigin = request.headers.get("Origin");
+      if (requestOrigin && requestOrigin !== url.origin && config.allowedOrigins.includes(requestOrigin)) corsOrigin = requestOrigin;
+      if (request.method === "OPTIONS") {
+        // CORS 预检：只对允许的来源返回 CORS 头，其他跨站来源返回 403
+        assertAllowedOrigin(request, config.allowedOrigins);
+        const allow = Object.keys(route.methods).join(", ");
+        const headers: Record<string, string> = { Allow: allow };
+        if (corsOrigin) {
+          headers["Access-Control-Allow-Methods"] = allow;
+          headers["Access-Control-Allow-Headers"] = "Content-Type";
+          headers["Access-Control-Max-Age"] = "86400";
+        }
+        return finish(new Response(null, { status: 204, headers }));
+      }
+    }
     const method = request.method === "HEAD" ? "GET" : (request.method as Method);
     const handler = route.methods[method];
     if (!handler) {
@@ -161,6 +179,11 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
     logRequest(entry);
     recordMetrics(env, entry);
     res.headers.set("X-Request-Id", requestId);
+    if (corsOrigin) {
+      res.headers.set("Access-Control-Allow-Origin", corsOrigin);
+      res.headers.set("Access-Control-Expose-Headers", "X-Request-Id");
+      res.headers.append("Vary", "Origin");
+    }
     return res;
   }
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { normalizeStickers } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
+import { effectiveScale } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
 import { parseContentLines, splitHighlights } from "../src/lib/segments.ts";
@@ -121,5 +123,28 @@ describe("sanitizeSettings", () => {
   it("keeps valid values and clamps numbers into range", () => {
     const settings = sanitizeSettings({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 99, naturalness: -1, seed: 42 });
     expect(settings).toMatchObject({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 28, naturalness: 0, seed: 42 });
+  });
+});
+
+describe("normalizeStickers", () => {
+  it("regenerates duplicate ids so each sticker can be edited on its own", () => {
+    const stickers = normalizeStickers([
+      { id: "dup", type: "star", x: 10, y: 10 },
+      { id: "dup", type: "star", x: 20, y: 20 },
+      { id: "other", type: "star", x: 30, y: 30 },
+    ]);
+    const ids = stickers.map((s) => s.id);
+    expect(ids[0]).toBe("dup");
+    expect(ids[2]).toBe("other");
+    expect(new Set(ids).size).toBe(3);
+  });
+});
+
+describe("effectiveScale", () => {
+  it("keeps exports within the canvas pixel budget, going below 1x when needed", () => {
+    expect(effectiveScale(840, 1188, 3)).toBe(3);
+    const tall = effectiveScale(840, 100_000, 2);
+    expect(tall).toBeLessThan(0.5);
+    expect(840 * tall * 100_000 * tall).toBeLessThanOrEqual(16_000_000);
   });
 });

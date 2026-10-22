@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, type CSSProperties } from "react";
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import { TEMPLATE_DEFAULT_THEME } from "../../../shared/themes.ts";
@@ -54,6 +54,27 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   const labels = useMemo(() => labelsFor(note), [note]);
   const doodle = useMemo(() => resolveDoodle(note, settings, aiDoodle), [note, settings, aiDoodle]);
   const Layout = LAYOUTS[settings.layout];
+  const minHeight = height ?? byId(PAGE_SIZES, "a4").height ?? 1188;
+
+  // 长图的高度随内容变化：测量实际高度，让贴纸的拖动范围覆盖整页
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(minHeight);
+  const setRefs = useCallback(
+    (element: HTMLDivElement | null) => {
+      setNode(element);
+      if (typeof ref === "function") ref(element);
+      else if (ref) ref.current = element;
+    },
+    [ref],
+  );
+  useLayoutEffect(() => {
+    if (!node || height) return;
+    const update = () => setMeasuredHeight(node.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node, height]);
 
   useEffect(() => {
     for (const family of usedFamilies(settings.zhFont, settings.enFont)) void loadFontCss(family);
@@ -62,7 +83,7 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   const style = {
     width: PAGE_WIDTH,
     height: height ?? undefined,
-    minHeight: height ?? byId(PAGE_SIZES, "a4").height,
+    minHeight,
     "--paper": paper.base,
     "--paper-line": paper.lineColor,
     "--ink": byId(INKS, settings.ink).color,
@@ -77,7 +98,7 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
 
   return (
     <div
-      ref={ref}
+      ref={setRefs}
       className={`note-page paper-${paper.id} layout-${settings.layout}${height ? "" : " is-long"}`}
       style={style}
       onPointerDown={(event) => {
@@ -90,7 +111,7 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
         selectedId={selectedStickerId}
         interactive={interactive}
         displayScale={displayScale}
-        pageHeight={height ?? 2400}
+        pageHeight={height ?? measuredHeight}
         naturalness={settings.naturalness}
         seed={settings.seed}
         onSelect={onSelectSticker}

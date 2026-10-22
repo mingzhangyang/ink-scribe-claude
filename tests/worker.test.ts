@@ -185,6 +185,38 @@ describe("POST /api/structure", () => {
     expect((await call(post("/api/structure", { text: SECRET_TEXT }, { Origin: "https://ink.example" }), env)).response.status).toBe(200);
   });
 
+  it("answers CORS preflights and adds CORS headers only for allowed origins", async () => {
+    const env = makeEnv(async () => ({ response: goodNote }), { ALLOWED_ORIGINS: "https://partner.example" });
+    const preflight = (origin: string) =>
+      handleApi(
+        new Request("https://ink.example/api/structure", {
+          method: "OPTIONS",
+          headers: { Origin: origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" },
+        }),
+        env,
+        noopWait,
+      );
+    const ok = await preflight("https://partner.example");
+    expect(ok.status).toBe(204);
+    expect(ok.headers.get("Access-Control-Allow-Origin")).toBe("https://partner.example");
+    expect(ok.headers.get("Access-Control-Allow-Methods")).toBe("POST");
+    expect(ok.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
+    const denied = await preflight("https://evil.example");
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("Access-Control-Allow-Origin")).toBeNull();
+
+    const { response } = await call(post("/api/structure", { text: SECRET_TEXT }, { Origin: "https://partner.example" }), env);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://partner.example");
+    expect(response.headers.get("Vary")).toContain("Origin");
+    // 错误响应同样带 CORS 头，浏览器才能读到错误信息
+    const invalid = await call(post("/api/structure", { text: "" }, { Origin: "https://partner.example" }), env);
+    expect(invalid.response.status).toBe(400);
+    expect(invalid.response.headers.get("Access-Control-Allow-Origin")).toBe("https://partner.example");
+    // 同源请求不需要 CORS 头
+    const same = await call(post("/api/structure", { text: SECRET_TEXT }, { Origin: "https://ink.example" }), env);
+    expect(same.response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
   it("rate limits per client", async () => {
     const env = makeEnv(async () => ({ response: goodNote }), { RATE_LIMIT_PER_MINUTE: "2" });
     expect((await call(post("/api/structure", { text: SECRET_TEXT }), env)).response.status).toBe(200);

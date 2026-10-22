@@ -25,7 +25,11 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
     try {
       const result = await extractTextFromFile(file);
       setInput({ text: result.text });
-      const pages = result.pages ? `，${result.pages} 页` : "";
+      const pages = !result.pages
+        ? ""
+        : result.pagesRead !== undefined && result.pagesRead < result.pages
+          ? `，共 ${result.pages} 页，只读取了前 ${result.pagesRead} 页`
+          : `，${result.pages} 页`;
       setImportState({ kind: "done", message: `已导入「${file.name}」（${KIND_LABELS[result.kind]}${pages}，${charLength(result.text).toLocaleString()} 字）` });
     } catch (error) {
       setImportState({ kind: "error", message: error instanceof FileImportError ? error.message : `无法读取「${file.name}」，请确认文件未损坏。` });

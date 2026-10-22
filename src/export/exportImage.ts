@@ -1,6 +1,7 @@
 import { domToBlob } from "modern-screenshot";
 import { loadFontCss } from "../fonts.ts";
 import { buildFontEmbedCss, ensureFontsLoaded } from "./fontEmbed.ts";
+import { effectiveScale } from "./scale.ts";
 
 export type ExportFormat = "png" | "jpeg";
 export type ExportScale = 1 | 2 | 3;
@@ -12,13 +13,7 @@ export type ExportOptions = {
   background: string;
 };
 
-/** Safari 的单张画布面积上限约为 16.7M 像素，超出时自动降低倍率。 */
-const MAX_CANVAS_PIXELS = 16_000_000;
-
-export function effectiveScale(width: number, height: number, requested: number): number {
-  const limit = Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, width * height));
-  return Math.max(0.5, Math.min(requested, Math.floor(limit * 100) / 100));
-}
+export { effectiveScale };
 
 function excludeEditorChrome(node: Node): boolean {
   return !(node instanceof Element && node.getAttribute("data-export-ignore") === "true");

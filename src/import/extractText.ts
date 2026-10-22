@@ -16,6 +16,8 @@ export type ExtractResult = {
   kind: FileKind;
   /** PDF 的总页数。 */
   pages?: number;
+  /** 实际读取的页数；超过上限的 PDF 只读取前面的页。 */
+  pagesRead?: number;
 };
 
 export class FileImportError extends Error {}
@@ -70,7 +72,7 @@ async function docxToText(bytes: Uint8Array): Promise<string> {
   return docxXmlToText(strFromU8(xml));
 }
 
-async function pdfToText(bytes: Uint8Array): Promise<{ text: string; pages: number }> {
+async function pdfToText(bytes: Uint8Array): Promise<{ text: string; pages: number; pagesRead: number }> {
   const pdfjs = await import("pdfjs-dist");
   const { default: workerUrl } = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -97,7 +99,7 @@ async function pdfToText(bytes: Uint8Array): Promise<{ text: string; pages: numb
       pages.push(joinPdfTextItems(content.items.flatMap((item) => ("str" in item ? [item] : []))));
       page.cleanup();
     }
-    return { text: normalizeExtractedText(pages.join("\n\n")), pages: doc.numPages };
+    return { text: normalizeExtractedText(pages.join("\n\n")), pages: doc.numPages, pagesRead: count };
   } finally {
     void doc.loadingTask.destroy();
   }
@@ -121,8 +123,8 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
       result = { kind, text: await docxToText(bytes) };
       break;
     case "pdf": {
-      const { text, pages } = await pdfToText(bytes);
-      result = { kind, text, pages };
+      const { text, pages, pagesRead } = await pdfToText(bytes);
+      result = { kind, text, pages, pagesRead };
       break;
     }
   }
