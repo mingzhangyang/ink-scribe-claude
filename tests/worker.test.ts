@@ -322,6 +322,17 @@ describe("routing", () => {
     expect(request.bodyUsed).toBe(true);
   });
 
+  it("does not let a stalled upload hold back an early error response", async () => {
+    const env = makeEnv(async () => ({}));
+    // 只发一个字节、之后不再结束的上传
+    const body = new ReadableStream<Uint8Array>({ start: (controller) => controller.enqueue(new Uint8Array([123])) });
+    const request = new Request("https://ink.example/api/config", { method: "POST", body, duplex: "half" } as RequestInit);
+    const started = Date.now();
+    const response = await handleApi(request, env, noopWait);
+    expect(response.status).toBe(405);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
   it("serves public config", async () => {
     const env = makeEnv(async () => ({}), { DOODLE_API_ENABLED: "true", MAX_INPUT_CHARS: "5000" });
     const { response, body } = await call(new Request("https://ink.example/api/config"), env);
