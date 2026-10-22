@@ -1,4 +1,6 @@
 import type { ApiErrorBody, DoodleResponse, PublicConfig, StructureRequest, StructureResponse } from "../shared/api.ts";
+import { normalizeDoodleSpec } from "../shared/doodle.ts";
+import { normalizeNoteStructure } from "../shared/note.ts";
 import type { RequestError } from "./state/store.ts";
 
 const CLIENT_TIMEOUT_MS = 120_000;
@@ -50,12 +52,26 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   return payload as T;
 }
 
-export function structureText(request: StructureRequest, signal?: AbortSignal): Promise<StructureResponse> {
-  return postJson<StructureResponse>("/api/structure", request, signal);
+/**
+ * 前端不直接信任接口返回值：与 Worker 使用同一套规范化逻辑再校验一次，
+ * 防止前后端版本不一致或异常响应导致页面渲染失败。
+ */
+export async function structureText(request: StructureRequest, signal?: AbortSignal): Promise<StructureResponse> {
+  const response = await postJson<Partial<StructureResponse> | undefined>("/api/structure", request, signal);
+  const checked = normalizeNoteStructure(response?.note);
+  if (!checked.ok || !response?.meta) {
+    throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "服务返回的笔记结构无效，请重试。", requestId: response?.meta?.requestId });
+  }
+  return { note: checked.value, meta: response.meta };
 }
 
-export function generateDoodle(concept: string, signal?: AbortSignal): Promise<DoodleResponse> {
-  return postJson<DoodleResponse>("/api/doodle", { concept }, signal);
+export async function generateDoodle(concept: string, signal?: AbortSignal): Promise<DoodleResponse> {
+  const response = await postJson<Partial<DoodleResponse> | undefined>("/api/doodle", { concept }, signal);
+  const checked = normalizeDoodleSpec(response?.doodle);
+  if (!checked.ok || !response?.meta) {
+    throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "服务返回的插图无效，请重试。", requestId: response?.meta?.requestId });
+  }
+  return { doodle: checked.value, meta: response.meta };
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfig | null> {

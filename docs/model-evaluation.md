@@ -56,7 +56,7 @@ npm run eval:models -- --models @cf/qwen/qwen3-30b-a3b-fp8,@cf/zai-org/glm-4.7-f
 npm run eval:models -- --mock            # 不联网，只验证评测流程
 ```
 
-结果以 Markdown 表格输出，并保存详细 JSON 到 `eval-results/`。
+结果以 Markdown 表格输出，并保存详细 JSON 到 `eval-results/`，其中包含每个模型在每个用例上生成的完整笔记，便于人工对比中英文整理质量（自动指标无法替代这一步）。
 
 ## 选择默认模型的标准
 

@@ -38,6 +38,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
   const removeSticker = useNoteStore((s) => s.removeSticker);
   const setSettings = useNoteStore((s) => s.setSettings);
   const clearError = useNoteStore((s) => s.clearError);
+  const hasInput = useNoteStore((s) => s.input.text.trim().length > 0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200 });
@@ -102,6 +103,15 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
     }
   }
 
+  // 原文仍在输入框中时，可以用“精简”档位重新整理来压缩内容
+  const canCondense = hasInput && (source === "ai" || source === "local") && status !== "loading";
+  function condense() {
+    const { setInput } = useNoteStore.getState();
+    setInput({ detail: "concise" });
+    if (source === "local") generateLocally();
+    else void generateNote();
+  }
+
   if (!note) return null;
 
   return (
@@ -163,6 +173,11 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
             <button type="button" className="btn btn-small btn-secondary" onClick={() => setSettings({ pageSize: "long" })}>
               改为长图
             </button>
+            {canCondense ? (
+              <button type="button" className="btn btn-small btn-secondary" onClick={condense} title="以“精简”详略重新整理原文">
+                精简后重新生成
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

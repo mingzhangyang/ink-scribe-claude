@@ -30,7 +30,7 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   if (!note) return null;
   const busy = status.kind === "working";
 
-  function render(fmt: ExportFormat) {
+  async function render(fmt: ExportFormat) {
     const node = pageRef.current;
     if (!node) throw new Error("画布尚未就绪");
     selectSticker(null);
@@ -59,16 +59,17 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   function handleCopy() {
     if (!clipboard.supported) return;
     setStatus({ kind: "working", label: "正在复制到剪贴板…" });
+    const fail = () => setStatus({ kind: "error", message: "复制失败：浏览器可能拒绝了剪贴板权限。可以改用下载图片。" });
     // ClipboardItem 必须在点击事件中同步创建，图片内容以 Promise 形式提供
     const blob = render("png").then((r) => r.blob);
-    copyToClipboard(blob)
-      .then(() => setStatus({ kind: "done", message: "已复制到剪贴板，可直接粘贴到聊天或文档中。" }))
-      .catch(() =>
-        setStatus({
-          kind: "error",
-          message: "复制失败：浏览器可能拒绝了剪贴板权限。可以改用下载图片。",
-        }),
-      );
+    try {
+      copyToClipboard(blob)
+        .then(() => setStatus({ kind: "done", message: "已复制到剪贴板，可直接粘贴到聊天或文档中。" }))
+        .catch(fail);
+    } catch {
+      blob.catch(() => undefined);
+      fail();
+    }
   }
 
   return (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModelInputs, extractModelOutput, parseJsonLoose } from "../worker/ai.ts";
+import { buildModelInputs, extractModelOutput, parseJsonLoose, upstreamErrorCode } from "../worker/ai.ts";
 import { loadConfig } from "../worker/config.ts";
 import type { Env } from "../worker/env.ts";
 
@@ -96,5 +96,14 @@ describe("parseJsonLoose", () => {
     expect(parseJsonLoose('<think>\n</think>\n{"a":2}')).toEqual({ a: 2 });
     expect(parseJsonLoose('Sure! Here it is: {"a":3} Hope this helps.')).toEqual({ a: 3 });
     expect(() => parseJsonLoose("no json")).toThrow();
+  });
+});
+
+describe("upstreamErrorCode", () => {
+  it("extracts Workers AI error numbers but never digits echoed from user text", () => {
+    expect(upstreamErrorCode(new Error("InferenceUpstreamError: 3040: Capacity temporarily exceeded"))).toBe("3040");
+    expect(upstreamErrorCode(new Error("5007: No such model"))).toBe("5007");
+    expect(upstreamErrorCode(new Error("Invalid input near '预算 9876 万元'"))).toBeUndefined();
+    expect(upstreamErrorCode(new Error("input: 2024: 年度计划"))).toBeUndefined();
   });
 });

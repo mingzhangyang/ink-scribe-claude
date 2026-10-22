@@ -674,6 +674,12 @@
   height: 100%;
 }
 
+.sticker-selection {
+  position: absolute;
+  transform-origin: center;
+  pointer-events: none;
+}
+
 .sticker-frame {
   position: absolute;
   inset: -6px;

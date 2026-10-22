@@ -3,45 +3,11 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { ApiErrorBody, ResponseMeta } from "../../shared/api.ts";
 import type { DoodleSpec } from "../../shared/doodle.ts";
 import type { NoteStructure } from "../../shared/note.ts";
-import type { Detail, Language, NoteStyle, Template } from "../../shared/options.ts";
-import type { DoodleTheme } from "../../shared/themes.ts";
-import type { AccentId, EnFontId, InkId, PageSizeId, PaperId, ZhFontId } from "../config/appearance.ts";
+import type { Detail, Language, Template } from "../../shared/options.ts";
 import { newStickerId, type StickerItem, type StickerType } from "../stickers/types.ts";
+import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from "./settings.ts";
 
-export type Settings = {
-  layout: NoteStyle;
-  paper: PaperId;
-  zhFont: ZhFontId;
-  enFont: EnFontId;
-  fontSize: number;
-  lineHeight: number;
-  letterSpacing: number;
-  ink: InkId;
-  accent: AccentId;
-  /** 0–1，控制手写抖动、旋转与墨色深浅变化的幅度。 */
-  naturalness: number;
-  pageSize: PageSizeId;
-  doodleMode: "auto" | "theme" | "ai" | "none";
-  doodleTheme: DoodleTheme;
-  seed: number;
-};
-
-export const DEFAULT_SETTINGS: Settings = {
-  layout: "hybrid-cornell",
-  paper: "grid",
-  zhFont: "lxgw",
-  enFont: "kalam",
-  fontSize: 19,
-  lineHeight: 1.75,
-  letterSpacing: 0.02,
-  ink: "blue",
-  accent: "yellow",
-  naturalness: 0.55,
-  pageSize: "a4",
-  doodleMode: "auto",
-  doodleTheme: "lightbulb",
-  seed: 7,
-};
+export { DEFAULT_SETTINGS, type Settings };
 
 export type InputState = {
   text: string;
@@ -165,7 +131,7 @@ export const useNoteStore = create<State>()(
       partialize: (state) => ({ settings: state.settings }),
       merge: (persisted, current) => ({
         ...current,
-        settings: { ...DEFAULT_SETTINGS, ...((persisted as Partial<State> | undefined)?.settings ?? {}) },
+        settings: sanitizeSettings((persisted as { settings?: unknown } | undefined)?.settings),
       }),
     },
   ),

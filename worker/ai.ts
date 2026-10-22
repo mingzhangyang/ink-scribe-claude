@@ -179,11 +179,14 @@ export function classifyAiError(error: unknown): AppError {
   return new AppError(502, "AI_UNAVAILABLE", "AI 服务暂时不可用，请稍后重试。", { cause: error });
 }
 
-/** 从上游错误中提取可安全记录的错误编号（例如 3040）。 */
+/**
+ * 从上游错误中提取可安全记录的错误编号（例如 “InferenceUpstreamError: 3040: …” 中的 3040）。
+ * 只匹配消息开头或 “Error:” 之后紧跟冒号的 4 位编号，避免把错误信息里回显的原文数字写进日志。
+ */
 export function upstreamErrorCode(error: unknown): string | undefined {
   const cause = error instanceof AppError ? error.cause : error;
   const message = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
-  return message.match(/\b(\d{4})\b/)?.[1];
+  return message.match(/(?:^|Error:\s*)(\d{4}):/)?.[1];
 }
 
 async function callModel(ai: AiBinding, task: AiTaskConfig, inputs: Record<string, unknown>, timeoutMs: number): Promise<unknown> {

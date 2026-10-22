@@ -5,6 +5,7 @@ import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
 import { parseContentLines, splitHighlights } from "../src/lib/segments.ts";
 import { sketchElements, spline } from "../src/lib/sketch.ts";
 import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } from "../src/lib/unicode-range.ts";
+import { DEFAULT_SETTINGS, sanitizeSettings } from "../src/state/settings.ts";
 
 describe("splitHighlights", () => {
   it("marks every non-overlapping occurrence", () => {
@@ -107,5 +108,18 @@ describe("doodle rendering", () => {
     expect(d.startsWith("M0 0")).toBe(true);
     expect(d.endsWith("Z")).toBe(true);
     expect(d.match(/C/g)).toHaveLength(3);
+  });
+});
+
+describe("sanitizeSettings", () => {
+  it("falls back to defaults for unknown or malformed values", () => {
+    expect(sanitizeSettings({ layout: "bogus", paper: 42, fontSize: "huge", naturalness: null, seed: 1.5 })).toEqual(DEFAULT_SETTINGS);
+    expect(sanitizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
+    expect(sanitizeSettings("garbage")).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("keeps valid values and clamps numbers into range", () => {
+    const settings = sanitizeSettings({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 99, naturalness: -1, seed: 42 });
+    expect(settings).toMatchObject({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 28, naturalness: 0, seed: 42 });
   });
 });

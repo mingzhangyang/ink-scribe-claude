@@ -146,8 +146,9 @@ describe("POST /api/structure", () => {
   });
 
   it("rejects oversized bodies even without Content-Length", async () => {
-    const env = makeEnv(async () => ({ response: goodNote }), { MAX_BODY_BYTES: "4096" });
-    const big = JSON.stringify({ text: "x".repeat(10_000) });
+    // MAX_INPUT_CHARS=200 时请求体上限为 max(4096, 200×6+8192) = 9392 字节
+    const env = makeEnv(async () => ({ response: goodNote }), { MAX_BODY_BYTES: "4096", MAX_INPUT_CHARS: "200" });
+    const big = JSON.stringify({ text: "x".repeat(20_000) });
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(big));
@@ -164,6 +165,14 @@ describe("POST /api/structure", () => {
     const { response, body } = await call(request, env);
     expect(response.status).toBe(413);
     expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
+  it("accepts in-limit text sent as \\u-escaped JSON", async () => {
+    const env = makeEnv(async () => ({ response: goodNote }));
+    const escaped = JSON.stringify({ text: "长".repeat(11_000) }).replace(/长/g, "\\u957f");
+    expect(escaped.length).toBeGreaterThan(65_536);
+    const { response } = await call(post("/api/structure", escaped), env);
+    expect(response.status).toBe(200);
   });
 
   it("rejects cross-origin browser requests", async () => {

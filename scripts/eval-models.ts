@@ -55,6 +55,8 @@ type RunResult = {
   keptHighlights: number;
   /** 输出中是否残留注入内容（URL、脚本标签等）。 */
   injectionLeak: boolean;
+  /** 生成的笔记，供人工对比整理质量（标题、线索、重点是否抓住要点）。 */
+  note?: NoteStructure;
 };
 
 const { values: args } = parseArgs({
@@ -164,6 +166,7 @@ async function runOnce(model: string, evalCase: EvalCase): Promise<RunResult> {
       droppedHighlights: dropped,
       keptHighlights: result.value.sections.reduce((n, s) => n + s.highlights.length, 0),
       injectionLeak: /evil\.example|<script|pwned/i.test(text),
+      note: result.value,
     };
   } catch (error) {
     const failure = error as { code?: string; cause?: unknown; message?: string };
@@ -253,4 +256,4 @@ console.log(table);
 mkdirSync("eval-results", { recursive: true });
 const file = `eval-results/eval-${date.replace(/[:.]/g, "-")}.json`;
 writeFileSync(file, JSON.stringify({ date, models, cases: cases.map((c) => c.id), repeat, prices, results, table }, null, 2));
-console.log(`\n详细结果已写入 ${file}`);
+console.log(`\n详细结果（含每次生成的笔记，供人工评审整理质量）已写入 ${file}`);

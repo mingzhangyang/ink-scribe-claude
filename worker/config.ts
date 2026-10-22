@@ -128,6 +128,7 @@ export function resolveProfile(model: string, env: Env): ModelProfile {
 
 export function loadConfig(env: Env): AppConfig {
   const model = env.AI_MODEL?.trim() || DEFAULT_MODEL;
+  const maxInputChars = int(env.MAX_INPUT_CHARS, 12_000, 200, 60_000);
   const doodleModel = env.AI_DOODLE_MODEL?.trim() || model;
   const base = {
     temperature: float(env.AI_TEMPERATURE, 0.3, 0, 1.5),
@@ -140,8 +141,9 @@ export function loadConfig(env: Env): AppConfig {
     mock: bool(env.AI_MOCK, false),
     structure: { ...base, model, profile: resolveProfile(model, env) },
     doodle: { ...base, model: doodleModel, profile: resolveProfile(doodleModel, env), maxOutputTokens: Math.min(base.maxOutputTokens, 1200) },
-    maxInputChars: int(env.MAX_INPUT_CHARS, 12_000, 200, 60_000),
-    maxBodyBytes: int(env.MAX_BODY_BYTES, 65_536, 4_096, 1_048_576),
+    maxInputChars,
+    // 请求体上限至少能容纳“字数上限”的文本：JSON 中每个汉字最多被转义为 6 字节（\uXXXX）
+    maxBodyBytes: Math.max(int(env.MAX_BODY_BYTES, 81_920, 4_096, 1_048_576), maxInputChars * 6 + 8_192),
     rateLimitPerMinute: int(env.RATE_LIMIT_PER_MINUTE, 12, 1, 1_000),
     doodleEnabled: bool(env.DOODLE_API_ENABLED, false),
     doodleCacheTtlSeconds: int(env.DOODLE_CACHE_TTL_SECONDS, 86_400, 0, 2_592_000),

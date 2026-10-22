@@ -24,6 +24,8 @@
     "worker",
     "shared",
     "src/lib",
-    "src/doodles"
+    "src/doodles",
+    "src/config",
+    "src/state/settings.ts"
   ]
 }
