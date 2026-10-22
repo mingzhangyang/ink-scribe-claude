@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ink-scribe",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  // 前端由 Vite 构建为静态资源；/api/* 优先交给 Worker，其余路径走静态资源并在未命中时回退到 index.html（SPA）。
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Workers AI binding：所有模型调用都在 Worker 内发起，浏览器不接触任何凭据。
+  "ai": { "binding": "AI" },
+
+  // Workers Rate Limiting binding（按客户端 IP 计数）。若删除该绑定，Worker 会退化为单实例内存限流。
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 12, "period": 60 }
+    }
+  ],
+
+  // 可选：开启 Workers Analytics Engine 以统计调用次数、延迟和 token 用量（不含用户原文）。
+  // "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "ink_scribe_ai_usage" }],
+
+  "vars": {
+    // 模型与生成参数集中在这里配置；修改模型无需改动业务代码。详见 docs/model-evaluation.md。
+    "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "AI_DOODLE_MODEL": "",
+    "AI_API_STYLE": "",
+    "AI_RESPONSE_FORMAT": "",
+    "AI_EXTRA_PARAMS": "",
+    "AI_TEMPERATURE": "0.3",
+    "AI_MAX_OUTPUT_TOKENS": "2048",
+    "AI_TIMEOUT_MS": "45000",
+    "AI_MAX_RETRIES": "1",
+    "AI_GATEWAY_ID": "",
+    "MAX_INPUT_CHARS": "12000",
+    "MAX_BODY_BYTES": "65536",
+    "RATE_LIMIT_PER_MINUTE": "12",
+    "DOODLE_API_ENABLED": "false",
+    "DOODLE_CACHE_TTL_SECONDS": "86400",
+    "ALLOWED_ORIGINS": ""
+  }
+}

@@ -1,0 +1,4 @@
+# 复制为 .dev.vars 后用于本地开发（vite dev / wrangler dev 会自动读取）。
+# AI_MOCK=true 时 Worker 不调用 Workers AI，而是使用本地启发式整理器返回结构化笔记，
+# 便于在没有 Cloudflare 账户或离线时开发界面。部署到生产环境时不要设置该变量。
+AI_MOCK=true
