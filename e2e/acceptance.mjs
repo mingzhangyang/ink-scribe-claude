@@ -2,6 +2,7 @@
 // 由 e2e/run.mjs 启动 mock 构建的预览服务后调用；也可对已运行的服务直接执行：
 //   E2E_BASE_URL=http://127.0.0.1:4173/ node e2e/acceptance.mjs
 import { chromium } from "playwright";
+import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
@@ -403,6 +404,66 @@ await context.close();
   await p4.waitForSelector(".alert-error");
   check("N-NETWORK", "网络错误有可理解的提示", (await p4.locator(".alert-error").innerText()).includes("网络"));
   await c4.close();
+}
+
+// ---------- U. 上传文件生成笔记（文件在浏览器本地解析） ----------
+{
+  const { page: p6, context: c6 } = await newPage();
+  await p6.goto(URL, { waitUntil: "networkidle" });
+  // 用 Chromium 把中文页面打印成 PDF，作为文字型 PDF 样本
+  const printer = await c6.newPage();
+  await printer.goto(URL, { waitUntil: "networkidle" });
+  await printer.evaluate(() => {
+    document.body.innerHTML = '<div style="font-family: \'LXGW WenKai Screen\'; font-size: 18px; padding: 40px">' +
+      "<h1>光合作用学习笔记</h1><p>光合作用是植物利用光能，把二氧化碳和水转化为葡萄糖并释放氧气的过程。</p>" +
+      "<p>它分为光反应和暗反应两个阶段。Light reactions happen in the thylakoid membrane.</p></div>";
+  });
+  await printer.evaluate(() => document.fonts.ready);
+  const pdf = await printer.pdf({ format: "A4" });
+  await printer.evaluate(() => { document.body.innerHTML = "<div></div>"; });
+  const blankPdf = await printer.pdf({ format: "A4" });
+  await printer.close();
+
+  const docx = Buffer.from(zipSync({
+    "[Content_Types].xml": strToU8('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'),
+    "word/document.xml": strToU8('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+      "<w:p><w:r><w:t>周会纪要</w:t></w:r></w:p><w:p><w:r><w:t>决定下周发布新版本 &amp; 修复导出问题。</w:t></w:r></w:p>" +
+      '<w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>李响负责前端</w:t></w:r></w:p></w:body></w:document>'),
+  }));
+  const gbk = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xb1, 0xca, 0xbc, 0xc7]); // “中文笔记”的 GBK 编码
+  const html = Buffer.from('<html><body><nav>导航</nav><article><h1>网页标题</h1><p>正文第一段。</p><script>window.__x=1</script><ul><li>要点</li></ul></article></body></html>');
+
+  const files = [
+    { name: "photosynthesis.pdf", mimeType: "application/pdf", buffer: pdf, expect: ["光合作用", "二氧化碳", "thylakoid"], label: "PDF（中文 + 英文）" },
+    { name: "meeting.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: docx, expect: ["周会纪要", "& 修复", "- 李响负责前端"], label: "Word .docx" },
+    { name: "notes-gbk.txt", mimeType: "text/plain", buffer: gbk, expect: ["中文笔记"], label: "GBK 编码 TXT" },
+    { name: "page.html", mimeType: "text/html", buffer: html, expect: ["网页标题", "正文第一段", "- 要点"], label: "HTML（去除脚本与导航）" },
+  ];
+  for (const file of files) {
+    await p6.locator('input[type="file"]').setInputFiles({ name: file.name, mimeType: file.mimeType, buffer: file.buffer });
+    await p6.waitForSelector(".input-panel .hint.is-ok, .input-panel .hint.is-error", { timeout: 30000 });
+    const status = await p6.locator(".input-panel [aria-live] .hint").first().innerText();
+    const text = await p6.locator(".source-text").inputValue();
+    const ok = file.expect.every((t) => text.includes(t)) && status.includes("已导入") && !text.includes("导航") && !text.includes("__x");
+    check(`U-${file.name}`, `上传 ${file.label} 并提取文字`, ok, `${status}；${text.replace(/\s+/g, " ").slice(0, 60)}`);
+  }
+  await p6.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await p6.waitForSelector(".badge-ai");
+  check("U-generate", "上传文件后生成手写笔记", (await p6.locator(".note-title").first().innerText()).length > 0);
+
+  const errorCases = [
+    { name: "scan.pdf", mimeType: "application/pdf", buffer: blankPdf, expect: "扫描件" },
+    { name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x"), expect: "暂不支持" },
+    { name: "broken.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: Buffer.from("not a zip"), expect: ".docx" },
+  ];
+  for (const file of errorCases) {
+    await p6.locator('input[type="file"]').setInputFiles({ name: file.name, mimeType: file.mimeType, buffer: file.buffer });
+    await p6.waitForFunction((n) => document.querySelector(".input-panel .hint.is-error")?.textContent?.length > 0 || false, file.name, { timeout: 30000 }).catch(() => {});
+    const err = await p6.locator(".input-panel .hint.is-error").first().innerText().catch(() => "");
+    check(`U-${file.name}`, `无法识别的文件 ${file.name} 给出明确提示`, err.includes(file.expect), err);
+  }
+  check("U-errors", "上传流程无脚本错误", p6.errors.length === 0, p6.errors.join("; "));
+  await c6.close();
 }
 
 // ---------- Q. 移动端 ----------

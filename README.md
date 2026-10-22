@@ -11,6 +11,7 @@
 | 模块 | 说明 |
 | --- | --- |
 | 输入 | 中英文文本，模板：通用整理 / 读书摘抄 / 会议纪要 / 课程总结 / 思想碎片；输出语言（跟随原文 / 中文 / English）；详略（精简 / 标准 / 详细） |
+| 上传文件 | 支持 TXT / Markdown（自动识别 UTF-8、UTF-16、GBK 编码）、HTML（去除脚本与导航）、Word .docx、文字型 PDF；点击上传或拖入文本框。文件在浏览器本地解析，只有提取出的文字会用于整理；文字超出上限时可一键截取。扫描件 / 图片 PDF 与旧版 .doc 暂不支持，会给出明确提示 |
 | AI 整理 | `POST /api/structure` 返回经过校验的 `NoteStructure`（标题、线索、段落、重点词、总结、插图建议） |
 | 版式 | 混合康奈尔手账（默认）、经典康奈尔、自由手账、简约手札 |
 | 纸张 | 方格纸、横线本、点阵纸、象牙白纸、纹理纸、牛皮纸、复古羊皮纸；页面 A4 / 3:4 / 1:1 / 长图 |
@@ -47,7 +48,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（35 项，覆盖生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（44 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
 
 > ⚠️ 不要用 `vite build --mode mock` 构建要部署的产物：mock 模式会把 `AI_MOCK=true` 写入生成的 Worker 配置。
@@ -106,6 +107,7 @@ docs/        API、部署、模型评测、字体与导出说明
 - 模型输出经过严格规范化：只保留契约字段、清理 HTML/控制字符、限制长度与数量，重点词必须逐字出现在正文中。
 - 插图只接受受限图元规格；SVG 由本地生成器以 React 元素渲染，不使用 `innerHTML`，不允许脚本、事件处理器、外部资源或 URL。
 - AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
+- 上传的文件只在浏览器内解析（PDF 使用按需加载的 pdf.js，CMap 文件同源提供），文件本身不会发送到服务器。
 - 本机只保存外观偏好（localStorage），不保存原文与笔记。
 
 ## 文档

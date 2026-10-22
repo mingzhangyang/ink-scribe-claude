@@ -26,6 +26,7 @@
     "src/lib",
     "src/doodles",
     "src/config",
-    "src/state/settings.ts"
+    "src/state/settings.ts",
+    "src/import/decode.ts"
   ]
 }
