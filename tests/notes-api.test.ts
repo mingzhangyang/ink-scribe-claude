@@ -160,7 +160,17 @@ describe("POST /api/v1/notes", () => {
     expect(other.body!.id).not.toBe(first.body!.id);
   });
 
-  it("queues a thumbnail render when rendering is configured", async () => {
+  it("does not render thumbnails unless explicitly enabled", async () => {
+    env.IMAGES = r2 as unknown as R2Bucket;
+    env.BROWSER = {} as Fetcher;
+    env.RENDER_QUEUE = { send: vi.fn(async (job: RenderJob) => void queued.push(job)) } as unknown as Queue<RenderJob>;
+    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
+    expect(body!.image.status).toBe("disabled");
+    expect(queued).toHaveLength(0);
+  });
+
+  it("queues a thumbnail render when rendering is enabled and configured", async () => {
+    env.THUMBNAILS_ENABLED = "true";
     env.IMAGES = r2 as unknown as R2Bucket;
     env.BROWSER = {} as Fetcher;
     env.RENDER_QUEUE = { send: vi.fn(async (job: RenderJob) => void queued.push(job)) } as unknown as Queue<RenderJob>;
@@ -288,6 +298,7 @@ describe("thumbnail queue consumer", () => {
   }
 
   async function pendingNote(): Promise<string> {
+    env.THUMBNAILS_ENABLED = "true";
     env.IMAGES = r2 as unknown as R2Bucket;
     env.BROWSER = {} as Fetcher;
     env.RENDER_QUEUE = { send: vi.fn(async () => {}) } as unknown as Queue<RenderJob>;

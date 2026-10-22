@@ -10,14 +10,13 @@
 
 ```bash
 npx wrangler d1 create ink-scribe               # 把返回的 database_id 填入 wrangler.jsonc
-npx wrangler r2 bucket create ink-scribe-images
-npx wrangler queues create ink-scribe-render
 npm run db:migrate:remote                       # 创建数据表
 npm run deploy
 npm run keys -- create --name "我的发布脚本" --remote   # 密钥只显示一次
 ```
 
-- 预览图使用 Browser Rendering，需要 Workers 付费计划。没有开通时可把 `THUMBNAILS_ENABLED` 设为 `"false"`：笔记照常发布，图库显示文字卡片，链接预览没有图片。
+- 预览图默认关闭：图库显示标题与摘要的文字卡片，链接预览只有标题与摘要；查看页仍可在浏览器中下载高清图片。
+- 需要预览图时（图库缩略图、聊天中的链接预览图片），按 `wrangler.jsonc` 中“可选：笔记预览图”一节的说明创建 R2 存储桶与队列、取消绑定注释，并把 `THUMBNAILS_ENABLED` 改为 `"true"`。这依赖 Browser Rendering，需要 Workers 付费计划；启用前已发布的笔记不会自动补图。
 - 绑定自定义域名后，把 `PUBLIC_BASE_URL` 设为该域名（如 `https://notes.example.com`），返回的链接和预览图地址都会使用它。
 - 本地开发：`npm run db:migrate` 创建本地表，`npm run keys -- create --name 本地` 生成本地密钥。
 
@@ -60,7 +59,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `visibility` | `unlisted`（默认）或 `public` |
 | `Idempotency-Key` 头 | 相同的键与请求体重试时返回同一条笔记（`200` + `Idempotent-Replayed: true`）；同一个键用于不同内容返回 `409` |
 
-预览图在后台生成：`image.status` 依次为 `pending` → `ready`（附 `url`、`width`、`height`），失败重试 3 次后为 `failed`；未开启截图时为 `disabled`。可用 `GET /api/v1/notes/<id>` 轮询。
+预览图默认关闭，`image.status` 为 `disabled`。启用后在后台生成：`image.status` 依次为 `pending` → `ready`（附 `url`、`width`、`height`），失败重试 3 次后为 `failed`。可用 `GET /api/v1/notes/<id>` 轮询。
 
 ## 其他接口
 

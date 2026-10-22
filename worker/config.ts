@@ -153,7 +153,7 @@ export function loadConfig(env: Env): AppConfig {
     doodleEnabled: bool(env.DOODLE_API_ENABLED, false),
     doodleCacheTtlSeconds: int(env.DOODLE_CACHE_TTL_SECONDS, 86_400, 0, 2_592_000),
     publicBaseUrl: env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "") || undefined,
-    thumbnailsEnabled: bool(env.THUMBNAILS_ENABLED, true),
+    thumbnailsEnabled: bool(env.THUMBNAILS_ENABLED, false),
     defaultTimezone: env.DEFAULT_TIMEZONE?.trim() || "Asia/Shanghai",
     apiRateLimitPerMinute: int(env.API_RATE_LIMIT_PER_MINUTE, 30, 1, 1_000),
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "")

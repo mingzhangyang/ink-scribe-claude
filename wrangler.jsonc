@@ -3,7 +3,7 @@
   "name": "ink-scribe",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
-  // @cloudflare/puppeteer（Browser Rendering 客户端）依赖 Node.js 兼容层
+  // @cloudflare/puppeteer（可选的 Browser Rendering 客户端）依赖 Node.js 兼容层
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
@@ -36,18 +36,17 @@
     }
   ],
 
-  // 笔记预览图（PNG）。首次部署前执行 `npx wrangler r2 bucket create ink-scribe-images`。
-  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "ink-scribe-images" }],
-
-  // 预览图生成队列：发布时入队，同一个 Worker 消费并调用 Browser Rendering 截图。
-  // 首次部署前执行 `npx wrangler queues create ink-scribe-render`。
-  "queues": {
-    "producers": [{ "binding": "RENDER_QUEUE", "queue": "ink-scribe-render" }],
-    "consumers": [{ "queue": "ink-scribe-render", "max_batch_size": 4, "max_batch_timeout": 5, "max_retries": 3 }]
-  },
-
-  // Browser Rendering（需要 Workers 付费计划）。
-  "browser": { "binding": "BROWSER" },
+  // ---- 可选：笔记预览图（图库缩略图、链接预览图片），默认关闭 ----
+  // 需要 Workers 付费计划（Browser Rendering）。启用步骤：
+  //   1. npx wrangler r2 bucket create ink-scribe-images
+  //   2. npx wrangler queues create ink-scribe-render
+  //   3. 取消下面三段配置的注释，并把 vars 中的 THUMBNAILS_ENABLED 改为 "true"
+  // "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "ink-scribe-images" }],
+  // "queues": {
+  //   "producers": [{ "binding": "RENDER_QUEUE", "queue": "ink-scribe-render" }],
+  //   "consumers": [{ "queue": "ink-scribe-render", "max_batch_size": 4, "max_batch_timeout": 5, "max_retries": 3 }]
+  // },
+  // "browser": { "binding": "BROWSER" },
 
   // 可选：开启 Workers Analytics Engine 以统计调用次数、延迟和 token 用量（不含用户原文）。
   // "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "ink_scribe_ai_usage" }],
@@ -72,7 +71,7 @@
     "ALLOWED_ORIGINS": "",
     // 分享链接使用的站点地址（例如 https://notes.example.com）；留空则使用请求的域名
     "PUBLIC_BASE_URL": "",
-    "THUMBNAILS_ENABLED": "true",
+    "THUMBNAILS_ENABLED": "false",
     "DEFAULT_TIMEZONE": "Asia/Shanghai",
     "API_RATE_LIMIT_PER_MINUTE": "30"
   }

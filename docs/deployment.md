@@ -42,9 +42,9 @@ npm run deploy          # = vite build && wrangler deploy
 | `ASSETS` | `assets.binding` | 静态资源（Worker 内兜底使用） |
 | `RATE_LIMITER` | `ratelimits`（默认每 IP 每分钟 12 次） | 跨实例限流；`namespace_id` 是账户内唯一的正整数字符串，如与其他 Worker 冲突请修改。删除该绑定后退化为单实例内存限流（`RATE_LIMIT_PER_MINUTE`） |
 | `DB` | `d1_databases` | 已发布的笔记与 API 密钥；部署前 `wrangler d1 create ink-scribe` 并填入 `database_id`，再执行 `npm run db:migrate:remote` |
-| `IMAGES` | `r2_buckets` | 预览图；部署前 `wrangler r2 bucket create ink-scribe-images` |
-| `RENDER_QUEUE` | `queues` | 预览图生成队列（本 Worker 同时是生产者和消费者）；部署前 `wrangler queues create ink-scribe-render` |
-| `BROWSER` | `browser` | Browser Rendering，需要 Workers 付费计划；未开通时设 `THUMBNAILS_ENABLED=false` |
+| `IMAGES` | `r2_buckets`（默认注释） | 可选：预览图存储 |
+| `RENDER_QUEUE` | `queues`（默认注释） | 可选：预览图生成队列（本 Worker 同时是生产者和消费者） |
+| `BROWSER` | `browser`（默认注释） | 可选：Browser Rendering，需要 Workers 付费计划。以上三项与 `THUMBNAILS_ENABLED=true` 一起启用 |
 | `METRICS` | `analytics_engine_datasets`（默认注释） | 可选：写入调用量、延迟、token 用量，用于成本监控 |
 
 ### AI Gateway（可选）
@@ -81,7 +81,7 @@ GROUP BY model
 - [ ] `npm run deploy` 后访问站点，用示例文本生成一次，检查 `X-Request-Id` 与 Workers Logs 中的 `api.request` 记录
 - [ ] 确认 `ratelimits.namespace_id` 不与账户内其他 Worker 冲突，必要时调整阈值
 - [ ] 若前端会被其他域名嵌入或调用，配置 `ALLOWED_ORIGINS`
-- [ ] 创建 D1、R2、Queue 并执行 `npm run db:migrate:remote`；设置 `PUBLIC_BASE_URL`；用 `npm run keys -- create --remote` 发放密钥，按 [publishing.md](publishing.md) 发布一条测试笔记，确认链接可打开、预览图在 1 分钟内变为 `ready`
+- [ ] 创建 D1 并执行 `npm run db:migrate:remote`；设置 `PUBLIC_BASE_URL`；用 `npm run keys -- create --remote` 发放密钥，按 [publishing.md](publishing.md) 发布一条测试笔记，确认链接可打开、出现在图库（如启用了预览图，确认 1 分钟内变为 `ready`）
 - [ ] 根据预算决定是否开启 `DOODLE_API_ENABLED`、`METRICS` 与 AI Gateway
 - [ ] 在 Chrome、Safari、Firefox 上各导出一次 PNG/JPG 并测试“复制到剪贴板”
 
