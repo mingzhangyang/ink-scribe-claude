@@ -19,11 +19,15 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
     { kind: "idle" } | { kind: "busy"; name: string } | { kind: "done"; message: string } | { kind: "error"; message: string }
   >({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
+  // 连续导入多个文件时，只采用最后一次导入的结果（较早的大文件可能更晚解析完）
+  const importGeneration = useRef(0);
 
   async function importFile(file: File) {
+    const current = ++importGeneration.current;
     setImportState({ kind: "busy", name: file.name });
     try {
       const result = await extractTextFromFile(file);
+      if (current !== importGeneration.current) return;
       setInput({ text: result.text });
       const pages = !result.pages
         ? ""
@@ -32,6 +36,7 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
           : `，${result.pages} 页`;
       setImportState({ kind: "done", message: `已导入「${file.name}」（${KIND_LABELS[result.kind]}${pages}，${charLength(result.text).toLocaleString()} 字）` });
     } catch (error) {
+      if (current !== importGeneration.current) return;
       setImportState({ kind: "error", message: error instanceof FileImportError ? error.message : `无法读取「${file.name}」，请确认文件未损坏。` });
     }
   }

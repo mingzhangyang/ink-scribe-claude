@@ -29,7 +29,7 @@ export function validateStructureRequest(body: unknown, maxInputChars: number): 
   if (length > maxInputChars) {
     throw new AppError(413, "TEXT_TOO_LONG", `文本过长（${length} 字），请控制在 ${maxInputChars} 字以内。`);
   }
-  const text = cleanText(record.text, maxInputChars, { multiline: true });
+  const text = cleanText(record.text, maxInputChars, { multiline: true, keepMarkup: true });
   if (charLength(text) < 2) {
     throw new AppError(400, "INVALID_REQUEST", "文本内容过短，无法整理。");
   }

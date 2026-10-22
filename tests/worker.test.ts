@@ -72,6 +72,14 @@ describe("POST /api/structure", () => {
     expect(inputs.messages[1].content).toContain(SECRET_TEXT);
   });
 
+  it("passes the user's text to the model without stripping code or markup", async () => {
+    const env = makeEnv(async () => ({ response: goodNote }));
+    const text = "请比较 Promise<string> 和 Promise<number>，以及 **粗体** 与 __init__ 的写法。";
+    expect((await call(post("/api/structure", { text }), env)).response.status).toBe(200);
+    const [, inputs] = (env.AI.run as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(inputs.messages[1].content).toContain(text);
+  });
+
   it("accepts object responses from JSON mode", async () => {
     const env = makeEnv(async () => ({ response: goodNote }));
     const { response } = await call(post("/api/structure", { text: SECRET_TEXT }), env);

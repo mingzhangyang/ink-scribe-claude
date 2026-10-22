@@ -105,6 +105,7 @@ describe("contentToHtml", () => {
   it("groups bullet and numbered lines into lists", () => {
     expect(contentToHtml("第一段\n1. 甲\n2. 乙\n- 丙\n结尾")).toBe("<p>第一段</p><ol><li>甲</li><li>乙</li></ol><ul><li>丙</li></ul><p>结尾</p>");
     expect(contentToHtml("a<b")).toBe("<p>a&lt;b</p>");
+    expect(contentToHtml("3.14 是圆周率")).toBe("<p>3.14 是圆周率</p>");
   });
 });
 

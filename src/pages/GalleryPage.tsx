@@ -15,8 +15,9 @@ function GalleryCard({ item }: { item: PublishedNoteSummary }) {
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString("zh-CN") : "";
   return (
     <a className="gallery-card" {...linkProps(`/n/${item.id}`)}>
-      <div className="gallery-thumb gallery-thumb-text" aria-hidden="true">
-        <strong>{item.title}</strong>
+      <div className="gallery-thumb gallery-thumb-text">
+        {/* 标题在下方说明中已有，这里只对视觉用户显示；摘要只出现在这里，需要读屏可读 */}
+        <strong aria-hidden="true">{item.title}</strong>
         <span>{item.summary}</span>
       </div>
       <div className="gallery-caption">

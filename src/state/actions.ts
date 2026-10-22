@@ -20,7 +20,9 @@ function withDate(note: NoteStructure): NoteStructure {
 }
 
 export async function generateNote(): Promise<void> {
-  const { input, settings, startLoading, setResult, setError, clearError } = useNoteStore.getState();
+  const { input, settings, noteSerial, startLoading, setResult, setError, clearError } = useNoteStore.getState();
+  // 请求期间如果载入或生成了另一条笔记（noteSerial 变化），丢弃本次结果与错误
+  const stale = () => controller !== current || useNoteStore.getState().noteSerial !== noteSerial;
   controller?.abort();
   const current = new AbortController();
   controller = current;
@@ -36,10 +38,10 @@ export async function generateNote(): Promise<void> {
       },
       current.signal,
     );
-    if (controller !== current) return;
+    if (stale()) return;
     setResult(withDate(response.note), response.meta, "ai");
   } catch (error) {
-    if (current.signal.aborted && controller !== current) return;
+    if (stale()) return;
     if (current.signal.aborted) {
       clearError();
       return;

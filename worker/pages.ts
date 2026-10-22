@@ -250,7 +250,7 @@ export function contentToHtml(content: string): string {
       continue;
     }
     const bullet = line.match(/^[-*•·]\s+(.*)$/);
-    const numbered = line.match(/^\d{1,2}[.、)）]\s*(.+)$/);
+    const numbered = line.match(/^\d{1,2}(?:\.(?!\d)|[、)）])\s*(.+)$/);
     const tag = bullet ? "ul" : numbered ? "ol" : "p";
     const text = escapeHtml(bullet?.[1] ?? numbered?.[1] ?? line);
     const last = blocks[blocks.length - 1];

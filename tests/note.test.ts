@@ -53,6 +53,18 @@ describe("normalizeNoteStructure", () => {
     expect(result.value.sections[0].highlights).toEqual(["Bold"]);
   });
 
+  it("keeps code-like angle brackets and identifiers intact", () => {
+    const result = normalizeNoteStructure({
+      title: "Promise<string> vs Promise<number>",
+      sections: [{ content: "Vec<u8>、Map<K, V> 与 __init__ 都应保留。", highlights: [] }],
+      summary: "ok",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.title).toBe("Promise<string> vs Promise<number>");
+    expect(result.value.sections[0].content).toBe("Vec<u8>、Map<K, V> 与 __init__ 都应保留。");
+  });
+
   it("matches highlights case-insensitively using the content's casing", () => {
     const result = normalizeNoteStructure({
       title: "t",

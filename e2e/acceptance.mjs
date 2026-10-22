@@ -486,8 +486,9 @@ if (process.env.E2E_API_KEY) {
   const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: { note: { title: "x", sections: [{ content: "y" }] } } });
   check("V2", "没有密钥时拒绝发布", unauth.status() === 401);
 
-  const html = await (await p7.request.get(note.url)).text();
-  check("V3", "分享链接的 HTML 带有标题与 Open Graph 信息", html.includes(`<title>${title} · 墨语笔记</title>`) && html.includes(`og:title" content="${title}"`));
+  const shareResponse = await p7.request.get(note.url);
+  const html = await shareResponse.text();
+  check("V3", "分享链接的 HTML 带有标题与 Open Graph 信息", html.includes(`<title>${title} · 墨语笔记</title>`) && html.includes(`og:title" content="${title}"`), `HTTP ${shareResponse.status()} ${html.slice(0, 160).replace(/\s+/g, " ")}`);
   check("V3b", "分享链接的 HTML 直接包含笔记正文与 Article 结构化数据", html.includes(`<h1>${title}</h1>`) && html.includes("<li>列表项</li>") && html.includes('"@type":"Article"') && html.includes(`<link rel="canonical" href="${note.url}"`));
 
   await p7.goto(note.url, { waitUntil: "networkidle" });

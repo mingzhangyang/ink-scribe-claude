@@ -33,6 +33,13 @@ describe("splitHighlights", () => {
 });
 
 describe("parseContentLines", () => {
+  it("does not treat decimal numbers as list markers", () => {
+    expect(parseContentLines("3.14 is pi\n2. second")).toEqual([
+      { kind: "text", text: "3.14 is pi" },
+      { kind: "numbered", marker: "2", text: "second" },
+    ]);
+  });
+
   it("recognises bullets, numbered items and gaps", () => {
     expect(parseContentLines("开头\n- 要点一\n• 要点二\n\n1. 第一步\n2、第二步\n\n")).toEqual([
       { kind: "text", text: "开头" },

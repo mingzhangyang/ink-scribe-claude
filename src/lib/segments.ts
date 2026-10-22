@@ -50,7 +50,8 @@ export function parseContentLines(content: string): ContentLine[] {
       lines.push({ kind: "bullet", text: bullet[1] });
       continue;
     }
-    const numbered = line.match(/^(\d{1,2})[.、)）]\s*(.*)$/);
+    // “3.14” 这类小数不是列表序号：句点后紧跟数字时不当作序号
+    const numbered = line.match(/^(\d{1,2})(?:\.(?!\d)|[、)）])\s*(.*)$/);
     if (numbered && numbered[2]) {
       lines.push({ kind: "numbered", marker: numbered[1], text: numbered[2] });
       continue;
