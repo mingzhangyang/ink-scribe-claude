@@ -300,6 +300,16 @@ describe("POST /api/doodle", () => {
     expect(body.doodle.elements).toHaveLength(2);
     expect(body.meta.warnings).toContain("丢弃了 1 个不合法的图元");
   });
+
+  it("rejects concepts that are empty after cleaning without calling the model", async () => {
+    const env = makeEnv(async () => ({ response: spec }), { DOODLE_API_ENABLED: "true" });
+    for (const concept of ["<b></b>", "\u0001\u0002"]) {
+      const { response, body } = await call(post("/api/doodle", { concept }), env);
+      expect(response.status).toBe(400);
+      expect(body.error.code).toBe("INVALID_REQUEST");
+    }
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
 });
 
 describe("routing", () => {

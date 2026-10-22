@@ -37,6 +37,8 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
       const result = await generateDoodle(concept);
       // 等待期间用户可能已生成或载入了另一条笔记，此时丢弃结果
       if (useNoteStore.getState().noteSerial !== noteSerial) return;
+      // 等待期间用户可能改选了“不显示插图”或内置主题，不能用结果覆盖新的选择
+      if (useNoteStore.getState().settings.doodleMode !== "ai") return;
       useNoteStore.getState().setAiDoodle(result.doodle);
       onToast("插图已更新");
     } catch (error) {

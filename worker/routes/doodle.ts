@@ -19,7 +19,10 @@ export function validateDoodleRequest(body: unknown): { concept: string } {
   if (charLength(raw) > MAX_CONCEPT_CHARS) {
     throw new AppError(413, "TEXT_TOO_LONG", `插图主题过长，请控制在 ${MAX_CONCEPT_CHARS} 字以内。`);
   }
-  return { concept: cleanText(raw, MAX_CONCEPT_CHARS) };
+  // 只含标签或控制字符的值清理后为空，不应再调用模型
+  const concept = cleanText(raw, MAX_CONCEPT_CHARS);
+  if (!concept) throw new AppError(400, "INVALID_REQUEST", "请提供插图主题 concept。");
+  return { concept };
 }
 
 /** 开发模式下的确定性插图：由概念文本的哈希决定花瓣数量与位置。 */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeStickers } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
-import { effectiveScale } from "../src/export/scale.ts";
+import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
 import { parseContentLines, splitHighlights } from "../src/lib/segments.ts";
@@ -175,5 +175,7 @@ describe("effectiveScale", () => {
     const tall = effectiveScale(840, 100_000, 2);
     expect(tall).toBeLessThan(0.5);
     expect(840 * tall * 100_000 * tall).toBeLessThanOrEqual(16_000_000);
+    expect(100_000 * tall).toBeLessThanOrEqual(MAX_CANVAS_DIMENSION);
+    expect(840 * tall).toBeLessThanOrEqual(MAX_CANVAS_DIMENSION);
   });
 });
