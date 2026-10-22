@@ -28,6 +28,21 @@ describe("docxXmlToText", () => {
     ].join("");
     expect(docxXmlToText(xml)).toBe("标题\nA & B \tC<D\n换行\n甲\t乙\n- 列表项\n保留\n表格");
   });
+
+  it("ignores tab-stop definitions and keeps nested text-box paragraphs", () => {
+    const xml =
+      '<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr><w:r><w:t>外层</w:t></w:r>' +
+      "<w:r><w:txbxContent><w:p><w:r><w:t>文本框</w:t></w:r></w:p></w:txbxContent></w:r><w:r><w:t>续</w:t></w:r></w:p>";
+    expect(docxXmlToText(xml)).toBe("文本框\n外层续");
+  });
+
+  it("handles unclosed paragraphs in linear time", () => {
+    expect(docxXmlToText("<w:p><w:r><w:t>甲</w:t></w:r><w:p><w:r><w:t>乙</w:t>")).toBe("甲\n乙");
+    const malformed = "<w:p><w:r><w:t>x</w:t></w:r>".repeat(50_000);
+    const started = performance.now();
+    expect(docxXmlToText(malformed).length).toBeGreaterThan(0);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
 });
 
 describe("joinPdfTextItems", () => {

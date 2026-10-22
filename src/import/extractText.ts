@@ -60,7 +60,7 @@ function htmlToText(html: string): string {
       }
       let chunk = raw.replace(/\s+/g, " ");
       // 普通文本在行首的空白来自 HTML 排版，去掉
-      if (/(^|\n)$/.test(text)) chunk = chunk.replace(/^ +/, "");
+      if (/(^|\n|\t)$/.test(text)) chunk = chunk.replace(/^ +/, "");
       emit(chunk);
       return;
     }
@@ -76,6 +76,8 @@ function htmlToText(html: string): string {
     node.childNodes.forEach((child) => walk(child, childPre));
     // 没有文字的列表项不输出符号
     if (node.tagName === "LI") pendingMarker = false;
+    // 单元格之间用制表符分隔，否则 <td>Tea</td><td>10</td> 会连成 “Tea10”
+    if (node.tagName === "TD" || node.tagName === "TH") text += "\t";
     if (block) text += "\n";
   };
   if (root) walk(root, false);

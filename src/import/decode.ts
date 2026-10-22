@@ -26,23 +26,65 @@ function decodeXmlEntities(text: string): string {
   });
 }
 
+// 只关心段落、文字、制表符、换行、列表标记与修订删除这几种标签
+const DOCX_TAG = /<(\/?)w:(p|t|tab|br|numPr|del)(?=[\s/>])[^>]*>/g;
+
 /**
  * 从 Word 文档的 word/document.xml 中提取纯文本：每个段落一行，保留制表符与手动换行，
  * 列表项加 “- ” 前缀，忽略样式、批注与修订删除的文字。
+ * 单遍扫描标签（不回溯），缺少闭合标签的畸形文档也只需线性时间。
  */
 export function docxXmlToText(xml: string): string {
-  const body = xml.replace(/<w:del\b[\s\S]*?<\/w:del>/g, "");
-  const paragraphs = body.match(/<w:p[\s>][\s\S]*?<\/w:p>/g) ?? [];
-  const lines = paragraphs.map((paragraph) => {
-    const isList = /<w:numPr\b/.test(paragraph);
-    let line = "";
-    for (const token of paragraph.match(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>|<w:br\s[^>]*\/>/g) ?? []) {
-      if (token.startsWith("<w:tab")) line += "\t";
-      else if (token.startsWith("<w:br")) line += "\n";
-      else line += decodeXmlEntities(token.replace(/^<w:t(?:\s[^>]*)?>|<\/w:t>$/g, ""));
+  const lines: string[] = [];
+  const emit = (paragraph: { line: string; isList: boolean }) =>
+    lines.push(paragraph.isList && paragraph.line.trim() ? `- ${paragraph.line.trim()}` : paragraph.line);
+  // 段落可以嵌套（文本框中的段落位于外层段落的 run 内）
+  const stack: Array<{ line: string; isList: boolean }> = [];
+  let deleted = 0;
+  let textStart = -1;
+  for (const match of xml.matchAll(DOCX_TAG)) {
+    const [tag, closing, name] = match;
+    const selfClosing = tag.endsWith("/>");
+    const current = stack[stack.length - 1];
+    if (textStart >= 0) {
+      // <w:t> 内不会出现其他标签（XML 中的 “<” 已转义），遇到闭合标签时取出文字
+      if (name === "t" && closing) {
+        if (current && deleted === 0) current.line += decodeXmlEntities(xml.slice(textStart, match.index));
+        textStart = -1;
+      }
+      continue;
     }
-    return isList && line.trim() ? `- ${line.trim()}` : line;
-  });
+    switch (name) {
+      case "del":
+        if (!selfClosing) deleted = closing ? Math.max(0, deleted - 1) : deleted + 1;
+        break;
+      case "p":
+        if (closing) {
+          const paragraph = stack.pop();
+          if (paragraph) emit(paragraph);
+        } else if (selfClosing) {
+          lines.push("");
+        } else {
+          stack.push({ line: "", isList: false });
+        }
+        break;
+      case "t":
+        if (!closing && !selfClosing) textStart = match.index + tag.length;
+        break;
+      case "numPr":
+        if (current && !closing) current.isList = true;
+        break;
+      case "tab":
+        // 带属性的 <w:tab w:val=… w:pos=…/> 是段落的制表位定义，不是正文中的制表符
+        if (current && deleted === 0 && /^<w:tab\s*\/>$/.test(tag)) current.line += "\t";
+        break;
+      case "br":
+        if (current && deleted === 0 && selfClosing) current.line += "\n";
+        break;
+    }
+  }
+  // 缺少闭合标签的段落也保留已读到的文字
+  stack.forEach(emit);
   return normalizeExtractedText(lines.join("\n"));
 }
 
