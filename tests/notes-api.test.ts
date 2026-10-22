@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Env, RenderJob } from "../worker/env.ts";
+import type { Env } from "../worker/env.ts";
 import { resetMemoryRateLimit } from "../worker/rate-limit.ts";
-import { handleRenderBatch, type RenderBrowser } from "../worker/render.ts";
 import { handleApi } from "../worker/router.ts";
-import { createTestD1, createTestR2 } from "./helpers/d1.ts";
+import { createTestD1 } from "./helpers/d1.ts";
 
 const KEY = "isk_test_key_owner";
 const OTHER_KEY = "isk_test_key_other";
@@ -22,8 +21,6 @@ const aiNote = {
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 let env: Env;
-let r2: ReturnType<typeof createTestR2>;
-let queued: RenderJob[];
 
 async function seedKeys(db: D1Database) {
   const insert = "INSERT INTO api_keys (id, name, key_hash, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)";
@@ -56,8 +53,6 @@ beforeEach(async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   const db = createTestD1();
   await seedKeys(db);
-  r2 = createTestR2();
-  queued = [];
   env = {
     AI: { run: vi.fn(async () => ({ response: aiNote })) } as unknown as Ai,
     DB: db,
@@ -103,7 +98,7 @@ describe("POST /api/v1/notes", () => {
     expect(body!.note.title).toBe("整理后的标题");
     expect(body!.note.date).toBeTruthy();
     expect(body!.settings).toMatchObject({ paper: "kraft", ink: "brown", layout: "hybrid-cornell" });
-    expect(body!.image.status).toBe("disabled");
+    expect(body).not.toHaveProperty("image");
     expect(body!.meta.model).toBeDefined();
   });
 
@@ -159,27 +154,6 @@ describe("POST /api/v1/notes", () => {
     expect(other.response.status).toBe(201);
     expect(other.body!.id).not.toBe(first.body!.id);
   });
-
-  it("does not render thumbnails unless explicitly enabled", async () => {
-    env.IMAGES = r2 as unknown as R2Bucket;
-    env.BROWSER = {} as Fetcher;
-    env.RENDER_QUEUE = { send: vi.fn(async (job: RenderJob) => void queued.push(job)) } as unknown as Queue<RenderJob>;
-    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
-    expect(body!.image.status).toBe("disabled");
-    expect(queued).toHaveLength(0);
-  });
-
-  it("queues a thumbnail render when rendering is enabled and configured", async () => {
-    env.THUMBNAILS_ENABLED = "true";
-    env.IMAGES = r2 as unknown as R2Bucket;
-    env.BROWSER = {} as Fetcher;
-    env.RENDER_QUEUE = { send: vi.fn(async (job: RenderJob) => void queued.push(job)) } as unknown as Queue<RenderJob>;
-    env.PUBLIC_BASE_URL = "https://ink.example.com/";
-    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
-    expect(body!.image.status).toBe("pending");
-    expect(body!.url).toBe(`https://ink.example.com/n/${body!.id}`);
-    expect(queued).toEqual([{ id: body!.id, origin: "https://ink.example.com" }]);
-  });
 });
 
 describe("reading, gallery and management", () => {
@@ -231,30 +205,15 @@ describe("reading, gallery and management", () => {
     const otherList = await call(request("GET", "/api/v1/notes", { key: OTHER_KEY }));
     expect(otherList.body!.items).toHaveLength(0);
 
-    env.IMAGES = r2 as unknown as R2Bucket;
-    await r2.put(`notes/${note.id}.png`, new Uint8Array([1]));
-    await env.DB!.prepare("UPDATE notes SET image_key = ? WHERE id = ?").bind(`notes/${note.id}.png`, note.id).run();
-    const deleted = await handleApi(request("DELETE", `/api/v1/notes/${note.id}`), env, (p) => void p);
+    const deleted = await handleApi(request("DELETE", `/api/v1/notes/${note.id}`), env, () => {});
     expect(deleted.status).toBe(204);
-    await Promise.resolve();
-    expect(r2.objects.size).toBe(0);
     expect((await call(request("GET", `/api/notes/${note.id}`, { key: null }))).response.status).toBe(404);
   });
 
-  it("serves the preview image only when it is ready", async () => {
-    const note = await create("public");
-    env.IMAGES = r2 as unknown as R2Bucket;
-    expect((await call(request("GET", `/api/notes/${note.id}/image.png`, { key: null }))).response.status).toBe(404);
-    await r2.put(`notes/${note.id}.png`, new Uint8Array([137, 80, 78, 71]));
-    await env.DB!.prepare("UPDATE notes SET image_status = 'ready', image_key = ?, image_width = 1680, image_height = 2376 WHERE id = ?")
-      .bind(`notes/${note.id}.png`, note.id)
-      .run();
-    const response = await handleApi(request("GET", `/api/notes/${note.id}/image.png`, { key: null }), env, () => {});
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("image/png");
-    const { body } = await call(request("GET", `/api/notes/${note.id}`, { key: null }));
-    expect(body!.image).toMatchObject({ status: "ready", width: 1680, height: 2376 });
-    expect(body!.image.url).toContain(`/api/notes/${note.id}/image.png`);
+  it("builds share links from PUBLIC_BASE_URL when configured", async () => {
+    env.PUBLIC_BASE_URL = "https://ink.example.com/";
+    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
+    expect(body!.url).toBe(`https://ink.example.com/n/${body!.id}`);
   });
 
   it("publishes an OpenAPI document pointing at the public origin", async () => {
@@ -262,89 +221,5 @@ describe("reading, gallery and management", () => {
     const { body } = await call(request("GET", "/api/v1/openapi.json", { key: null }));
     expect(body!.servers).toEqual([{ url: "https://ink.example.com" }]);
     expect(Object.keys(body!.paths)).toContain("/api/v1/notes");
-  });
-});
-
-describe("thumbnail queue consumer", () => {
-  function batchOf(jobs: Array<RenderJob & { attempts?: number }>) {
-    const messages = jobs.map((job) => ({
-      body: { id: job.id, origin: job.origin },
-      attempts: job.attempts ?? 1,
-      ack: vi.fn(),
-      retry: vi.fn(),
-    }));
-    return { messages, ackAll: vi.fn(), retryAll: vi.fn() } as unknown as MessageBatch<RenderJob> & { messages: typeof messages };
-  }
-
-  function fakeBrowser(screenshot: () => Promise<Uint8Array>) {
-    const visited: string[] = [];
-    const browser: RenderBrowser = {
-      async newPage() {
-        return {
-          async setViewport() {},
-          async goto(url: string) {
-            visited.push(url);
-          },
-          async waitForSelector() {},
-          async $() {
-            return { boundingBox: async () => ({ width: 840, height: 1188 }), screenshot };
-          },
-          async close() {},
-        };
-      },
-      close: vi.fn(async () => {}),
-    };
-    return { browser, visited };
-  }
-
-  async function pendingNote(): Promise<string> {
-    env.THUMBNAILS_ENABLED = "true";
-    env.IMAGES = r2 as unknown as R2Bucket;
-    env.BROWSER = {} as Fetcher;
-    env.RENDER_QUEUE = { send: vi.fn(async () => {}) } as unknown as Queue<RenderJob>;
-    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
-    return body!.id;
-  }
-
-  it("screenshots the render page, stores the PNG and marks the image ready", async () => {
-    const id = await pendingNote();
-    const { browser, visited } = fakeBrowser(async () => new Uint8Array([137, 80, 78, 71]));
-    const batch = batchOf([{ id, origin: "https://ink.example.com" }]);
-    await handleRenderBatch(batch, env, async () => browser);
-    expect(visited).toEqual([`https://ink.example.com/n/${id}?render=1`]);
-    expect(r2.objects.has(`notes/${id}.png`)).toBe(true);
-    expect(batch.messages[0].ack).toHaveBeenCalled();
-    expect(browser.close).toHaveBeenCalled();
-    const { body } = await call(request("GET", `/api/notes/${id}`, { key: null }));
-    expect(body!.image).toMatchObject({ status: "ready", width: 1680, height: 2376 });
-  });
-
-  it("retries failures and marks the image failed after the last attempt", async () => {
-    const id = await pendingNote();
-    const { browser } = fakeBrowser(async () => {
-      throw new Error("timeout");
-    });
-    const early = batchOf([{ id, origin: "https://x.example", attempts: 1 }]);
-    await handleRenderBatch(early, env, async () => browser);
-    expect(early.messages[0].retry).toHaveBeenCalled();
-    const last = batchOf([{ id, origin: "https://x.example", attempts: 3 }]);
-    await handleRenderBatch(last, env, async () => browser);
-    expect(last.messages[0].ack).toHaveBeenCalled();
-    const { body } = await call(request("GET", `/api/notes/${id}`, { key: null }));
-    expect(body!.image.status).toBe("failed");
-  });
-
-  it("acks jobs for deleted notes and retries the whole batch when the browser cannot start", async () => {
-    await pendingNote();
-    const { browser } = fakeBrowser(async () => new Uint8Array([1]));
-    const gone = batchOf([{ id: "AAAAAAAAAAAAAAAAAAAAAA", origin: "https://x.example" }]);
-    await handleRenderBatch(gone, env, async () => browser);
-    expect(gone.messages[0].ack).toHaveBeenCalled();
-
-    const blocked = batchOf([{ id: "AAAAAAAAAAAAAAAAAAAAAA", origin: "https://x.example" }]);
-    await handleRenderBatch(blocked, env, async () => {
-      throw new Error("no browser sessions available");
-    });
-    expect(blocked.retryAll).toHaveBeenCalled();
   });
 });

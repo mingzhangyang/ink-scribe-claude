@@ -8,7 +8,7 @@ function escapeAttr(value: string): string {
 
 /**
  * /n/:id 查看页：返回前端 index.html，并在服务端注入标题与 Open Graph 元信息，
- * 让 agent 发到聊天工具里的链接能显示标题、摘要与预览图。页面内容仍由前端渲染。
+ * 让 agent 发到聊天工具里的链接能显示标题与摘要。页面内容仍由前端渲染。
  */
 export async function handleSharePage(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -35,15 +35,10 @@ export async function handleSharePage(request: Request, env: Env): Promise<Respo
     ["property", "og:title", summary.title],
     ["property", "og:description", summary.summary],
     ["property", "og:url", summary.url],
-    ["name", "twitter:card", summary.image.url ? "summary_large_image" : "summary"],
+    ["name", "twitter:card", "summary"],
     ["name", "twitter:title", summary.title],
     ["name", "twitter:description", summary.summary],
   ];
-  if (summary.image.url) {
-    meta.push(["property", "og:image", summary.image.url], ["name", "twitter:image", summary.image.url]);
-    if (summary.image.width) meta.push(["property", "og:image:width", String(summary.image.width)]);
-    if (summary.image.height) meta.push(["property", "og:image:height", String(summary.image.height)]);
-  }
   // 仅持有链接可见的笔记不允许搜索引擎收录
   if (summary.visibility === "unlisted") meta.push(["name", "robots", "noindex, nofollow"]);
 

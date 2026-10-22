@@ -155,8 +155,6 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
 
   const language = noteLanguage(note);
   note = withDate(note, language, ctx.config.defaultTimezone);
-  const { RENDER_QUEUE, IMAGES, BROWSER } = ctx.env;
-  const canRender = ctx.config.thumbnailsEnabled && !ctx.config.mock && !!RENDER_QUEUE && !!IMAGES && !!BROWSER;
   const id = newNoteId();
   const now = Date.now();
   await insertNote(database, {
@@ -169,17 +167,9 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
     settings,
     stickers,
     doodle,
-    imageStatus: canRender ? "pending" : "disabled",
     now,
   });
   if (idempotencyKey) await saveIdempotent(database, apiKey.id, idempotencyKey, requestHash, id, now);
-  if (canRender) {
-    try {
-      await RENDER_QUEUE!.send({ id, origin: ctx.origin });
-    } catch {
-      // 入队失败不影响发布结果；查看页仍可正常渲染，只是暂时没有预览图
-    }
-  }
   ctx.log.template = template;
   const result = await published(ctx, id);
   return jsonResponse({ ...result, meta: { requestId: ctx.requestId, ...meta } }, 201, { Location: result.url });
@@ -222,7 +212,6 @@ export async function handlePatchNote(ctx: RouteContext): Promise<Response> {
 export async function handleDeleteNote(ctx: RouteContext): Promise<Response> {
   const row = await deleteNote(db(ctx), ctx.params.id, ctx.apiKey!.id);
   if (!row) throw new AppError(404, "NOT_FOUND", "笔记不存在。");
-  if (row.image_key && ctx.env.IMAGES) ctx.waitUntil(ctx.env.IMAGES.delete(row.image_key));
   return new Response(null, { status: 204 });
 }
 
@@ -248,20 +237,4 @@ export async function handleGallery(ctx: RouteContext): Promise<Response> {
   );
   const body: NoteListResponse = { items: rows.map((row) => toSummary(row, ctx.origin)), nextCursor };
   return jsonResponse(body, 200, { "Cache-Control": "no-cache" });
-}
-
-export async function handleNoteImage(ctx: RouteContext): Promise<Response> {
-  const row = ownedRowOr404(await getNoteRow(db(ctx), ctx.params.id));
-  if (row.image_status !== "ready" || !row.image_key || !ctx.env.IMAGES) {
-    throw new AppError(404, "NOT_FOUND", "预览图尚未生成。");
-  }
-  const object = await ctx.env.IMAGES.get(row.image_key);
-  if (!object) throw new AppError(404, "NOT_FOUND", "预览图尚未生成。");
-  return new Response(object.body, {
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=86400",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
 }

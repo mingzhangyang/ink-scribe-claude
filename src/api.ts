@@ -121,15 +121,6 @@ async function getJson(path: string): Promise<unknown> {
 function safeSummary(raw: Record<string, unknown>): PublishedNoteSummary | null {
   const str = (value: unknown) => (typeof value === "string" ? value : "");
   if (typeof raw.id !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(raw.id)) return null;
-  const image = (raw.image ?? {}) as Record<string, unknown>;
-  // 只接受本站的预览图路径，并转换为相对地址（与 CSP 的 img-src 'self' 一致）
-  let imagePath = "";
-  try {
-    const parsed = new URL(str(image.url), location.origin);
-    if (parsed.pathname === `/api/notes/${raw.id}/image.png`) imagePath = `${parsed.pathname}${parsed.search}`;
-  } catch {
-    imagePath = "";
-  }
   return {
     id: raw.id,
     url: `/n/${raw.id}`,
@@ -139,12 +130,6 @@ function safeSummary(raw: Record<string, unknown>): PublishedNoteSummary | null 
     template: str(raw.template),
     layout: str(raw.layout),
     visibility: raw.visibility === "public" ? "public" : "unlisted",
-    image: {
-      status: image.status === "ready" || image.status === "pending" || image.status === "failed" ? image.status : "disabled",
-      ...(imagePath ? { url: imagePath } : {}),
-      ...(typeof image.width === "number" ? { width: image.width } : {}),
-      ...(typeof image.height === "number" ? { height: image.height } : {}),
-    },
     createdAt: str(raw.createdAt),
     updatedAt: str(raw.updatedAt),
   };

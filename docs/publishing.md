@@ -15,9 +15,8 @@ npm run deploy
 npm run keys -- create --name "我的发布脚本" --remote   # 密钥只显示一次
 ```
 
-- 预览图默认关闭：图库显示标题与摘要的文字卡片，链接预览只有标题与摘要；查看页仍可在浏览器中下载高清图片。
-- 需要预览图时（图库缩略图、聊天中的链接预览图片），按 `wrangler.jsonc` 中“可选：笔记预览图”一节的说明创建 R2 存储桶与队列、取消绑定注释，并把 `THUMBNAILS_ENABLED` 改为 `"true"`。这依赖 Browser Rendering，需要 Workers 付费计划；启用前已发布的笔记不会自动补图。
-- 绑定自定义域名后，把 `PUBLIC_BASE_URL` 设为该域名（如 `https://notes.example.com`），返回的链接和预览图地址都会使用它。
+- 不生成预览图：图库以标题与摘要的文字卡片展示，链接预览显示标题与摘要；查看页可在浏览器中下载高清图片。
+- 绑定自定义域名后，把 `PUBLIC_BASE_URL` 设为该域名（如 `https://notes.example.com`），返回的链接会使用它。
 - 本地开发：`npm run db:migrate` 创建本地表，`npm run keys -- create --name 本地` 生成本地密钥。
 
 ## 发布一条笔记
@@ -43,7 +42,6 @@ curl -X POST https://notes.example.com/api/v1/notes \
   "id": "aYsHAXVJORuZWD8zykcUdg",
   "url": "https://notes.example.com/n/aYsHAXVJORuZWD8zykcUdg",
   "visibility": "public",
-  "image": { "status": "pending" },
   "note": { "title": "…", "sections": [] },
   "settings": { "layout": "free-journal", "paper": "kraft" },
   "meta": { "requestId": "…", "model": "@cf/qwen/qwen3-30b-a3b-fp8", "attempts": 1 }
@@ -59,7 +57,6 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `visibility` | `unlisted`（默认）或 `public` |
 | `Idempotency-Key` 头 | 相同的键与请求体重试时返回同一条笔记（`200` + `Idempotent-Replayed: true`）；同一个键用于不同内容返回 `409` |
 
-预览图默认关闭，`image.status` 为 `disabled`。启用后在后台生成：`image.status` 依次为 `pending` → `ready`（附 `url`、`width`、`height`），失败重试 3 次后为 `failed`。可用 `GET /api/v1/notes/<id>` 轮询。
 
 ## 其他接口
 
@@ -68,10 +65,9 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `GET /api/v1/notes?cursor=&limit=` | 密钥 | 列出当前密钥发布的笔记 |
 | `GET /api/v1/notes/:id` | 密钥 | 查询（只能访问自己密钥发布的笔记） |
 | `PATCH /api/v1/notes/:id` | 密钥 | 修改 `visibility` |
-| `DELETE /api/v1/notes/:id` | 密钥 | 删除笔记及预览图，返回 `204` |
+| `DELETE /api/v1/notes/:id` | 密钥 | 删除笔记，返回 `204` |
 | `GET /api/notes/:id` | 公开 | 查看页使用的笔记数据（`public` 与 `unlisted` 均可通过 ID 读取） |
 | `GET /api/gallery?cursor=&template=&language=` | 公开 | 图库中的公开笔记 |
-| `GET /api/notes/:id/image.png` | 公开 | 预览图 |
 | `GET /api/v1/openapi.json`、`GET /llms.txt` | 公开 | 给 agent 读的接口说明 |
 
 ## 给 AI agent 的说明
@@ -81,7 +77,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 - 密钥放在环境变量（如 `INKSCRIBE_API_KEY`）中，不要回显；
 - 默认使用 `unlisted`，只有用户明确要求公开时才用 `public`；
 - 每次发布带上 `Idempotency-Key`（例如任务 ID），网络重试不会产生重复笔记；
-- 把返回的 `url` 发给用户。链接发到聊天工具里会显示标题、摘要和预览图（服务端注入的 Open Graph 信息）。
+- 把返回的 `url` 发给用户。链接发到聊天工具里会显示标题和摘要（服务端注入的 Open Graph 信息）。
 
 ## 密钥管理
 

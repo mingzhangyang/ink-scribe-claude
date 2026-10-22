@@ -4,8 +4,6 @@ import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.t
 import { NotePage } from "../components/note/NotePage.tsx";
 import { byId, PAGE_WIDTH, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
-import { ensureFontsLoaded } from "../export/fontEmbed.ts";
-import { loadFontCss } from "../fonts.ts";
 import { linkProps, navigate } from "../router.ts";
 import { useNoteStore } from "../state/store.ts";
 
@@ -13,11 +11,8 @@ const noop = () => {};
 
 type State = { kind: "loading" } | { kind: "error"; code: string; message: string } | { kind: "ready"; data: ViewableNote };
 
-/**
- * 已发布笔记的只读查看页。render 模式（?render=1）只输出笔记页面本身，
- * 供 Browser Rendering 截图生成预览图：字体加载完成后在 <html> 上标记 data-render-ready。
- */
-export function NoteViewPage({ id, render, onToast }: { id: string; render: boolean; onToast: (message: string) => void }) {
+/** 已发布笔记的只读查看页：可复制链接、下载图片，或载入编辑器继续修改。 */
+export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: string) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const pageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -44,16 +39,7 @@ export function NoteViewPage({ id, render, onToast }: { id: string; render: bool
   useEffect(() => {
     if (state.kind !== "ready") return;
     document.title = `${state.data.note.title} · 墨语笔记`;
-    if (!render) return;
-    // 截图前确保所需字体分片全部加载
-    const families = usedFamilies(state.data.settings.zhFont, state.data.settings.enFont);
-    void (async () => {
-      await Promise.all(families.map(loadFontCss));
-      await ensureFontsLoaded(families, pageRef.current?.textContent ?? "");
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      document.documentElement.dataset.renderReady = "true";
-    })();
-  }, [state, render]);
+  }, [state]);
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -68,7 +54,11 @@ export function NoteViewPage({ id, render, onToast }: { id: string; render: bool
   }, [state.kind]);
 
   if (state.kind === "loading") {
-    return <main className="page-center">{render ? null : <p className="hint">正在加载笔记…</p>}</main>;
+    return (
+      <main className="page-center">
+        <p className="hint">正在加载笔记…</p>
+      </main>
+    );
   }
   if (state.kind === "error") {
     return (
@@ -99,8 +89,6 @@ export function NoteViewPage({ id, render, onToast }: { id: string; render: bool
       onRemoveSticker={noop}
     />
   );
-  if (render) return <div className="render-root">{page}</div>;
-
   const scale = Math.min(1, width / PAGE_WIDTH);
 
   async function download() {

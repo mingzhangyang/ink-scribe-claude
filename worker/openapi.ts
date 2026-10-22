@@ -52,16 +52,6 @@ const noteStructureSchema = {
   },
 } as const;
 
-const imageSchema = {
-  type: "object",
-  properties: {
-    status: { type: "string", enum: ["pending", "ready", "failed", "disabled"] },
-    url: { type: "string", format: "uri" },
-    width: { type: "integer" },
-    height: { type: "integer" },
-  },
-} as const;
-
 const summarySchema = {
   type: "object",
   properties: {
@@ -73,7 +63,6 @@ const summarySchema = {
     template: { type: "string" },
     layout: { type: "string" },
     visibility: { type: "string", enum: ["public", "unlisted"] },
-    image: imageSchema,
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" },
   },
@@ -161,7 +150,7 @@ export const OPENAPI_SPEC = {
     },
     "/api/v1/notes/{id}": {
       parameters: [noteIdParam],
-      get: { operationId: "getNote", summary: "查询笔记（含预览图状态）", security: [{ bearer: [] }], responses: { "200": { description: "笔记" }, "404": errorResponse } },
+      get: { operationId: "getNote", summary: "查询笔记", security: [{ bearer: [] }], responses: { "200": { description: "笔记" }, "404": errorResponse } },
       patch: {
         operationId: "updateNote",
         summary: "修改可见性",
@@ -203,7 +192,7 @@ export function llmsTxt(origin: string): string {
 
 - 认证：\`Authorization: Bearer <API 密钥>\`（由站点管理员发放）。
 - 创建笔记：\`POST ${origin}/api/v1/notes\`，JSON 请求体提供 \`text\`（原文，服务端用 Workers AI 整理）或 \`note\`（你已整理好的结构）二选一。
-- 返回的 \`url\` 即笔记查看页，直接发给用户；\`image.url\` 在预览图生成后可用（\`image.status\` 为 \`ready\`）。
+- 返回的 \`url\` 即笔记查看页，直接发给用户。
 - \`visibility\` 默认 \`unlisted\`（仅持有链接可见）；只有用户明确要求公开时才使用 \`public\`，公开笔记会出现在 ${origin}/gallery。
 - 重试时带上相同的 \`Idempotency-Key\` 头，避免重复创建。
 

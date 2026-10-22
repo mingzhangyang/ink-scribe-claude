@@ -22,9 +22,8 @@
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
 | 溢出处理 | 自动检测文字超出页面，一键缩小字号、切换为长图，或以“精简”档位重新生成 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
-| 发布与分享 | 用 API 密钥调用 `POST /api/v1/notes`（传原文或已整理的结构），返回查看链接 `/n/<id>`；链接带标题、摘要与预览图的 Open Graph 信息。详见 [docs/publishing.md](docs/publishing.md) |
+| 发布与分享 | 用 API 密钥调用 `POST /api/v1/notes`（传原文或已整理的结构），返回查看链接 `/n/<id>`；链接带标题与摘要的 Open Graph 信息。详见 [docs/publishing.md](docs/publishing.md) |
 | 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
-| 预览图（可选，默认关闭） | 启用后由 Queue 触发 Browser Rendering 截图，存入 R2，用于图库缩略图与链接预览图片；未启用时图库显示文字卡片 |
 | 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
 
 ## 快速开始
@@ -66,8 +65,7 @@ Browser ── 输入 / 画布 / 样式 / 贴纸 / 导出（客户端完成排�
    ▼
 Cloudflare Worker ── 静态资源 + SPA 回退；/api/structure、/api/doodle、/api/config；
    │                   发布接口 /api/v1/notes、查看页 /n/:id（注入 Open Graph）、图库 /api/gallery
-   ├── D1：已发布的笔记与 API 密钥（哈希）
-   └── 可选：Queues → Browser Rendering → R2，生成预览图
+   └── D1：已发布的笔记与 API 密钥（哈希）
    │  校验 · 来源检查 · 限流 · 超时 · 修复重试 · 只记录元数据的日志与指标
    ▼ AI binding
 Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
@@ -76,7 +74,7 @@ Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
 ```text
 shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、选项枚举、本地整理器
 worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志、
-             发布接口与存储（D1）、分享页元信息、预览图队列消费者
+             发布接口与存储（D1）、分享页元信息
 migrations/  D1 数据库迁移
 src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
 scripts/     模型评测脚本与评测集
@@ -107,8 +105,7 @@ docs/        API、部署、模型评测、字体与导出说明
 | `DOODLE_API_ENABLED` | `false` | 是否启用 `/api/doodle` |
 | `DOODLE_CACHE_TTL_SECONDS` | `86400` | AI 插图缓存时长（只缓存校验后的图元，缓存键为哈希） |
 | `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
-| `PUBLIC_BASE_URL` | 空 | 分享链接与预览图使用的站点地址；为空时使用请求的域名 |
-| `THUMBNAILS_ENABLED` | `false` | 是否生成预览图（需要 Browser Rendering、R2 与 Queue 绑定，见 `wrangler.jsonc`） |
+| `PUBLIC_BASE_URL` | 空 | 分享链接使用的站点地址；为空时使用请求的域名 |
 | `DEFAULT_TIMEZONE` | `Asia/Shanghai` | 发布时自动补全笔记日期使用的时区 |
 | `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥每分钟的请求上限 |
 

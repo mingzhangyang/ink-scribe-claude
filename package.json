@@ -23,7 +23,6 @@
     "db:migrate:remote": "wrangler d1 migrations apply ink-scribe --remote"
   },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.4.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/indie-flower": "^5.3.0",
     "@fontsource/kalam": "^5.3.0",

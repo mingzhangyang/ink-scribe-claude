@@ -75,7 +75,6 @@ export type ApiErrorBody = {
 // ---------- 发布的笔记（/api/v1 与公开读取接口） ----------
 
 export type NoteVisibility = "public" | "unlisted";
-export type ImageStatus = "pending" | "ready" | "failed" | "disabled";
 
 export type PublishedNoteSummary = {
   id: string;
@@ -86,7 +85,6 @@ export type PublishedNoteSummary = {
   template: string;
   layout: string;
   visibility: NoteVisibility;
-  image: { status: ImageStatus; url?: string; width?: number; height?: number };
   createdAt: string;
   updatedAt: string;
 };

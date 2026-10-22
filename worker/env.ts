@@ -6,12 +6,6 @@ export interface Env {
   METRICS?: AnalyticsEngineDataset;
   /** 发布的笔记与 API 密钥。 */
   DB?: D1Database;
-  /** 笔记预览图。 */
-  IMAGES?: R2Bucket;
-  /** 预览图生成任务队列（生产者与消费者都是本 Worker）。 */
-  RENDER_QUEUE?: Queue<RenderJob>;
-  /** Browser Rendering，用于截图生成预览图。 */
-  BROWSER?: Fetcher;
 
   AI_MODEL?: string;
   AI_DOODLE_MODEL?: string;
@@ -32,9 +26,6 @@ export interface Env {
   DOODLE_CACHE_TTL_SECONDS?: string;
   ALLOWED_ORIGINS?: string;
   PUBLIC_BASE_URL?: string;
-  THUMBNAILS_ENABLED?: string;
   DEFAULT_TIMEZONE?: string;
   API_RATE_LIMIT_PER_MINUTE?: string;
 }
-
-export type RenderJob = { id: string; origin: string };

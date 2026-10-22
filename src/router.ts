@@ -5,14 +5,14 @@ import { useSyncExternalStore, type MouseEvent } from "react";
 export type Route =
   | { name: "editor" }
   | { name: "gallery" }
-  | { name: "note"; id: string; render: boolean }
+  | { name: "note"; id: string }
   | { name: "not-found" };
 
-export function parseRoute(pathname: string, search: string): Route {
+export function parseRoute(pathname: string): Route {
   if (pathname === "/" || pathname === "") return { name: "editor" };
   if (/^\/gallery\/?$/.test(pathname)) return { name: "gallery" };
   const note = pathname.match(/^\/n\/([A-Za-z0-9_-]{22})\/?$/);
-  if (note) return { name: "note", id: note[1], render: new URLSearchParams(search).get("render") === "1" };
+  if (note) return { name: "note", id: note[1] };
   return { name: "not-found" };
 }
 
@@ -41,7 +41,7 @@ export function useRoute(): Route {
     },
     () => snapshot,
   );
-  return parseRoute(location.pathname, location.search);
+  return parseRoute(location.pathname);
 }
 
 /** 站内链接：普通点击走前端路由，修饰键点击保留浏览器默认行为（新标签页等）。 */

@@ -1030,11 +1030,6 @@ a.brand {
   width: 100%;
 }
 
-.render-root {
-  display: inline-block;
-  background: transparent;
-}
-
 .gallery-main {
   display: flex;
   flex-direction: column;
@@ -1085,10 +1080,7 @@ a.brand {
 
 .gallery-thumb {
   width: 100%;
-  height: auto;
   aspect-ratio: 840 / 1188;
-  object-fit: cover;
-  object-position: top;
   border-radius: 6px;
   background: var(--paper-ui);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);

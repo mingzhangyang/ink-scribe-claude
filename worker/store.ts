@@ -1,4 +1,4 @@
-import type { ImageStatus, NoteVisibility, PublishedNote, PublishedNoteSummary } from "../shared/api.ts";
+import type { NoteVisibility, PublishedNote, PublishedNoteSummary } from "../shared/api.ts";
 import { normalizeDoodleSpec, type DoodleSpec } from "../shared/doodle.ts";
 import { normalizeNoteStructure, type NoteStructure } from "../shared/note.ts";
 import { sanitizeSettings, type Settings } from "../shared/settings.ts";
@@ -21,10 +21,6 @@ export type NoteRow = {
   settings_json: string;
   stickers_json: string;
   doodle_json: string | null;
-  image_status: ImageStatus;
-  image_key: string | null;
-  image_width: number | null;
-  image_height: number | null;
   created_at: number;
   updated_at: number;
 };
@@ -39,12 +35,11 @@ export type NewNote = {
   settings: Settings;
   stickers: StickerItem[];
   doodle?: DoodleSpec;
-  imageStatus: ImageStatus;
   now: number;
 };
 
 const SUMMARY_COLUMNS =
-  "id, api_key_id, visibility, title, summary, language, template, layout, image_status, image_key, image_width, image_height, created_at, updated_at";
+  "id, api_key_id, visibility, title, summary, language, template, layout, created_at, updated_at";
 
 /** 128 位随机数编码为 22 位 base64url，作为不可枚举的笔记 ID。 */
 export function newNoteId(): string {
@@ -99,7 +94,8 @@ export async function insertNote(db: D1Database, input: NewNote): Promise<void> 
       JSON.stringify(input.settings),
       JSON.stringify(input.stickers),
       input.doodle ? JSON.stringify(input.doodle) : null,
-      input.imageStatus,
+      // 预览图功能已移除，保留列以兼容已有数据库，统一写入 disabled
+      "disabled",
       input.now,
       input.now,
     )
@@ -126,17 +122,6 @@ export async function deleteNote(db: D1Database, id: string, apiKeyId: string): 
     db.prepare("DELETE FROM idempotency_keys WHERE note_id = ?").bind(id),
   ]);
   return row;
-}
-
-export async function setImageResult(
-  db: D1Database,
-  id: string,
-  result: { status: ImageStatus; key?: string; width?: number; height?: number },
-): Promise<void> {
-  await db
-    .prepare("UPDATE notes SET image_status = ?, image_key = ?, image_width = ?, image_height = ? WHERE id = ?")
-    .bind(result.status, result.key ?? null, result.width ?? null, result.height ?? null, id)
-    .run();
 }
 
 // ---------- 分页 ----------
@@ -217,12 +202,6 @@ function iso(ms: number): string {
 }
 
 export function toSummary(row: NoteRow, origin: string): PublishedNoteSummary {
-  const image: PublishedNoteSummary["image"] = { status: row.image_status };
-  if (row.image_status === "ready" && row.image_key) {
-    image.url = `${origin}/api/notes/${row.id}/image.png?v=${row.updated_at}`;
-    if (row.image_width) image.width = row.image_width;
-    if (row.image_height) image.height = row.image_height;
-  }
   return {
     id: row.id,
     url: `${origin}/n/${row.id}`,
@@ -232,7 +211,6 @@ export function toSummary(row: NoteRow, origin: string): PublishedNoteSummary {
     template: row.template,
     layout: row.layout,
     visibility: row.visibility,
-    image,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };

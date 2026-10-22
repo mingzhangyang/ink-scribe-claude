@@ -61,23 +61,3 @@ export function createTestD1(): D1Database {
   };
   return api as unknown as D1Database;
 }
-
-/** 内存版 R2，只实现 get/put/delete。 */
-export function createTestR2() {
-  const objects = new Map<string, Uint8Array>();
-  const bucket = {
-    objects,
-    async put(key: string, value: Uint8Array) {
-      objects.set(key, value);
-      return {};
-    },
-    async get(key: string) {
-      const value = objects.get(key);
-      return value ? { body: value } : null;
-    },
-    async delete(key: string) {
-      objects.delete(key);
-    },
-  };
-  return bucket;
-}

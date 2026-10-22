@@ -1,7 +1,6 @@
 import { loadConfig } from "./config.ts";
-import type { Env, RenderJob } from "./env.ts";
+import type { Env } from "./env.ts";
 import { llmsTxt } from "./openapi.ts";
-import { handleRenderBatch } from "./render.ts";
 import { handleApi } from "./router.ts";
 import { handleSharePage } from "./share-page.ts";
 
@@ -24,8 +23,4 @@ export default {
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response("Not Found", { status: 404 });
   },
-
-  async queue(batch, env): Promise<void> {
-    await handleRenderBatch(batch as MessageBatch<RenderJob>, env);
-  },
-} satisfies ExportedHandler<Env, RenderJob>;
+} satisfies ExportedHandler<Env>;

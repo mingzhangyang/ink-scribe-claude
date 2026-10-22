@@ -27,9 +27,6 @@ export function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // 截图渲染模式：只输出笔记页面
-  if (route.name === "note" && route.render) return <NoteViewPage id={route.id} render onToast={setToast} />;
-
   return (
     <div className="app">
       <header className="app-header">
@@ -59,7 +56,7 @@ export function App() {
 
       {route.name === "editor" ? <EditorPage config={config} onToast={setToast} /> : null}
       {route.name === "gallery" ? <GalleryPage /> : null}
-      {route.name === "note" ? <NoteViewPage id={route.id} render={false} onToast={setToast} /> : null}
+      {route.name === "note" ? <NoteViewPage id={route.id} onToast={setToast} /> : null}
       {route.name === "not-found" ? (
         <main className="page-center">
           <div className="empty-state">

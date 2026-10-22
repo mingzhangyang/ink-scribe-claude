@@ -15,21 +15,10 @@ function GalleryCard({ item }: { item: PublishedNoteSummary }) {
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString("zh-CN") : "";
   return (
     <a className="gallery-card" {...linkProps(`/n/${item.id}`)}>
-      {item.image.url ? (
-        <img
-          src={item.image.url}
-          alt={item.title}
-          loading="lazy"
-          width={item.image.width}
-          height={item.image.height}
-          className="gallery-thumb"
-        />
-      ) : (
-        <div className="gallery-thumb gallery-thumb-text" aria-hidden="true">
-          <strong>{item.title}</strong>
-          <span>{item.summary}</span>
-        </div>
-      )}
+      <div className="gallery-thumb gallery-thumb-text" aria-hidden="true">
+        <strong>{item.title}</strong>
+        <span>{item.summary}</span>
+      </div>
       <div className="gallery-caption">
         <strong>{item.title}</strong>
         <small>

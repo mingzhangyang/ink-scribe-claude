@@ -524,11 +524,6 @@ if (process.env.E2E_API_KEY) {
   const unlistedHtml = await (await p7.request.get(unlisted.url)).text();
   check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
 
-  const renderPage = await c7.newPage();
-  await renderPage.goto(`${note.url}?render=1`, { waitUntil: "networkidle" });
-  const ready = await renderPage.waitForSelector('html[data-render-ready="true"]', { timeout: 20000 }).then(() => true).catch(() => false);
-  check("V8", "截图渲染模式只输出笔记并标记就绪", ready && (await renderPage.locator(".app-header").count()) === 0);
-
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
   await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
   await p7.goto(note.url, { waitUntil: "networkidle" });

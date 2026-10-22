@@ -13,7 +13,6 @@ import {
   handleGallery,
   handleGetNoteV1,
   handleListNotes,
-  handleNoteImage,
   handlePatchNote,
   handlePublicNote,
 } from "./routes/notes.ts";
@@ -69,12 +68,6 @@ const ROUTES: Route[] = [
   { name: "/api/doodle", pattern: /^\/api\/doodle$/, access: "ai", methods: { POST: handleDoodle } },
   { name: "/api/gallery", pattern: /^\/api\/gallery$/, access: "public", methods: { GET: handleGallery } },
   { name: "/api/notes/:id", pattern: new RegExp(`^/api/notes/${ID}$`), access: "public", methods: { GET: handlePublicNote } },
-  {
-    name: "/api/notes/:id/image.png",
-    pattern: new RegExp(`^/api/notes/${ID}/image\\.png$`),
-    access: "public",
-    methods: { GET: handleNoteImage },
-  },
   {
     name: "/api/v1/openapi.json",
     pattern: /^\/api\/v1\/openapi\.json$/,
