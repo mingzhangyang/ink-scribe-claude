@@ -1,0 +1,719 @@
+/*
+ * 笔记画布样式。所有尺寸都基于内部坐标系（页面宽 840px），
+ * 预览缩放由外层容器完成，导出时直接渲染该节点。
+ */
+
+.note-page {
+  --ink-muted: color-mix(in srgb, var(--ink) 58%, transparent);
+  --ink-faint: color-mix(in srgb, var(--ink) 22%, transparent);
+  --doodle-accent: #c2410c;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 50px 56px 44px;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--hand-font);
+  font-size: var(--fs);
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: var(--lh);
+  letter-spacing: var(--ls);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow-wrap: anywhere;
+}
+
+.note-page h1,
+.note-page h2 {
+  font-weight: 400;
+}
+
+/* ---------- 纸张 ---------- */
+.paper-grid {
+  background-image:
+    linear-gradient(var(--paper-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+}
+
+.paper-lined {
+  background-image:
+    linear-gradient(90deg, transparent 36px, rgba(220, 38, 38, 0.32) 36px, rgba(220, 38, 38, 0.32) 38px, transparent 38px),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--rule, 26px) - 1px),
+      var(--paper-line) calc(var(--rule, 26px) - 1px),
+      var(--paper-line) var(--rule, 26px)
+    );
+  background-position: 0 0, 0 44px;
+}
+
+.paper-dot {
+  background-image: radial-gradient(circle at 1px 1px, var(--paper-line) 1.25px, transparent 1.7px);
+  background-size: 24px 24px;
+  background-position: 11px 11px;
+}
+
+.paper-ivory {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.28 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.paper-textured {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.28 0 0 0 0 0.25 0 0 0 0.13 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02 0.4' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.36 0 0 0 0 0.3 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+}
+
+.paper-kraft {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.22 0 0 0 0 0.1 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(var(--paper-line) 1px, transparent 1px);
+  background-size: auto, 100% 30px;
+}
+
+.paper-parchment {
+  background-image:
+    radial-gradient(ellipse at center, transparent 52%, rgba(120, 72, 30, 0.2) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.3 0 0 0 0 0.15 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- 手写抖动与重点 ---------- */
+.note-page .j {
+  position: relative;
+}
+.note-page .j0 {
+  top: calc(var(--jit) * -0.05em);
+}
+.note-page .j1 {
+  top: calc(var(--jit) * 0.04em);
+}
+.note-page .j2 {
+  top: calc(var(--jit) * -0.02em);
+  opacity: calc(1 - var(--jit) * 0.1);
+}
+.note-page .j3 {
+  top: calc(var(--jit) * 0.06em);
+}
+.note-page .j4 {
+  opacity: calc(1 - var(--jit) * 0.16);
+}
+.note-page .j5 {
+  top: calc(var(--jit) * -0.07em);
+}
+.note-page .j6 {
+  top: calc(var(--jit) * 0.025em);
+  opacity: calc(1 - var(--jit) * 0.07);
+}
+.note-page .j7 {
+  top: calc(var(--jit) * -0.03em);
+}
+
+.note-page mark.hl {
+  color: inherit;
+  padding: 0 0.1em;
+  margin: 0 -0.04em;
+  border-radius: 0.25em 0.1em 0.3em 0.12em;
+  background-repeat: no-repeat;
+  background-image: linear-gradient(
+    100deg,
+    transparent 0.12em,
+    color-mix(in srgb, var(--accent) 88%, transparent) 0.22em,
+    var(--accent) calc(100% - 0.25em),
+    transparent calc(100% - 0.08em)
+  );
+  background-size: 100% 0.68em;
+  background-position: 0 0.62em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.note-page mark.hl-1 {
+  background-size: 100% 0.56em;
+  background-position: 0 0.78em;
+}
+
+.note-page mark.hl-2 {
+  background-size: 100% 0.8em;
+  background-position: 0 0.5em;
+}
+
+.hand-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.hand-line {
+  margin: 0 0 0.18em;
+}
+
+.hand-gap {
+  height: 0.45em;
+}
+
+.hand-bullet,
+.hand-numbered {
+  position: relative;
+  padding-left: 1.25em;
+}
+
+.hand-bullet::before {
+  content: "";
+  position: absolute;
+  left: 0.3em;
+  top: calc(var(--lh) * 0.5em - 0.2em);
+  width: 0.36em;
+  height: 0.36em;
+  border: 2px solid var(--doodle-accent);
+  border-radius: 50% 40% 55% 45%;
+}
+
+.hand-numbered::before {
+  content: attr(data-marker) ".";
+  position: absolute;
+  left: 0;
+  color: var(--doodle-accent);
+}
+
+.hand-underline {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-top: 2px;
+}
+
+/* ---------- 公共部件 ---------- */
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+.note-title {
+  margin: 0;
+  font-size: calc(var(--fs) * 2.05);
+  line-height: 1.25;
+  display: inline-block;
+  max-width: 78%;
+  transform-origin: left bottom;
+}
+
+.note-date {
+  flex: none;
+  font-size: calc(var(--fs) * 0.85);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  padding-bottom: 0.6em;
+}
+
+.region-label {
+  display: inline-block;
+  white-space: nowrap;
+  margin-bottom: 0.45em;
+  font-size: calc(var(--fs) * 0.82);
+  letter-spacing: 0.12em;
+  color: var(--doodle-accent);
+}
+
+.region-label::before {
+  content: "✦ ";
+}
+
+.cue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+
+.cue-keyword {
+  display: inline;
+  font-size: calc(var(--fs) * 1.04);
+  background: linear-gradient(transparent 60%, color-mix(in srgb, var(--accent) 80%, transparent) 60%);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.cue-note {
+  margin-top: 0.15em;
+  font-size: calc(var(--fs) * 0.8);
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.cue-list-question .cue-item {
+  position: relative;
+  padding-left: 1.1em;
+}
+
+.cue-list-question .cue-item::before {
+  content: "?";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--doodle-accent);
+}
+
+.cue-list-question .cue-keyword {
+  background: none;
+}
+
+.note-section {
+  margin-bottom: 0.85em;
+  transform-origin: left center;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  margin: 0 0 0.2em;
+  font-size: calc(var(--fs) * 1.22);
+  line-height: 1.35;
+}
+
+.section-index {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.4em;
+  height: 1.4em;
+  border: 2px solid var(--doodle-accent);
+  border-radius: 52% 46% 55% 44%;
+  color: var(--doodle-accent);
+  font-size: 0.7em;
+  line-height: 1;
+  transform: translateY(-0.12em) rotate(-6deg);
+}
+
+.summary-text {
+  font-size: calc(var(--fs) * 0.95);
+}
+
+.summary-sticky {
+  position: relative;
+  padding: 20px 22px 14px;
+  background: color-mix(in srgb, var(--accent) 45%, #fffdf2);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 8px 14px -8px rgba(0, 0, 0, 0.25);
+  min-height: 0;
+  max-height: 290px;
+  overflow: hidden;
+}
+
+.summary-tape {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  width: 120px;
+  height: 28px;
+  transform: translateX(-50%) rotate(-3deg);
+}
+
+.doodle-slot {
+  width: 170px;
+  height: 170px;
+  flex: none;
+  justify-self: end;
+}
+
+.doodle-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tape-deco {
+  display: block;
+}
+
+/* ---------- 混合康奈尔 / 经典康奈尔 ---------- */
+.layout-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 27% minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "cues main"
+    "footer footer";
+  column-gap: 26px;
+  row-gap: 20px;
+}
+
+.layout-grid .note-header {
+  grid-area: header;
+}
+
+.layout-grid .note-cues {
+  grid-area: cues;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-grid .note-main {
+  grid-area: main;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-grid .note-footer {
+  grid-area: footer;
+}
+
+.layout-hybrid-cornell .note-cues {
+  padding-right: 18px;
+  border-right: 2px dashed var(--ink-faint);
+}
+
+.layout-hybrid-cornell .note-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  align-items: end;
+  gap: 28px;
+  padding-top: 6px;
+}
+
+.layout-classic-cornell .note-header {
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--ink-faint);
+}
+
+.classic-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  min-width: 0;
+  flex: 1;
+}
+
+.classic-field .note-title {
+  max-width: none;
+}
+
+.classic-field-label,
+.note-date-label {
+  flex: none;
+  font-size: calc(var(--fs) * 0.8);
+  color: var(--ink-muted);
+}
+
+.layout-classic-cornell .note-main {
+  padding-left: 22px;
+  border-left: 2px solid rgba(220, 38, 38, 0.45);
+}
+
+.layout-classic-cornell .note-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 16px;
+  min-height: 150px;
+  max-height: 260px;
+  overflow: hidden;
+  padding-top: 12px;
+  border-top: 2px solid var(--ink-faint);
+}
+
+.doodle-small {
+  width: 110px;
+  height: 110px;
+}
+
+/* ---------- 自由手账 ---------- */
+.journal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.journal-header {
+  position: relative;
+  justify-content: center;
+  text-align: center;
+  padding: 8px 110px 0;
+}
+
+.journal-title-tape {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 240px;
+  height: 36px;
+  transform: translateX(-50%) rotate(-2deg);
+}
+
+.journal-header .note-title {
+  position: relative;
+  max-width: 100%;
+}
+
+.journal-stamp {
+  position: absolute;
+  right: 0;
+  top: -6px;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  padding: 10px;
+  border: 2px dashed var(--doodle-accent);
+  border-radius: 50%;
+  text-align: center;
+  color: var(--doodle-accent);
+}
+
+.journal-stamp .note-date {
+  padding: 0;
+  white-space: normal;
+  color: inherit;
+  font-size: calc(var(--fs) * 0.72);
+  line-height: 1.3;
+}
+
+.cue-chips,
+.cue-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+}
+
+.cue-chip {
+  white-space: nowrap;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.15em 0.85em;
+  border-radius: 999px;
+  font-size: calc(var(--fs) * 0.92);
+  line-height: 1.35;
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
+.cue-chip-1 {
+  background: color-mix(in srgb, #bbf7d0 75%, transparent);
+}
+
+.cue-chip-2 {
+  background: color-mix(in srgb, #fed7aa 75%, transparent);
+}
+
+.cue-chip small {
+  font-size: 0.72em;
+  color: var(--ink-muted);
+}
+
+.journal-cards {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  columns: 2;
+  column-gap: 24px;
+  padding: 4px 6px;
+}
+
+.journal-card {
+  break-inside: avoid;
+  margin-bottom: 18px;
+  padding: 14px 16px 10px;
+  border: 2px solid color-mix(in srgb, var(--ink) 50%, transparent);
+  border-radius: 255px 18px 225px 18px / 18px 225px 18px 255px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.journal-card-1 {
+  background: color-mix(in srgb, #bbf7d0 32%, transparent);
+}
+
+.journal-card-2 {
+  background: color-mix(in srgb, #fed7aa 32%, transparent);
+}
+
+.journal-card-3 {
+  background: color-mix(in srgb, #bfdbfe 30%, transparent);
+}
+
+.journal-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 24px;
+  align-items: center;
+}
+
+.doodle-large {
+  width: 190px;
+  height: 190px;
+}
+
+/* ---------- 简约手札 ---------- */
+.minimal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 36px 0;
+}
+
+.doodle-corner {
+  position: absolute;
+  right: 20px;
+  top: 0;
+  width: 112px;
+  height: 112px;
+}
+
+.minimal-header {
+  display: block;
+  padding-right: 120px;
+}
+
+.minimal-header .note-title {
+  max-width: 100%;
+  font-size: calc(var(--fs) * 2.2);
+}
+
+.minimal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  margin: 6px 0 26px;
+  font-size: calc(var(--fs) * 0.85);
+  color: var(--ink-muted);
+}
+
+.minimal-meta .note-date {
+  padding: 0;
+}
+
+.cue-tags {
+  justify-content: flex-start;
+  gap: 2px 12px;
+}
+
+.cue-tags .cue-chip {
+  flex-direction: row;
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  color: var(--doodle-accent);
+}
+
+.minimal-main .note-section {
+  margin-bottom: 1.1em;
+}
+
+.minimal-main .section-heading {
+  font-size: calc(var(--fs) * 1.15);
+}
+
+.minimal-summary {
+  margin-top: 0.6em;
+  padding: 0.4em 0 0.4em 1em;
+  border-left: 3px solid var(--accent);
+}
+
+/* ---------- 长图模式：区域高度随内容增长 ---------- */
+.note-page.is-long .layout-grid {
+  grid-template-rows: auto auto auto;
+}
+
+.note-page.is-long [data-fit],
+.note-page.is-long .note-main,
+.note-page.is-long .note-cues {
+  overflow: visible;
+  max-height: none;
+}
+
+/* ---------- 贴纸 ---------- */
+.sticker-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sticker {
+  position: absolute;
+  pointer-events: auto;
+  transform-origin: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.sticker.is-interactive {
+  cursor: grab;
+}
+
+.sticker.is-interactive:active {
+  cursor: grabbing;
+}
+
+.sticker:focus {
+  outline: none;
+}
+
+.sticker svg {
+  display: block;
+  overflow: visible;
+}
+
+.sticker-doodle {
+  width: 100%;
+  height: 100%;
+}
+
+.sticker-frame {
+  position: absolute;
+  inset: -6px;
+  border: 1.5px dashed #2563eb;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.sticker-handle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  background: #fff;
+  pointer-events: auto;
+  font: 600 13px/1 var(--ui-font, sans-serif);
+  letter-spacing: 0;
+}
+
+.handle-rotate {
+  left: 50%;
+  top: -18px;
+  cursor: grab;
+}
+
+.handle-scale {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.handle-delete {
+  right: 0;
+  top: 0;
+  border-color: #fff;
+  background: #dc2626;
+  color: #fff;
+  cursor: pointer;
+}

@@ -20,10 +20,26 @@ function stripWoffFallback(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [stripWoffFallback(), react(), cloudflare()],
-  build: {
-    // 中文手写字体按 unicode-range 切片，单个分片通常小于 100KB，无需内联
-    assetsInlineLimit: 0,
-  },
+export default defineConfig(({ mode }) => {
+  // `vite --mode mock`：不连接 Cloudflare 远程绑定，Worker 使用本地启发式整理器与示例插图（AI_MOCK），
+  // 便于在没有 Cloudflare 账号或离线时开发和测试界面。切勿用该模式构建生产产物。
+  const mockAi = mode === "mock";
+  return {
+    plugins: [
+      stripWoffFallback(),
+      react(),
+      cloudflare(
+        mockAi
+          ? {
+              remoteBindings: false,
+              config: (config) => ({ vars: { ...config.vars, AI_MOCK: "true", DOODLE_API_ENABLED: "true" } }),
+            }
+          : {},
+      ),
+    ],
+    build: {
+      // 中文手写字体按 unicode-range 切片，单个分片通常小于 100KB，无需内联
+      assetsInlineLimit: 0,
+    },
+  };
 });

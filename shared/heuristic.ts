@@ -32,9 +32,16 @@ const ENDS_WITH_PUNCT = /[。！？!?；;，,：:.、…]$/;
 
 export function splitSentences(text: string): string[] {
   return text
-    .replace(/\n+/g, " ")
-    .split(/(?<=[。！？!?；;])\s*|(?<=[.])\s+(?=[A-Z0-9"“])/)
+    .split(/\n+|(?<=[。！？!?；;])\s*|(?<=[.])\s+(?=[A-Z0-9"“])/)
     .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 以逗号、句号、冒号和换行切分出短小句段，用于线索提示。 */
+function splitClauses(text: string): string[] {
+  return text
+    .split(/[，,。！？!?；;：:\n]|(?<=[.])\s+/)
+    .map((s) => s.trim().replace(/^[-*•·\d.、)）\s]+/, ""))
     .filter(Boolean);
 }
 
@@ -127,7 +134,7 @@ function takeSentences(text: string, maxChars: number): string {
   return truncate(result || text, maxChars);
 }
 
-/** 统计候选关键词：英文取非停用词，中文取不含虚词的 2–4 字片段。 */
+/** 统计候选关键词：英文取非停用词，中文取不含虚词的 2–6 字片段。 */
 export function extractKeywords(text: string, limit: number): string[] {
   const lang = detectLanguage(text);
   const counts = new Map<string, number>();
@@ -139,7 +146,7 @@ export function extractKeywords(text: string, limit: number): string[] {
   } else {
     for (const run of text.match(/[㐀-鿿]+/g) ?? []) {
       const chars = Array.from(run);
-      for (let n = 2; n <= 4; n++) {
+      for (let n = 2; n <= 6; n++) {
         for (let i = 0; i + n <= chars.length; i++) {
           const gram = chars.slice(i, i + n);
           if (gram.some((c) => CJK_STOP_CHARS.has(c))) continue;
@@ -154,9 +161,17 @@ export function extractKeywords(text: string, limit: number): string[] {
     .map(([term, count]) => ({ term, score: count * Math.pow(Array.from(term).length, 1.3) }))
     .sort((a, b) => b.score - a.score);
 
+  const overlaps = (a: string, b: string) => {
+    if (a.includes(b) || b.includes(a)) return true;
+    // “注意力”与“意力残留”这类首尾相接的片段视为同一个词
+    for (let k = 2; k < Math.min(a.length, b.length); k++) {
+      if (a.endsWith(b.slice(0, k)) || b.endsWith(a.slice(0, k))) return true;
+    }
+    return false;
+  };
   const chosen: string[] = [];
   for (const { term } of scored) {
-    if (chosen.some((c) => c.includes(term) || term.includes(c))) continue;
+    if (chosen.some((c) => overlaps(c, term))) continue;
     chosen.push(term);
     if (chosen.length >= limit) break;
   }
@@ -227,15 +242,33 @@ export function structureLocally(input: string, options: LocalStructureOptions):
     };
   });
 
-  const sentences = splitSentences(text);
+  const body = blocks.map((b) => b.body).join("\n");
+  const clauses = splitClauses(body);
   const cueTerms = keywords.length > 0 ? keywords : sections.map((s) => s.heading).filter(Boolean);
   const cues = cueTerms.slice(0, budget.cues).map((keyword) => {
-    const sentence = sentences.find((s) => s.toLowerCase().includes(keyword.toLowerCase())) ?? "";
-    return { keyword, note: truncate(sentence, 40) };
+    const lower = keyword.toLowerCase();
+    // 优先选择除关键词本身外还有信息量的句段
+    const clause =
+      clauses.find((c) => c.toLowerCase().includes(lower) && Array.from(c).length > Array.from(keyword).length + 3) ??
+      clauses.find((c) => c.toLowerCase().includes(lower)) ??
+      "";
+    return { keyword, note: truncate(clause, 36) };
   });
 
-  const lead = truncate(sentences[0] ?? "", 80);
+  // 抽取式摘要：选出包含最多高频关键词的句子
   const top = keywords.slice(0, 3);
+  const sentences = splitSentences(body).filter((s) => Array.from(s).length >= 6);
+  let lead = sentences[0] ?? "";
+  let best = -1;
+  for (const sentence of sentences) {
+    const lowerSentence = sentence.toLowerCase();
+    const score = keywords.reduce((n, k) => n + (lowerSentence.includes(k.toLowerCase()) ? 1 : 0), 0);
+    if (score > best) {
+      best = score;
+      lead = sentence;
+    }
+  }
+  lead = truncate(lead, 80);
   const summary =
     lang === "zh"
       ? `${lead}${top.length ? `\n要点围绕「${top.join("」「")}」展开。` : ""}`
