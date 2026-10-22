@@ -2,6 +2,8 @@
 
 所有接口由 Cloudflare Worker 提供，返回 `application/json; charset=utf-8`，并带 `Cache-Control: no-store`（`/api/config` 除外）和 `X-Request-Id` 响应头。类型定义见 [`shared/api.ts`](../shared/api.ts)、[`shared/note.ts`](../shared/note.ts)、[`shared/doodle.ts`](../shared/doodle.ts)。
 
+> 发布接口（`/api/v1/notes`）、查看页数据（`/api/notes/:id`）与图库（`/api/gallery`）见 [publishing.md](publishing.md)，机器可读的定义见 `/api/v1/openapi.json`。
+
 ## `GET /api/config`
 
 前端启动时读取的公开配置：
@@ -123,17 +125,20 @@
 | --- | --- | --- |
 | 400 | `INVALID_REQUEST` | 缺少字段、枚举值无效、文本为空 |
 | 400 | `INVALID_JSON` | 请求体不是合法 JSON |
+| 401 | `UNAUTHORIZED` | 发布接口缺少 API 密钥，或密钥无效 / 已吊销（带 `WWW-Authenticate: Bearer`） |
 | 403 | `FORBIDDEN_ORIGIN` | 浏览器跨站调用（`Origin` 不是本站且不在 `ALLOWED_ORIGINS` 中） |
 | 403 | `FEATURE_DISABLED` | `/api/doodle` 未启用 |
 | 404 | `NOT_FOUND` | 接口不存在 |
 | 405 | `METHOD_NOT_ALLOWED` | 方法错误（带 `Allow` 头） |
 | 413 | `PAYLOAD_TOO_LARGE` | 请求体超过 `MAX_BODY_BYTES` |
 | 413 | `TEXT_TOO_LONG` | 文本超过 `MAX_INPUT_CHARS` |
+| 409 | `IDEMPOTENCY_CONFLICT` | 同一个 `Idempotency-Key` 用于内容不同的发布请求 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 不是 `application/json` |
 | 429 | `RATE_LIMITED` | 触发本服务限流（带 `Retry-After`） |
 | 429 | `AI_RATE_LIMITED` | Workers AI 额度或频率限制（带 `Retry-After`） |
 | 502 | `AI_OUTPUT_INVALID` | 修复重试后仍无法得到合规结构 |
 | 502/503 | `AI_UNAVAILABLE` | 模型不可用、容量不足或上游错误 |
+| 503 | `STORAGE_UNAVAILABLE` | 未配置 D1 绑定 |
 | 504 | `AI_TIMEOUT` | 模型调用超时 |
 | 500 | `INTERNAL_ERROR` | 未预期的错误 |
 

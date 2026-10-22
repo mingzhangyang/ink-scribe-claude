@@ -49,6 +49,9 @@ export const ERROR_CODES = [
   "PAYLOAD_TOO_LARGE",
   "TEXT_TOO_LONG",
   "FORBIDDEN_ORIGIN",
+  "UNAUTHORIZED",
+  "IDEMPOTENCY_CONFLICT",
+  "STORAGE_UNAVAILABLE",
   "RATE_LIMITED",
   "FEATURE_DISABLED",
   "NOT_FOUND",
@@ -67,4 +70,35 @@ export type ApiErrorBody = {
     requestId?: string;
     retryAfterSeconds?: number;
   };
+};
+
+// ---------- 发布的笔记（/api/v1 与公开读取接口） ----------
+
+export type NoteVisibility = "public" | "unlisted";
+export type ImageStatus = "pending" | "ready" | "failed" | "disabled";
+
+export type PublishedNoteSummary = {
+  id: string;
+  url: string;
+  title: string;
+  summary: string;
+  language: "zh" | "en";
+  template: string;
+  layout: string;
+  visibility: NoteVisibility;
+  image: { status: ImageStatus; url?: string; width?: number; height?: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PublishedNote = PublishedNoteSummary & {
+  note: import("./note.ts").NoteStructure;
+  settings: import("./settings.ts").Settings;
+  stickers: import("./stickers.ts").StickerItem[];
+  doodle?: import("./doodle.ts").DoodleSpec;
+};
+
+export type NoteListResponse = {
+  items: PublishedNoteSummary[];
+  nextCursor: string | null;
 };

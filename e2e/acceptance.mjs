@@ -466,6 +466,78 @@ await context.close();
   await c6.close();
 }
 
+// ---------- V. Agent 发布、查看页与图库 ----------
+if (process.env.E2E_API_KEY) {
+  const { page: p7, context: c7 } = await newPage();
+  const auth = { Authorization: `Bearer ${process.env.E2E_API_KEY}` };
+  const title = `E2E 公开笔记 ${Date.now()}`;
+  const created = await p7.request.post(`${URL}api/v1/notes`, {
+    headers: { ...auth, "Idempotency-Key": `e2e-${Date.now()}` },
+    data: {
+      note: { title, sections: [{ heading: "要点", content: "这是通过 API 发布的笔记。\n- 列表项", highlights: ["API"] }], summary: "总结一句话" },
+      template: "lecture-summary",
+      visibility: "public",
+      appearance: { paper: "kraft", ink: "brown", layout: "free-journal" },
+      stickers: [{ type: "star", x: 700, y: 120, variant: "gold" }],
+    },
+  });
+  const note = await created.json();
+  check("V1", "API 密钥发布笔记并返回链接", created.status() === 201 && /\/n\/[A-Za-z0-9_-]{22}$/.test(note.url), `${created.status()} ${note.url}`);
+  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: { note: { title: "x", sections: [{ content: "y" }] } } });
+  check("V2", "没有密钥时拒绝发布", unauth.status() === 401);
+
+  const html = await (await p7.request.get(note.url)).text();
+  check("V3", "分享链接的 HTML 带有标题与 Open Graph 信息", html.includes(`<title>${title} · 墨语笔记</title>`) && html.includes(`og:title" content="${title}"`));
+
+  await p7.goto(note.url, { waitUntil: "networkidle" });
+  await p7.waitForSelector(".note-page");
+  const view = await p7.evaluate(() => ({
+    title: document.querySelector(".note-title")?.textContent ?? "",
+    cls: document.querySelector(".note-page")?.className ?? "",
+    stickers: document.querySelectorAll(".sticker").length,
+    handles: document.querySelectorAll(".sticker-selection").length,
+  }));
+  check("V4", "查看页按发布时的外观只读渲染", view.title.includes("E2E") && view.cls.includes("paper-kraft") && view.cls.includes("layout-free-journal") && view.stickers === 1 && view.handles === 0, JSON.stringify(view));
+
+  // 回归：浏览器带缓存校验头（If-None-Match）再次打开链接时仍应返回完整页面（曾因转发该头而得到 Not Found）
+  const shellEtag = (await p7.request.get(URL)).headers()["etag"] ?? "";
+  const revisit = await p7.request.get(note.url, { headers: shellEtag ? { "If-None-Match": shellEtag } : {} });
+  const revisitHtml = await revisit.text();
+  check("V4b", "带缓存校验头再次打开链接仍返回完整页面", revisit.status() === 200 && revisitHtml.includes(`og:title" content="${title}"`), `ETag ${shellEtag || "无"}，HTTP ${revisit.status()}`);
+
+  await p7.goto(`${URL}gallery`, { waitUntil: "networkidle" });
+  const card = p7.locator(".gallery-card").filter({ hasText: title });
+  check("V5", "公开笔记出现在图库", (await card.count()) === 1);
+  await card.click();
+  await p7.waitForURL(note.url);
+  await p7.getByRole("button", { name: "在编辑器中打开" }).click();
+  await p7.waitForSelector(".input-panel");
+  const editor = await p7.evaluate(() => ({
+    badge: document.querySelector(".workspace-status")?.textContent ?? "",
+    stickers: document.querySelectorAll(".sticker").length,
+    cls: document.querySelector(".note-page")?.className ?? "",
+  }));
+  check("V6", "从查看页把笔记（含外观与贴纸）载入编辑器", editor.badge.includes("已发布") && editor.stickers === 1 && editor.cls.includes("paper-kraft"), JSON.stringify(editor));
+
+  const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, { headers: auth, data: { note: { title: `E2E 隐藏 ${Date.now()}`, sections: [{ content: "仅链接可见" }] } } })).json();
+  const gallery = await (await p7.request.get(`${URL}api/gallery?limit=50`)).json();
+  const unlistedHtml = await (await p7.request.get(unlisted.url)).text();
+  check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
+
+  const renderPage = await c7.newPage();
+  await renderPage.goto(`${note.url}?render=1`, { waitUntil: "networkidle" });
+  const ready = await renderPage.waitForSelector('html[data-render-ready="true"]', { timeout: 20000 }).then(() => true).catch(() => false);
+  check("V8", "截图渲染模式只输出笔记并标记就绪", ready && (await renderPage.locator(".app-header").count()) === 0);
+
+  const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
+  await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
+  await p7.goto(note.url, { waitUntil: "networkidle" });
+  const goneText = await p7.locator(".empty-state").innerText({ timeout: 10000 }).catch(async () => `[未找到提示] ${(await p7.locator("main").innerText()).slice(0, 80)}`);
+  check("V9", "删除后链接显示“不存在”", removed.status() === 204 && goneText.includes("不存在"), `DELETE ${removed.status()}；${goneText}`);
+  check("V10", "发布与查看流程无脚本错误", p7.errors.length === 0, p7.errors.join("; "));
+  await c7.close();
+}
+
 // ---------- Q. 移动端 ----------
 {
   const { page: p5, context: c5 } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

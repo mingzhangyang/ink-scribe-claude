@@ -22,6 +22,9 @@
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
 | 溢出处理 | 自动检测文字超出页面，一键缩小字号、切换为长图，或以“精简”档位重新生成 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
+| 发布与分享 | 用 API 密钥调用 `POST /api/v1/notes`（传原文或已整理的结构），返回查看链接 `/n/<id>`；链接带标题、摘要与预览图的 Open Graph 信息。详见 [docs/publishing.md](docs/publishing.md) |
+| 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
+| 预览图 | 发布后由 Queue 触发 Browser Rendering 截图，存入 R2，用于图库缩略图与链接预览 |
 | 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
 
 ## 快速开始
@@ -48,7 +51,9 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（44 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（55 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
+| `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
 
 > ⚠️ 不要用 `vite build --mode mock` 构建要部署的产物：mock 模式会把 `AI_MOCK=true` 写入生成的 Worker 配置。
@@ -59,7 +64,10 @@ npm run dev
 Browser ── 输入 / 画布 / 样式 / 贴纸 / 导出（客户端完成排版与图片渲染）
    │ HTTPS JSON（同源）
    ▼
-Cloudflare Worker ── 静态资源 + SPA 回退；/api/structure、/api/doodle、/api/config
+Cloudflare Worker ── 静态资源 + SPA 回退；/api/structure、/api/doodle、/api/config；
+   │                   发布接口 /api/v1/notes、查看页 /n/:id（注入 Open Graph）、图库 /api/gallery
+   ├── D1：已发布的笔记与 API 密钥（哈希）   ├── R2：预览图
+   ├── Queues → Browser Rendering：生成预览图
    │  校验 · 来源检查 · 限流 · 超时 · 修复重试 · 只记录元数据的日志与指标
    ▼ AI binding
 Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
@@ -67,7 +75,9 @@ Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
 
 ```text
 shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、选项枚举、本地整理器
-worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志
+worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志、
+             发布接口与存储（D1）、分享页元信息、预览图队列消费者
+migrations/  D1 数据库迁移
 src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
 scripts/     模型评测脚本与评测集
 tests/       Vitest 单元测试
@@ -97,6 +107,10 @@ docs/        API、部署、模型评测、字体与导出说明
 | `DOODLE_API_ENABLED` | `false` | 是否启用 `/api/doodle` |
 | `DOODLE_CACHE_TTL_SECONDS` | `86400` | AI 插图缓存时长（只缓存校验后的图元，缓存键为哈希） |
 | `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
+| `PUBLIC_BASE_URL` | 空 | 分享链接与预览图使用的站点地址；为空时使用请求的域名 |
+| `THUMBNAILS_ENABLED` | `true` | 是否生成预览图（需要 Browser Rendering） |
+| `DEFAULT_TIMEZONE` | `Asia/Shanghai` | 发布时自动补全笔记日期使用的时区 |
+| `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥每分钟的请求上限 |
 
 “按模型”的默认值来自 [`worker/config.ts`](worker/config.ts) 中的 `MODEL_PROFILES`，覆盖了 Qwen、Llama、Mistral、Gemma、GLM、DeepSeek、gpt-oss 等候选模型的调用约定。
 
@@ -108,11 +122,13 @@ docs/        API、部署、模型评测、字体与导出说明
 - 插图只接受受限图元规格；SVG 由本地生成器以 React 元素渲染，不使用 `innerHTML`，不允许脚本、事件处理器、外部资源或 URL。
 - AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
 - 上传的文件只在浏览器内解析（PDF 使用按需加载的 pdf.js，CMap 文件同源提供），文件本身不会发送到服务器。
+- 发布接口只接受 API 密钥（只存哈希、可吊销）；笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`；入库与读取时都会再次规范化。
 - 本机只保存外观偏好（localStorage），不保存原文与笔记。
 
 ## 文档
 
 - [API 与数据契约](docs/api.md)
+- [发布接口、查看页与图库](docs/publishing.md)
 - [部署与运维](docs/deployment.md)
 - [Workers AI 模型选择与评测](docs/model-evaluation.md)
 - [字体、导出与浏览器兼容](docs/fonts-and-export.md)

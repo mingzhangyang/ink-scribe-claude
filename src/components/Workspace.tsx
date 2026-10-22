@@ -120,6 +120,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
         <div className="workspace-status">
           {source === "sample" ? <span className="badge">示例笔记</span> : null}
           {source === "local" ? <span className="badge badge-muted">本地快速排版</span> : null}
+          {source === "shared" ? <span className="badge badge-muted">来自已发布的笔记</span> : null}
           {source === "ai" && meta ? (
             <span className="badge badge-ai" title={`模型：${meta.model}`}>
               {meta.mock ? "演示模式（未调用 AI）" : `AI 整理 · ${(meta.latencyMs / 1000).toFixed(1)}s`}

@@ -29,8 +29,15 @@ export function clientKey(request: Request): string {
   return request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ?? "anonymous";
 }
 
-export async function enforceRateLimit(env: Env, request: Request, route: string, limitPerMinute: number): Promise<void> {
-  const key = `${route}:${clientKey(request)}`;
+export async function enforceRateLimit(
+  env: Env,
+  request: Request,
+  route: string,
+  limitPerMinute: number,
+  /** 指定计数主体（例如 API 密钥 ID）；默认按客户端 IP。 */
+  subject: string = clientKey(request),
+): Promise<void> {
+  const key = `${route}:${subject}`;
   let allowed: boolean;
   if (env.RATE_LIMITER) {
     try {

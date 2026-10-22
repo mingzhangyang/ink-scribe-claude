@@ -60,7 +60,9 @@ export default defineConfig(({ mode }) => {
         mockAi
           ? {
               remoteBindings: false,
-              config: (config) => ({ vars: { ...config.vars, AI_MOCK: "true", DOODLE_API_ENABLED: "true" } }),
+              config: (config) => ({
+                vars: { ...config.vars, AI_MOCK: "true", DOODLE_API_ENABLED: "true", THUMBNAILS_ENABLED: "false" },
+              }),
             }
           : {},
       ),

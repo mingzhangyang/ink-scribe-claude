@@ -22,7 +22,7 @@ type State = {
   input: InputState;
   note: NoteStructure | null;
   meta: ResponseMeta | null;
-  source: "ai" | "local" | "sample" | null;
+  source: "ai" | "local" | "sample" | "shared" | null;
   status: "idle" | "loading" | "error";
   error: RequestError | null;
   settings: Settings;
@@ -35,6 +35,8 @@ type State = {
   resetSettings: () => void;
   startLoading: () => void;
   setResult: (note: NoteStructure, meta: ResponseMeta | null, source: "ai" | "local" | "sample") => void;
+  /** 把已发布的笔记（含外观与贴纸）载入编辑器。 */
+  loadShared: (input: { note: NoteStructure; settings: Settings; stickers: StickerItem[]; doodle: DoodleSpec | null }) => void;
   setError: (error: RequestError) => void;
   clearError: () => void;
   updateNote: (updater: (note: NoteStructure) => NoteStructure) => void;
@@ -77,6 +79,18 @@ export const useNoteStore = create<State>()(
           selectedStickerId: null,
           settings: { ...s.settings, seed: Math.floor(Math.random() * 100_000) },
         })),
+      loadShared: ({ note, settings, stickers, doodle }) =>
+        set({
+          note,
+          settings,
+          stickers,
+          aiDoodle: doodle,
+          meta: null,
+          source: "shared",
+          status: "idle",
+          error: null,
+          selectedStickerId: null,
+        }),
       setError: (error) => set({ status: "error", error }),
       clearError: () => set({ status: "idle", error: null }),
       updateNote: (updater) => set((s) => (s.note ? { note: updater(s.note) } : {})),

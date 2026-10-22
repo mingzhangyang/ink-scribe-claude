@@ -3,13 +3,15 @@
   "name": "ink-scribe",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // @cloudflare/puppeteer（Browser Rendering 客户端）依赖 Node.js 兼容层
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
   // 前端由 Vite 构建为静态资源；/api/* 优先交给 Worker，其余路径走静态资源并在未命中时回退到 index.html（SPA）。
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/n/*", "/llms.txt"]
   },
 
   // Workers AI binding：所有模型调用都在 Worker 内发起，浏览器不接触任何凭据。
@@ -23,6 +25,29 @@
       "simple": { "limit": 12, "period": 60 }
     }
   ],
+
+  // 发布的笔记与 API 密钥。首次部署前执行 `npx wrangler d1 create ink-scribe` 并把返回的 database_id 填到这里。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ink-scribe",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // 笔记预览图（PNG）。首次部署前执行 `npx wrangler r2 bucket create ink-scribe-images`。
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "ink-scribe-images" }],
+
+  // 预览图生成队列：发布时入队，同一个 Worker 消费并调用 Browser Rendering 截图。
+  // 首次部署前执行 `npx wrangler queues create ink-scribe-render`。
+  "queues": {
+    "producers": [{ "binding": "RENDER_QUEUE", "queue": "ink-scribe-render" }],
+    "consumers": [{ "queue": "ink-scribe-render", "max_batch_size": 4, "max_batch_timeout": 5, "max_retries": 3 }]
+  },
+
+  // Browser Rendering（需要 Workers 付费计划）。
+  "browser": { "binding": "BROWSER" },
 
   // 可选：开启 Workers Analytics Engine 以统计调用次数、延迟和 token 用量（不含用户原文）。
   // "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "ink_scribe_ai_usage" }],
@@ -44,6 +69,11 @@
     "RATE_LIMIT_PER_MINUTE": "12",
     "DOODLE_API_ENABLED": "false",
     "DOODLE_CACHE_TTL_SECONDS": "86400",
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "",
+    // 分享链接使用的站点地址（例如 https://notes.example.com）；留空则使用请求的域名
+    "PUBLIC_BASE_URL": "",
+    "THUMBNAILS_ENABLED": "true",
+    "DEFAULT_TIMEZONE": "Asia/Shanghai",
+    "API_RATE_LIMIT_PER_MINUTE": "30"
   }
 }

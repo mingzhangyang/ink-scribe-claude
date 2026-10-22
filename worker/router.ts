@@ -4,9 +4,21 @@ import { loadConfig, type AppConfig } from "./config.ts";
 import type { Env } from "./env.ts";
 import { AppError, assertAllowedOrigin, errorResponse, jsonResponse } from "./http.ts";
 import { logEvent, logRequest, recordMetrics, type RequestLog } from "./log.ts";
+import { OPENAPI_SPEC } from "./openapi.ts";
 import { enforceRateLimit } from "./rate-limit.ts";
 import { handleDoodle } from "./routes/doodle.ts";
+import {
+  handleCreateNote,
+  handleDeleteNote,
+  handleGallery,
+  handleGetNoteV1,
+  handleListNotes,
+  handleNoteImage,
+  handlePatchNote,
+  handlePublicNote,
+} from "./routes/notes.ts";
 import { handleStructure } from "./routes/structure.ts";
+import { findApiKey, touchApiKey, type ApiKeyRecord } from "./store.ts";
 
 export type RouteContext = {
   request: Request;
@@ -16,35 +28,84 @@ export type RouteContext = {
   startedAt: number;
   log: Partial<RequestLog>;
   waitUntil: (promise: Promise<unknown>) => void;
+  /** 路径参数，例如 /api/notes/:id 中的 id。 */
+  params: Record<string, string>;
+  /** 生成分享链接使用的站点地址（PUBLIC_BASE_URL 或请求来源）。 */
+  origin: string;
+  /** 通过 Bearer 认证的 API 密钥（仅 access 为 "key" 的路由）。 */
+  apiKey?: ApiKeyRecord;
 };
+
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
 type Route = {
-  method: "GET" | "POST";
-  /** 是否调用模型（需要来源校验与限流）。 */
-  ai: boolean;
-  handler: (ctx: RouteContext) => Promise<Response>;
+  /** 用于日志与指标的模板路径（不含实际 ID）。 */
+  name: string;
+  pattern: RegExp;
+  /** public：公开读取；ai：网页调用模型（来源校验 + 按 IP 限流）；key：需要 API 密钥（按密钥限流）。 */
+  access: "public" | "ai" | "key";
+  methods: Partial<Record<Method, (ctx: RouteContext) => Promise<Response>>>;
 };
 
-const ROUTES: Record<string, Route> = {
-  "/api/config": {
-    method: "GET",
-    ai: false,
-    handler: async ({ config }) => {
-      const body: PublicConfig = {
-        maxInputChars: config.maxInputChars,
-        doodleEnabled: config.doodleEnabled,
-        mock: config.mock,
-      };
-      return jsonResponse(body, 200, { "Cache-Control": "public, max-age=60" });
+const ID = "(?<id>[A-Za-z0-9_-]{22})";
+
+const ROUTES: Route[] = [
+  {
+    name: "/api/config",
+    pattern: /^\/api\/config$/,
+    access: "public",
+    methods: {
+      GET: async ({ config }) => {
+        const body: PublicConfig = {
+          maxInputChars: config.maxInputChars,
+          doodleEnabled: config.doodleEnabled,
+          mock: config.mock,
+        };
+        return jsonResponse(body, 200, { "Cache-Control": "public, max-age=60" });
+      },
     },
   },
-  "/api/structure": { method: "POST", ai: true, handler: handleStructure },
-  "/api/doodle": { method: "POST", ai: true, handler: handleDoodle },
-};
+  { name: "/api/structure", pattern: /^\/api\/structure$/, access: "ai", methods: { POST: handleStructure } },
+  { name: "/api/doodle", pattern: /^\/api\/doodle$/, access: "ai", methods: { POST: handleDoodle } },
+  { name: "/api/gallery", pattern: /^\/api\/gallery$/, access: "public", methods: { GET: handleGallery } },
+  { name: "/api/notes/:id", pattern: new RegExp(`^/api/notes/${ID}$`), access: "public", methods: { GET: handlePublicNote } },
+  {
+    name: "/api/notes/:id/image.png",
+    pattern: new RegExp(`^/api/notes/${ID}/image\\.png$`),
+    access: "public",
+    methods: { GET: handleNoteImage },
+  },
+  {
+    name: "/api/v1/openapi.json",
+    pattern: /^\/api\/v1\/openapi\.json$/,
+    access: "public",
+    methods: {
+      GET: async ({ origin }) =>
+        jsonResponse({ ...OPENAPI_SPEC, servers: [{ url: origin }] }, 200, { "Cache-Control": "public, max-age=300" }),
+    },
+  },
+  { name: "/api/v1/notes", pattern: /^\/api\/v1\/notes$/, access: "key", methods: { POST: handleCreateNote, GET: handleListNotes } },
+  {
+    name: "/api/v1/notes/:id",
+    pattern: new RegExp(`^/api/v1/notes/${ID}$`),
+    access: "key",
+    methods: { GET: handleGetNoteV1, PATCH: handlePatchNote, DELETE: handleDeleteNote },
+  },
+];
 
 function newRequestId(request: Request): string {
   const ray = request.headers.get("CF-Ray");
   return ray ? ray.split("-")[0] : crypto.randomUUID();
+}
+
+async function authenticate(env: Env, request: Request): Promise<ApiKeyRecord> {
+  const header = request.headers.get("Authorization") ?? "";
+  const match = header.match(/^Bearer\s+(\S+)$/i);
+  if (!match) throw new AppError(401, "UNAUTHORIZED", "缺少 API 密钥，请在 Authorization 头中使用 Bearer 方式提供。");
+  if (!env.DB) throw new AppError(503, "STORAGE_UNAVAILABLE", "存储未配置，暂时无法使用发布接口。");
+  const key = await findApiKey(env.DB, match[1]);
+  if (!key || key.revokedAt) throw new AppError(401, "UNAUTHORIZED", "API 密钥无效或已吊销。");
+  return key;
 }
 
 export async function handleApi(request: Request, env: Env, waitUntil: (promise: Promise<unknown>) => void): Promise<Response> {
@@ -53,21 +114,33 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
   const requestId = newRequestId(request);
   const log: Partial<RequestLog> = {};
   const config = loadConfig(env);
+  const origin = config.publicBaseUrl ?? url.origin;
   let response: Response;
   let errorCode: string | undefined;
+  let routeName = url.pathname;
 
   try {
-    const route = ROUTES[url.pathname];
+    const route = ROUTES.find((r) => r.pattern.test(url.pathname));
     if (!route) throw new AppError(404, "NOT_FOUND", "接口不存在。");
-    if (request.method !== route.method) {
-      const error = new AppError(405, "METHOD_NOT_ALLOWED", `该接口只支持 ${route.method} 请求。`);
-      return finish(errorResponse(error, requestId, { Allow: route.method }), error.code);
+    routeName = route.name;
+    const params = (url.pathname.match(route.pattern)?.groups ?? {}) as Record<string, string>;
+    const method = request.method === "HEAD" ? "GET" : (request.method as Method);
+    const handler = route.methods[method];
+    if (!handler) {
+      const allow = Object.keys(route.methods).join(", ");
+      const error = new AppError(405, "METHOD_NOT_ALLOWED", `该接口只支持 ${allow} 请求。`);
+      return finish(errorResponse(error, requestId, { Allow: allow }), error.code);
     }
-    if (route.ai) {
+    let apiKey: ApiKeyRecord | undefined;
+    if (route.access === "ai") {
       assertAllowedOrigin(request, config.allowedOrigins);
       await enforceRateLimit(env, request, url.pathname, config.rateLimitPerMinute);
+    } else if (route.access === "key") {
+      apiKey = await authenticate(env, request);
+      await enforceRateLimit(env, request, "/api/v1", config.apiRateLimitPerMinute, apiKey.id);
+      waitUntil(touchApiKey(env.DB!, apiKey.id, startedAt).catch(() => undefined));
     }
-    response = await route.handler({ request, env, config, requestId, startedAt, log, waitUntil });
+    response = await handler({ request, env, config, requestId, startedAt, log, waitUntil, params, origin, apiKey });
   } catch (error) {
     const appError = error instanceof AppError ? error : new AppError(500, "INTERNAL_ERROR", "服务器内部错误，请稍后重试。", { cause: error });
     if (appError.status >= 500) {
@@ -78,7 +151,7 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
         errorName: appError.cause instanceof Error ? appError.cause.name : undefined,
       });
     }
-    response = errorResponse(appError, requestId);
+    response = errorResponse(appError, requestId, appError.status === 401 ? { "WWW-Authenticate": "Bearer" } : {});
     errorCode = appError.code;
   }
   return finish(response, errorCode);
@@ -87,7 +160,7 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
     const entry: RequestLog = {
       ...log,
       requestId,
-      route: url.pathname,
+      route: routeName,
       status: res.status,
       code,
       latencyMs: Date.now() - startedAt,

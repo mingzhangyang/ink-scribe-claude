@@ -42,53 +42,50 @@ export function validateStructureRequest(body: unknown, maxInputChars: number): 
   };
 }
 
-export async function handleStructure(ctx: RouteContext): Promise<Response> {
-  const { request, env, config, log } = ctx;
-  const body = await readJsonBody(request, config.maxBodyBytes);
-  const input = validateStructureRequest(body, config.maxInputChars);
+export type GeneratedNote = { note: NoteStructure; model: string; attempts: number; warnings: string[] };
+
+/** 把原文整理为 NoteStructure（mock 模式下使用本地启发式整理器），并把用量写入请求日志。 */
+export async function generateNoteFromText(ctx: RouteContext, input: StructureRequest): Promise<GeneratedNote> {
+  const { env, config, log } = ctx;
   log.inputChars = charLength(input.text);
   log.template = input.template;
   log.style = input.style;
 
-  let note: NoteStructure;
-  let warnings: string[] = [];
-  let attempts = 0;
-  let model: string;
-
   if (config.mock) {
-    note = structureLocally(input.text, { template: input.template, detail: input.detail });
-    model = "local-heuristic";
     log.mock = true;
-  } else {
-    model = config.structure.model;
-    log.model = model;
-    const { system, user } = buildStructureMessages({ ...input, detail: input.detail ?? "standard" });
-    const result = await runJsonTask(env.AI as unknown as AiBinding, config.structure, {
-      system,
-      user,
-      schemaName: "note_structure",
-      schema: NOTE_JSON_SCHEMA as unknown as Record<string, unknown>,
-      normalize: normalizeNoteStructure,
-      invalidMessage: "无法生成有效的笔记结构，请重试。",
-    });
-    note = result.value;
-    warnings = result.warnings;
-    attempts = result.attempts;
-    log.attempts = attempts;
-    log.promptTokens = result.usage.promptTokens;
-    log.completionTokens = result.usage.completionTokens;
+    return { note: structureLocally(input.text, { template: input.template, detail: input.detail }), model: "local-heuristic", attempts: 0, warnings: [] };
   }
-  log.warnings = warnings.length;
+  const model = config.structure.model;
+  log.model = model;
+  const { system, user } = buildStructureMessages({ ...input, detail: input.detail ?? "standard" });
+  const result = await runJsonTask(env.AI as unknown as AiBinding, config.structure, {
+    system,
+    user,
+    schemaName: "note_structure",
+    schema: NOTE_JSON_SCHEMA as unknown as Record<string, unknown>,
+    normalize: normalizeNoteStructure,
+    invalidMessage: "无法生成有效的笔记结构，请重试。",
+  });
+  log.attempts = result.attempts;
+  log.promptTokens = result.usage.promptTokens;
+  log.completionTokens = result.usage.completionTokens;
+  log.warnings = result.warnings.length;
+  return { note: result.value, model, attempts: result.attempts, warnings: result.warnings };
+}
 
+export async function handleStructure(ctx: RouteContext): Promise<Response> {
+  const body = await readJsonBody(ctx.request, ctx.config.maxBodyBytes);
+  const input = validateStructureRequest(body, ctx.config.maxInputChars);
+  const generated = await generateNoteFromText(ctx, input);
   const response: StructureResponse = {
-    note,
+    note: generated.note,
     meta: {
       requestId: ctx.requestId,
-      model,
+      model: generated.model,
       latencyMs: Date.now() - ctx.startedAt,
-      attempts,
-      warnings,
-      ...(config.mock ? { mock: true } : {}),
+      attempts: generated.attempts,
+      warnings: generated.warnings,
+      ...(ctx.config.mock ? { mock: true } : {}),
     },
   };
   return jsonResponse(response);
