@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModelInputs, extractModelOutput, parseJsonLoose, upstreamErrorCode } from "../worker/ai.ts";
+import { buildModelInputs, extractModelOutput, parseJsonLoose, runJsonTask, upstreamErrorCode, type Usage } from "../worker/ai.ts";
 import { loadConfig } from "../worker/config.ts";
 import type { Env } from "../worker/env.ts";
 
@@ -105,5 +105,25 @@ describe("upstreamErrorCode", () => {
     expect(upstreamErrorCode(new Error("5007: No such model"))).toBe("5007");
     expect(upstreamErrorCode(new Error("Invalid input near '预算 9876 万元'"))).toBeUndefined();
     expect(upstreamErrorCode(new Error("input: 2024: 年度计划"))).toBeUndefined();
+  });
+});
+
+describe("runJsonTask", () => {
+  it("reports accumulated usage even when every attempt is invalid", async () => {
+    const task = { ...loadConfig(env({})).structure, maxRetries: 1, timeoutMs: 60_000 };
+    const ai = { run: async () => ({ response: "not json", usage: { prompt_tokens: 100, completion_tokens: 20 } }) };
+    const reports: Array<[number, Usage]> = [];
+    await expect(
+      runJsonTask(ai, task, {
+        system: "s",
+        user: "u",
+        schemaName: "x",
+        schema: {},
+        normalize: () => ({ ok: false, errors: ["bad"] }),
+        invalidMessage: "invalid",
+        onUsage: (attempts, usage) => reports.push([attempts, usage]),
+      }),
+    ).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    expect(reports.at(-1)).toEqual([2, { promptTokens: 200, completionTokens: 40 }]);
   });
 });

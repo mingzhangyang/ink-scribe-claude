@@ -5,10 +5,10 @@ import { detectLanguage } from "../../../shared/text.ts";
 import { blockJitter, HandContent, HandText } from "./HandText.tsx";
 import { DoodleArt } from "./DoodleArt.tsx";
 
-export type Labels = { cues: string; summary: string; notes: string; topic: string; date: string; keywords: string };
+export type Labels = { lang: "zh-CN" | "en"; cues: string; summary: string; notes: string; topic: string; date: string; keywords: string };
 
-const ZH_LABELS: Labels = { cues: "线索", summary: "总结", notes: "笔记", topic: "主题", date: "日期", keywords: "关键词" };
-const EN_LABELS: Labels = { cues: "Cues", summary: "Summary", notes: "Notes", topic: "Topic", date: "Date", keywords: "Keywords" };
+const ZH_LABELS: Labels = { lang: "zh-CN", cues: "线索", summary: "总结", notes: "笔记", topic: "主题", date: "日期", keywords: "关键词" };
+const EN_LABELS: Labels = { lang: "en", cues: "Cues", summary: "Summary", notes: "Notes", topic: "Topic", date: "Date", keywords: "Keywords" };
 
 export function labelsFor(note: NoteStructure): Labels {
   const sample = [note.title, note.summary, ...note.sections.map((s) => s.content)].join("\n");

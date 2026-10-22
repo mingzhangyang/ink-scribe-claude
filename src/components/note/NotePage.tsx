@@ -99,6 +99,8 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   return (
     <div
       ref={setRefs}
+      // 界面是中文，笔记可能是英文：按笔记内容标注语言，读屏软件才能用正确的发音朗读
+      lang={labels.lang}
       className={`note-page paper-${paper.id} layout-${settings.layout}${height ? "" : " is-long"}`}
       style={style}
       onPointerDown={(event) => {

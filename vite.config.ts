@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -32,10 +32,20 @@ function pdfjsCmaps(): Plugin {
     name: "ink-scribe:pdfjs-cmaps",
     configureServer(server) {
       server.middlewares.use("/pdfjs/cmaps/", (req, res, next) => {
-        const file = join(dir, basename(decodeURIComponent((req.url ?? "").split("?")[0])));
-        if (!existsSync(file)) return next();
+        let name: string;
+        try {
+          name = basename(decodeURIComponent((req.url ?? "").split("?")[0]));
+        } catch {
+          return next();
+        }
+        // 空文件名会指向 CMap 目录本身，读取目录会抛出 EISDIR
+        if (!name || name === "." || name === "..") return next();
+        const file = join(dir, name);
+        if (!existsSync(file) || !statSync(file).isFile()) return next();
         res.setHeader("Content-Type", "application/octet-stream");
-        createReadStream(file).pipe(res);
+        createReadStream(file)
+          .on("error", (error) => (res.headersSent ? res.destroy(error) : next(error)))
+          .pipe(res);
       });
     },
     generateBundle() {

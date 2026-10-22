@@ -65,10 +65,12 @@ export async function generateNoteFromText(ctx: RouteContext, input: StructureRe
     schema: NOTE_JSON_SCHEMA as unknown as Record<string, unknown>,
     normalize: normalizeNoteStructure,
     invalidMessage: "无法生成有效的笔记结构，请重试。",
+    onUsage: (attempts, usage) => {
+      log.attempts = attempts;
+      log.promptTokens = usage.promptTokens;
+      log.completionTokens = usage.completionTokens;
+    },
   });
-  log.attempts = result.attempts;
-  log.promptTokens = result.usage.promptTokens;
-  log.completionTokens = result.usage.completionTokens;
   log.warnings = result.warnings.length;
   return { note: result.value, model, attempts: result.attempts, warnings: result.warnings };
 }

@@ -28,6 +28,11 @@ export type JsonTask<T> = {
   normalize: (raw: unknown) => NormalizeResult<T>;
   /** 多次尝试仍无法得到合法结构时返回给用户的提示。 */
   invalidMessage: string;
+  /**
+   * 每次调用模型后回报累计的尝试次数与 token 用量。任务最终失败时也已回报，
+   * 调用方据此记账，不会因为抛错而漏记已消耗的用量。
+   */
+  onUsage?: (attempts: number, usage: Usage) => void;
 };
 
 const MAX_REPAIR_ECHO_CHARS = 6_000;
@@ -235,6 +240,7 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
     try {
       output = await callModel(ai, task, buildModelInputs(task, messages, job.schemaName, job.schema), task.timeoutMs);
     } catch (error) {
+      job.onUsage?.(attempts, { ...usage });
       const appError = classifyAiError(error);
       if (appError.code === "AI_UNAVAILABLE" && appError.status === 503) {
         lastUpstreamError = appError;
@@ -247,6 +253,7 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
     const extracted = extractModelOutput(output);
     usage.promptTokens += extracted.usage.promptTokens;
     usage.completionTokens += extracted.usage.completionTokens;
+    job.onUsage?.(attempts, { ...usage });
 
     let parsed: unknown;
     let errors: string[];

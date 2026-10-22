@@ -14,6 +14,11 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    // 直接访问英文笔记时 Worker 会把 <html lang> 设为 en；应用界面本身是中文，笔记画布自行标注语言
+    document.documentElement.lang = "zh-CN";
+  }, []);
+
+  useEffect(() => {
     void fetchPublicConfig().then((c) => c && setConfig(c));
   }, []);
 

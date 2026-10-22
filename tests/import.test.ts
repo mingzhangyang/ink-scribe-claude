@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeTextBytes, docxXmlToText, joinPdfTextItems } from "../src/import/decode.ts";
+import { strFromU8, strToU8, zipSync } from "fflate";
+import { readZipEntry, ZipEntryTooLargeError } from "../src/import/zip.ts";
 
 describe("decodeTextBytes", () => {
   it("handles UTF-8 with and without BOM, UTF-16 and GBK", () => {
@@ -38,5 +40,29 @@ describe("joinPdfTextItems", () => {
       { str: "2. 第二条", hasEOL: false },
     ];
     expect(joinPdfTextItems(items)).toBe("深度工作是在无干扰状态下进行的专业活动。\nSpaced repetition is effective.\n1. 第一条\n2. 第二条");
+  });
+});
+
+describe("readZipEntry", () => {
+  const archive = (entries: Record<string, Uint8Array>) => zipSync(entries, { level: 9 });
+
+  it("extracts the requested entry", () => {
+    const zip = archive({ "word/styles.xml": strToU8("<styles/>"), "word/document.xml": strToU8("<w:document>正文</w:document>") });
+    expect(strFromU8(readZipEntry(zip, "word/document.xml", 1024)!)).toBe("<w:document>正文</w:document>");
+  });
+
+  it("returns null when the entry is missing", () => {
+    expect(readZipEntry(archive({ "a.txt": strToU8("a") }), "word/document.xml", 1024)).toBeNull();
+  });
+
+  it("stops once the expanded size exceeds the budget", () => {
+    // 4MB 的重复内容压缩后只有几 KB
+    const zip = archive({ "word/document.xml": new Uint8Array(4 * 1024 * 1024).fill(0x61) });
+    expect(zip.length).toBeLessThan(64 * 1024);
+    expect(() => readZipEntry(zip, "word/document.xml", 1024 * 1024)).toThrow(ZipEntryTooLargeError);
+  });
+
+  it("rejects data that is not a zip archive", () => {
+    expect(() => readZipEntry(strToU8("just some text, not a zip"), "word/document.xml", 1024)).toThrow();
   });
 });

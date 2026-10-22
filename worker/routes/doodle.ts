@@ -113,10 +113,12 @@ export async function handleDoodle(ctx: RouteContext): Promise<Response> {
     schema: DOODLE_JSON_SCHEMA as unknown as Record<string, unknown>,
     normalize: normalizeDoodleSpec,
     invalidMessage: "无法生成有效的插图，请重试或使用内置插图。",
+    onUsage: (attempts, usage) => {
+      log.attempts = attempts;
+      log.promptTokens = usage.promptTokens;
+      log.completionTokens = usage.completionTokens;
+    },
   });
-  log.attempts = result.attempts;
-  log.promptTokens = result.usage.promptTokens;
-  log.completionTokens = result.usage.completionTokens;
   log.warnings = result.warnings.length;
 
   if (cache && cacheKey) {

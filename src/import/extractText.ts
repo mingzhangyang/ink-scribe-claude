@@ -39,9 +39,18 @@ function htmlToText(html: string): string {
   doc.querySelectorAll("script, style, noscript, template, iframe, svg, nav").forEach((el) => el.remove());
   const root = doc.querySelector("article, main") ?? doc.body;
   let text = "";
-  const walk = (node: Node) => {
+  const walk = (node: Node, pre: boolean) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      text += (node.textContent ?? "").replace(/\s+/g, " ");
+      const raw = node.textContent ?? "";
+      if (pre) {
+        // <pre> 中的换行与缩进是内容的一部分（例如代码），原样保留
+        text += raw;
+        return;
+      }
+      let chunk = raw.replace(/\s+/g, " ");
+      // 普通文本在行首（或列表符号之后）的空白来自 HTML 排版，去掉
+      if (/(^|\n)(- )?$/.test(text)) chunk = chunk.replace(/^ +/, "");
+      text += chunk;
       return;
     }
     if (!(node instanceof Element)) return;
@@ -52,22 +61,26 @@ function htmlToText(html: string): string {
     const block = BLOCK_TAGS.has(node.tagName);
     if (block) text += "\n";
     if (node.tagName === "LI") text += "- ";
-    node.childNodes.forEach(walk);
+    const childPre = pre || node.tagName === "PRE";
+    node.childNodes.forEach((child) => walk(child, childPre));
     if (block) text += "\n";
   };
-  if (root) walk(root);
-  return normalizeExtractedText(text.split("\n").map((l) => l.trim()).join("\n"));
+  if (root) walk(root, false);
+  return normalizeExtractedText(text);
 }
 
+/** word/document.xml 解压后的大小上限；上传大小只限制了压缩后的字节数。 */
+const MAX_DOCX_XML_BYTES = 50 * 1024 * 1024;
+
 async function docxToText(bytes: Uint8Array): Promise<string> {
-  const { unzipSync, strFromU8 } = await import("fflate");
-  let files: Record<string, Uint8Array>;
+  const [{ strFromU8 }, { readZipEntry, ZipEntryTooLargeError }] = await Promise.all([import("fflate"), import("./zip.ts")]);
+  let xml: Uint8Array | null;
   try {
-    files = unzipSync(bytes, { filter: (f) => f.name === "word/document.xml" });
-  } catch {
+    xml = readZipEntry(bytes, "word/document.xml", MAX_DOCX_XML_BYTES);
+  } catch (error) {
+    if (error instanceof ZipEntryTooLargeError) throw new FileImportError("Word 文件的正文过大，请拆分后再上传。");
     throw new FileImportError("无法读取该 Word 文件，请确认是 .docx 格式（不支持旧版 .doc）。");
   }
-  const xml = files["word/document.xml"];
   if (!xml) throw new FileImportError("Word 文件中没有找到正文内容。");
   return docxXmlToText(strFromU8(xml));
 }

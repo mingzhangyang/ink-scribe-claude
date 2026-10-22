@@ -27,6 +27,23 @@ describe("splitHighlights", () => {
     ]);
   });
 
+  it("keeps offsets right when lowercasing changes the string length", () => {
+    // "İ".toLowerCase() 是两个 UTF-16 单元，按小写串的位置切原文会错位
+    expect(splitHighlights("İstanbul city", ["city"])).toEqual([
+      { text: "İstanbul ", highlight: null },
+      { text: "city", highlight: 0 },
+    ]);
+  });
+
+  it("treats regex syntax in phrases literally", () => {
+    expect(splitHighlights("a+b (c) a.b", ["a+b", "(c)"])).toEqual([
+      { text: "a+b", highlight: 0 },
+      { text: " ", highlight: null },
+      { text: "(c)", highlight: 1 },
+      { text: " a.b", highlight: null },
+    ]);
+  });
+
   it("returns the whole text when nothing matches", () => {
     expect(splitHighlights("abc", ["x", ""])).toEqual([{ text: "abc", highlight: null }]);
   });

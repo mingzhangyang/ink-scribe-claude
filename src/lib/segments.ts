@@ -4,17 +4,14 @@ export type TextRun = { text: string; highlight: number | null };
 
 export function splitHighlights(text: string, highlights: string[]): TextRun[] {
   const ranges: Array<{ start: number; end: number; index: number }> = [];
-  const lower = text.toLowerCase();
   highlights.forEach((phrase, index) => {
     if (!phrase) return;
-    const needle = phrase.toLowerCase();
-    let from = 0;
-    for (;;) {
-      const start = lower.indexOf(needle, from);
-      if (start < 0) break;
-      const end = start + needle.length;
+    // 直接在原文上做不区分大小写的匹配：toLowerCase() 可能改变字符串长度（如 “İ”），导致位置错位
+    const pattern = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+    for (const match of text.matchAll(pattern)) {
+      const start = match.index;
+      const end = start + match[0].length;
       if (!ranges.some((r) => start < r.end && end > r.start)) ranges.push({ start, end, index });
-      from = end;
     }
   });
   ranges.sort((a, b) => a.start - b.start);
