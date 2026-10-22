@@ -47,6 +47,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（35 项，覆盖生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
 
 > ⚠️ 不要用 `vite build --mode mock` 构建要部署的产物：mock 模式会把 `AI_MOCK=true` 写入生成的 Worker 配置。
@@ -69,6 +70,7 @@ worker/      Worker：路由、配置与模型调用约定、提示词、AI 调�
 src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
 scripts/     模型评测脚本与评测集
 tests/       Vitest 单元测试
+e2e/         Playwright 浏览器验收测试
 docs/        API、部署、模型评测、字体与导出说明
 ```
 
