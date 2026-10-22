@@ -82,6 +82,9 @@ export const MAX_STICKERS = 40;
  * 校验贴纸列表（用于持久化的笔记与 API 输入）：只保留已知类型与字段，
  * 坐标、旋转与缩放钳制到合理范围，AI 插图贴纸的图元再次规范化。
  */
+/** 贴纸纵坐标上限：远高于导出允许的长图高度（见 src/export/scale.ts）。 */
+export const MAX_STICKER_Y = 100_000;
+
 export function normalizeStickers(input: unknown): StickerItem[] {
   if (!Array.isArray(input)) return [];
   const result: StickerItem[] = [];
@@ -98,7 +101,8 @@ export function normalizeStickers(input: unknown): StickerItem[] {
       id: typeof r.id === "string" && /^[\w-]{1,40}$/.test(r.id) && !seen.has(r.id) ? r.id : newStickerId(),
       type,
       x: Math.round(num(r.x, -40, 880, 420)),
-      y: Math.round(num(r.y, -40, 4000, 420)),
+      // 长图的高度随内容增长，纵坐标只设一个宽松的上限
+      y: Math.round(num(r.y, -40, MAX_STICKER_Y, 420)),
       rotation: Math.round(num(r.rotation, -180, 180, 0) * 10) / 10,
       scale: Math.round(num(r.scale, 0.3, 3, 1) * 100) / 100,
     };

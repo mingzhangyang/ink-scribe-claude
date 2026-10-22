@@ -431,13 +431,13 @@ await context.close();
       '<w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>李响负责前端</w:t></w:r></w:p></w:body></w:document>'),
   }));
   const gbk = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xb1, 0xca, 0xbc, 0xc7]); // “中文笔记”的 GBK 编码
-  const html = Buffer.from('<html><body><nav>导航</nav><article><h1>网页标题</h1><p>正文第一段。</p><script>window.__x=1</script><ul><li>要点</li></ul></article></body></html>');
+  const html = Buffer.from('<html><body><nav>导航</nav><article><h1>网页标题</h1><p>正文第一段。</p><script>window.__x=1</script><ul><li>要点</li><li><p>段落项</p></li></ul><pre>if ready:\n    run()</pre></article></body></html>');
 
   const files = [
     { name: "photosynthesis.pdf", mimeType: "application/pdf", buffer: pdf, expect: ["光合作用", "二氧化碳", "thylakoid"], label: "PDF（中文 + 英文）" },
     { name: "meeting.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: docx, expect: ["周会纪要", "& 修复", "- 李响负责前端"], label: "Word .docx" },
     { name: "notes-gbk.txt", mimeType: "text/plain", buffer: gbk, expect: ["中文笔记"], label: "GBK 编码 TXT" },
-    { name: "page.html", mimeType: "text/html", buffer: html, expect: ["网页标题", "正文第一段", "- 要点"], label: "HTML（去除脚本与导航）" },
+    { name: "page.html", mimeType: "text/html", buffer: html, expect: ["网页标题", "正文第一段", "- 要点", "- 段落项", "if ready:\n    run()"], label: "HTML（去除脚本与导航）" },
   ];
   for (const file of files) {
     await p6.locator('input[type="file"]').setInputFiles({ name: file.name, mimeType: file.mimeType, buffer: file.buffer });

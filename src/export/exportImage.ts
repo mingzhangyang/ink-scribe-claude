@@ -15,6 +15,9 @@ export type ExportOptions = {
 
 export { effectiveScale };
 
+/** 由 CSS content 生成、不在 textContent 中的字符（列表序号、线索问号、区块标记）。 */
+const CSS_GENERATED_CHARS = "0123456789.?✦";
+
 function excludeEditorChrome(node: Node): boolean {
   return !(node instanceof Element && node.getAttribute("data-export-ignore") === "true");
 }
@@ -35,7 +38,7 @@ function snapshotNode(node: HTMLElement): HTMLElement {
 export async function renderNoteBlob(node: HTMLElement, options: ExportOptions): Promise<{ blob: Blob; scale: number }> {
   const snapshot = snapshotNode(node);
   try {
-    const text = snapshot.textContent ?? "";
+    const text = `${snapshot.textContent ?? ""}${CSS_GENERATED_CHARS}`;
     await Promise.all(options.families.map(loadFontCss));
     await ensureFontsLoaded(options.families, text);
     const cssText = await buildFontEmbedCss(options.families, text);

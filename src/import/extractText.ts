@@ -39,18 +39,29 @@ function htmlToText(html: string): string {
   doc.querySelectorAll("script, style, noscript, template, iframe, svg, nav").forEach((el) => el.remove());
   const root = doc.querySelector("article, main") ?? doc.body;
   let text = "";
+  // 列表符号推迟到列表项的第一段文字前再写入：<li><p>…</p></li> 中段落开头的换行不能把符号和内容拆开
+  let pendingMarker = false;
+  const emit = (chunk: string) => {
+    if (!chunk) return;
+    if (pendingMarker) {
+      text += "- ";
+      pendingMarker = false;
+    }
+    text += chunk;
+  };
   const walk = (node: Node, pre: boolean) => {
     if (node.nodeType === Node.TEXT_NODE) {
       const raw = node.textContent ?? "";
       if (pre) {
         // <pre> 中的换行与缩进是内容的一部分（例如代码），原样保留
-        text += raw;
+        if (pendingMarker && !raw.trim()) return;
+        emit(raw);
         return;
       }
       let chunk = raw.replace(/\s+/g, " ");
-      // 普通文本在行首（或列表符号之后）的空白来自 HTML 排版，去掉
-      if (/(^|\n)(- )?$/.test(text)) chunk = chunk.replace(/^ +/, "");
-      text += chunk;
+      // 普通文本在行首的空白来自 HTML 排版，去掉
+      if (/(^|\n)$/.test(text)) chunk = chunk.replace(/^ +/, "");
+      emit(chunk);
       return;
     }
     if (!(node instanceof Element)) return;
@@ -60,9 +71,11 @@ function htmlToText(html: string): string {
     }
     const block = BLOCK_TAGS.has(node.tagName);
     if (block) text += "\n";
-    if (node.tagName === "LI") text += "- ";
+    if (node.tagName === "LI") pendingMarker = true;
     const childPre = pre || node.tagName === "PRE";
     node.childNodes.forEach((child) => walk(child, childPre));
+    // 没有文字的列表项不输出符号
+    if (node.tagName === "LI") pendingMarker = false;
     if (block) text += "\n";
   };
   if (root) walk(root, false);

@@ -162,6 +162,11 @@ describe("normalizeStickers", () => {
     expect(ids[2]).toBe("other");
     expect(new Set(ids).size).toBe(3);
   });
+
+  it("keeps positions far down a long page", () => {
+    const [sticker] = normalizeStickers([{ id: "low", type: "star", x: 100, y: 5000 }]);
+    expect(sticker.y).toBe(5000);
+  });
 });
 
 describe("effectiveScale", () => {

@@ -20,12 +20,13 @@ describe("docxXmlToText", () => {
       '<w:document><w:body>',
       '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>标题</w:t></w:r></w:p>',
       '<w:p><w:r><w:t xml:space="preserve">A &amp; B </w:t></w:r><w:r><w:tab/><w:t>C&lt;D</w:t></w:r><w:r><w:br/><w:t>换行</w:t></w:r></w:p>',
+      '<w:p><w:r><w:t>甲</w:t><w:tab /><w:t>乙</w:t></w:r></w:p>',
       '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/></w:numPr></w:pPr><w:r><w:t>列表项</w:t></w:r></w:p>',
       '<w:p><w:del><w:r><w:delText>删除</w:delText></w:r></w:del><w:r><w:t>保留</w:t></w:r></w:p>',
       '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>表格</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
       "</w:body></w:document>",
     ].join("");
-    expect(docxXmlToText(xml)).toBe("标题\nA & B \tC<D\n换行\n- 列表项\n保留\n表格");
+    expect(docxXmlToText(xml)).toBe("标题\nA & B \tC<D\n换行\n甲\t乙\n- 列表项\n保留\n表格");
   });
 });
 

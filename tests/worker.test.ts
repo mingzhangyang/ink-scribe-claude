@@ -80,6 +80,14 @@ describe("POST /api/structure", () => {
     expect(inputs.messages[1].content).toContain(text);
   });
 
+  it("keeps indentation of the user's text", async () => {
+    const env = makeEnv(async () => ({ response: goodNote }));
+    const text = "def f(items):\n    for item in items:\n        if item:\n\t\t\treturn item\n    return None";
+    expect((await call(post("/api/structure", { text }), env)).response.status).toBe(200);
+    const [, inputs] = (env.AI.run as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(inputs.messages[1].content).toContain(text);
+  });
+
   it("accepts object responses from JSON mode", async () => {
     const env = makeEnv(async () => ({ response: goodNote }));
     const { response } = await call(post("/api/structure", { text: SECRET_TEXT }), env);

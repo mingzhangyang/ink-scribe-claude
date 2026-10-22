@@ -12,26 +12,29 @@ export type CleanOptions = {
   multiline?: boolean;
   /** 保留 HTML 标签与 Markdown 符号（用户原文交给模型理解，不应改写其中的代码与标记）。 */
   keepMarkup?: boolean;
+  /** 保留制表符与行首缩进（Python、YAML 等原文的层级依赖缩进）。 */
+  keepIndent?: boolean;
 };
 
 export function cleanText(value: unknown, maxChars: number, options: CleanOptions = {}): string {
   if (typeof value !== "string" && typeof value !== "number") return "";
   let text = String(value)
     .replace(/\r\n?/g, "\n")
-    .replace(/\t/g, " ")
     .replace(CONTROL_CHARS, "");
+  if (!options.keepIndent) text = text.replace(/\t/g, " ");
   if (!options.keepMarkup) text = text.replace(HTML_TAG, "").replace(MD_EMPHASIS, "");
 
   if (options.multiline) {
     text = text
       .split("\n")
-      .map((line) => line.replace(/ {2,}/g, " ").trimEnd())
+      .map((line) => (options.keepIndent ? line : line.replace(/ {2,}/g, " ")).trimEnd())
       .join("\n")
       .replace(/\n{3,}/g, "\n\n");
   } else {
     text = text.replace(/\s+/g, " ");
   }
-  return truncate(text.trim(), maxChars);
+  // 保留缩进时只去掉开头的空行，第一行的缩进也是内容
+  return truncate(options.keepIndent ? text.replace(/^\s*\n/, "").trimEnd() : text.trim(), maxChars);
 }
 
 /** 按 Unicode 码点截断，避免把代理对拆成乱码。 */

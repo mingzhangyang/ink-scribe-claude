@@ -36,7 +36,7 @@ export function docxXmlToText(xml: string): string {
   const lines = paragraphs.map((paragraph) => {
     const isList = /<w:numPr\b/.test(paragraph);
     let line = "";
-    for (const token of paragraph.match(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>|<w:tab\/>|<w:br\/>|<w:br\s[^>]*\/>/g) ?? []) {
+    for (const token of paragraph.match(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>|<w:br\s[^>]*\/>/g) ?? []) {
       if (token.startsWith("<w:tab")) line += "\t";
       else if (token.startsWith("<w:br")) line += "\n";
       else line += decodeXmlEntities(token.replace(/^<w:t(?:\s[^>]*)?>|<\/w:t>$/g, ""));
