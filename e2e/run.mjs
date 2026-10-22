@@ -36,8 +36,11 @@ run("npx", [
   `INSERT OR REPLACE INTO api_keys (id, name, key_hash, created_at) VALUES ('key_e2e', 'e2e', '${keyHash}', ${Date.now()})`,
 ]);
 
+// 预览服务只在本机通信，不需要外网；去掉代理变量，避免请求转发经过代理时偶发 “fetch failed”
+const previewEnv = { ...env };
+for (const name of ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"]) delete previewEnv[name];
 const preview = spawn("npx", ["vite", "preview", "--mode", "mock", "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"], {
-  env,
+  env: previewEnv,
   stdio: ["ignore", "ignore", "inherit"],
   detached: true,
 });
