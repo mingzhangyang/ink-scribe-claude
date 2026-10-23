@@ -799,7 +799,9 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
   await page.locator('.library-main input[type="file"]').setInputFiles(backup);
   await page.locator(".library-main .hint.is-ok").waitFor();
-  check("LB5", "导出备份后可导入恢复已删除的笔记", await cards.count() === 2);
+  // The notice appears before the list reloads, so wait for the restored card rather than counting at once.
+  const restored = await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 2, null, { timeout: 5000 }).then(() => true, () => false);
+  check("LB5", "导出备份后可导入恢复已删除的笔记", restored);
   check("LB6", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();
 }

@@ -65,7 +65,9 @@ export async function startDrafts() {
       && next.stickers === previous.stickers && next.aiDoodle === previous.aiDoodle && next.source === previous.source
       && next.libraryLink === previous.libraryLink) return;
     // Skip sample initialization only before user work exists. Later replacements must match the saved canvas.
-    if (!hasWork && next.source === "sample" && next.noteSerial !== previous.noteSerial) return;
+    // Opening a document (e.g. a library entry made from the sample) is not initialization, even with source "sample".
+    if (!hasWork && next.source === "sample" && next.noteSerial !== previous.noteSerial
+      && next.documentSerial === previous.documentSerial) return;
     hasWork = true;
     pending = snapshot();
     save();

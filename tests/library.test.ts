@@ -178,6 +178,46 @@ describe("library in the editor", () => {
     expect(c.useLibraryStatus.getState().status).toBe("deleted");
   });
 
+  it("clears a stale deleted status once the entry is restored from a backup", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    const link = c.store.getState().libraryLink!;
+    const backup = backupOf([(await getEntry(link.id))!]);
+    await deleteEntry(link.id);
+    await c.checkLibraryLink(true);
+    expect(c.useLibraryStatus.getState().status).toBe("deleted");
+    await importBackup(backup);
+    await c.checkLibraryLink(true);
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    c.store.getState().setInput({ text: "恢复后继续编辑" });
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).toBe(link.id);
+    expect((await listEntries()).entries).toHaveLength(1);
+  });
+
+  it("ignores a failed link check once another document is opened", async () => {
+    const c = await boot();
+    const other = await saveEntry(null, edited("B"));
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    const working = indexedDB;
+    vi.stubGlobal("indexedDB", { open: () => { throw new Error("unavailable"); } });
+    const pending = c.checkLibraryLink(true);
+    c.openEntry(other);
+    await pending;
+    vi.stubGlobal("indexedDB", working);
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+  });
+
+  it("autosaves an opened sample-derived entry and its link when no draft exists yet", async () => {
+    const entry = await saveEntry(null, { ...document, source: "sample" });
+    const c = await boot();
+    c.openEntry(entry);
+    await vi.waitFor(async () => expect((await readDraft())?.library).toEqual({ id: entry.id, revision: entry.revision }));
+    expect((await readDraft())?.document?.note?.title).toBe(document.note!.title);
+  });
+
   it("ignores the outcome of a save once another document is opened", async () => {
     const c = await boot();
     const other = await saveEntry(null, edited("B"));

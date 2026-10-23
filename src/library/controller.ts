@@ -53,13 +53,20 @@ export async function checkLibraryLink(recheck = false) {
   const link = useNoteStore.getState().libraryLink;
   const { baseline, status } = useLibraryStatus.getState();
   if (!link || status === "saving" || (!recheck && baseline?.revision === link.revision)) return;
+  // Another document was opened or a save started meanwhile: neither result nor failure describes the editor now.
+  const stale = () => useNoteStore.getState().libraryLink !== link || useLibraryStatus.getState().status === "saving";
   try {
     const entry = await getEntry(link.id);
-    if (useNoteStore.getState().libraryLink !== link || useLibraryStatus.getState().status === "saving") return;
+    if (stale()) return;
     if (!entry) set({ status: "deleted" });
     else if (entry.revision !== link.revision) set({ status: "conflict" });
-    else if (baseline?.revision !== link.revision) set({ baseline: { revision: entry.revision, text: serialize(entry.document) } });
-  } catch { set({ status: "error" }); }
+    else {
+      // The expected revision is there again (e.g. restored from a backup), so earlier failures no longer apply.
+      const current = useLibraryStatus.getState();
+      if (current.status === "deleted" || current.status === "conflict" || current.status === "error") set({ status: "idle" });
+      if (current.baseline?.revision !== link.revision) set({ baseline: { revision: entry.revision, text: serialize(entry.document) } });
+    }
+  } catch { if (!stale()) set({ status: "error" }); }
 }
 
 /** Saves the editor to its linked entry, or to a new entry when unlinked or `asNew`. */
