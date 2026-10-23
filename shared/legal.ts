@@ -56,8 +56,9 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           items: [
             "草稿默认自动保存在当前浏览器的 IndexedDB 中，包括输入文字、整理后的笔记、外观、贴纸和插图等编辑状态；它不会自动跨设备同步。",
             "界面语言、主题和笔记外观偏好保存在 localStorage 中，用于下次打开时恢复设置。",
-            "草稿栏可删除已保存的草稿并关闭自动保存。为维持关闭状态，浏览器仍会保留相关状态信息；当前画面中的内容不会立即消失，外观和语言等偏好也不会随草稿一起删除。",
-            "浏览器的“清除站点数据”功能可进一步清除本地草稿和偏好。清理浏览器数据、结束隐私浏览或更换设备可能使草稿丢失，请自行保存需要保留的导出文件。",
+            "通过“保存到笔记库”保存的笔记也存放在当前浏览器的 IndexedDB 中，内容与草稿相同，包括原文、笔记、外观、贴纸和插图。笔记库不会上传，也不会跨设备同步；你可以在笔记库页面删除单条笔记，或把全部笔记导出为 JSON 备份文件，导出的备份文件由你自行保管。",
+            "草稿栏可删除已保存的草稿并关闭自动保存。浏览器会保留一条标记，使自动保存保持关闭；当前画面中的内容不会立即消失，笔记库中的笔记以及外观、语言等偏好也不会随草稿一起删除。",
+            "浏览器的“清除站点数据”功能可清除本地草稿、笔记库和偏好。清理浏览器数据、结束隐私浏览或更换设备可能使这些内容丢失，请定期导出需要保留的笔记或图片。",
           ],
         },
         {
@@ -65,7 +66,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "AI 整理与可选插图",
           paragraphs: [
             "点击 AI 整理时，应用把输入或提取出的文字，以及模板、输出语言、版式和详略设置发送到本网站的 /api/structure。Cloudflare Worker 使用配置的 Workers AI 模型处理这些信息并返回笔记；本地快速排版无需发送文字给 AI。",
-            "如果站点启用了 AI 插图，你请求生成插图时，描述文字（concept）会发送到 /api/doodle 并用于模型处理。生成后的图元可能在服务器缓存，缓存键使用描述的哈希值，缓存内容去除描述正文。",
+            "如果站点启用了 AI 插图，你请求生成插图时，笔记的插图描述或标题（concept）会发送到 /api/doodle 并用于模型处理。生成后的图元可能在服务器缓存，缓存键使用描述的哈希值，缓存内容去除描述正文。",
             "应用的整理接口不会把原文或本次模型输出写入发布数据库，应用日志也不记录这些正文。AI Gateway 启用时，应用请求关闭网关正文日志；这不等于底层平台完全不处理或保留任何请求信息。平台处理说明见“服务提供商与外部链接”。",
           ],
         },
@@ -114,7 +115,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "retention-deletion",
           title: "保存、删除与撤回分享",
           paragraphs: [
-            "本地数据由当前浏览器保存，直到你通过应用或浏览器清除它们，或浏览器不再保留它们。已发布笔记不会随你关闭页面而自动删除，当前发布功能也没有统一的自动到期删除期限。日志、平台备份和缓存的保留方式取决于相关平台与部署配置。",
+            "草稿、笔记库和偏好等本地数据由当前浏览器保存，直到你通过应用或浏览器清除它们，或浏览器不再保留它们。已发布笔记不会随你关闭页面而自动删除，当前发布功能也没有统一的自动到期删除期限。日志、平台备份和缓存的保留方式取决于相关平台与部署配置。",
             "已发布作品可由持有对应密钥或 manageToken 的 API 客户端删除，或联系维护者协助处理。删除笔记后，为防止延迟重试重新创建作品，系统仍可保留幂等关联与必要管理记录；这些关联与管理记录目前没有自动到期清除期限。吊销密钥会阻止继续使用该密钥，但不会自动删除已经发布的作品。",
             "从 public 改为 unlisted 只是取消公开列表展示，原链接仍可访问。删除或调整可见性无法召回他人已下载、截图、转发或由第三方缓存的副本。",
           ],
@@ -189,7 +190,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "合理使用与他人权益",
           paragraphs: [
             "请仅提交和发布你有权处理的内容。不得利用服务从事违法活动、侵犯他人权利、泄露未经授权的个人信息或机密，或者传播恶意代码、垃圾内容和用于攻击服务的请求。",
-            "共享设备上的草稿、导出的文件、公开链接以及你选择的第三方 agent 需要由你妥善管理。不得把本服务的正常可访问性解释为对任何内容的合法性或来源作出背书。",
+            "共享设备上的草稿和笔记库、导出的文件、分享出去的链接，以及你选择的第三方 agent，需要由你妥善管理。某项内容能通过本服务访问，不代表维护者认可其合法性或来源。",
           ],
         },
         {
@@ -205,7 +206,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "删除、限制访问与服务调整",
           paragraphs: [
             "维护者可以为维护服务、安全、防止滥用、处理侵权投诉或遵守适用法律，对内容或 API 访问进行调查、限制、移除或停用，并可调整或停止部分功能。这些处理应在适用法律允许的范围内进行。",
-            "你可使用 manageToken 等相应凭据通过 API 删除自己管理的作品，或联系维护者寻求帮助。停用密钥并不会自动撤下既有作品；删除或改变可见性也不能消除已经被他人取得的副本。具体数据处理方式见隐私政策。",
+            "你可使用 manageToken 等相应凭据通过 API 删除自己管理的作品，或联系维护者寻求帮助。吊销密钥不会自动撤下已发布的作品；删除或改变可见性也不能消除已经被他人取得的副本。具体数据处理方式见隐私政策。",
             "功能和条款可能随着维护迭代而调整，本页会标明更新日期。使用新的功能或发布方式前，请重新查看相关说明。",
           ],
           links: [{ href: "/privacy#retention-deletion", label: "了解保存与删除方式" }],
@@ -248,13 +249,14 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "local-data",
           title: "Content stored in your browser",
           paragraphs: [
-            "Imported TXT, Markdown, HTML, DOCX, and PDF files are parsed in your browser. The application does not upload the original files to the server. Image previews, exports, and image copying also happen in the browser. Choosing AI organization sends the extracted text for further processing, as explained below.",
+            "Imported TXT, Markdown, HTML, DOCX, and PDF files are parsed in your browser. The application does not upload the original files to the server. Image previews, exports, and image copying also happen in the browser. Choosing AI organization sends the extracted text to the server, as explained below.",
           ],
           items: [
             "Drafts autosave by default in the current browser's IndexedDB, including input text, the prepared note, appearance, stickers, illustrations, and related editing state. They do not automatically sync across devices.",
             "Interface language, theme, and note appearance preferences are kept in localStorage so they can be restored on your next visit.",
-            "The draft bar can delete the saved draft and disable autosave. Some state remains to keep autosave disabled. Content currently on screen is not immediately cleared, and appearance or language preferences are not deleted with the draft.",
-            "Your browser's clear-site-data controls can also remove local drafts and preferences. Browser cleanup, the end of a private session, or changing devices can cause drafts to be lost. Keep your own copies of exported files you need.",
+            "Notes you add with “Save to library” are also kept in the current browser's IndexedDB, with the same contents as a draft: source text, note, appearance, stickers, and illustrations. The library is not uploaded and does not sync across devices. On the library page you can delete individual notes or export all of them as a JSON backup file, which you then keep yourself.",
+            "The draft bar can delete the saved draft and disable autosave. The browser keeps a marker so autosave stays disabled. Content currently on screen is not immediately cleared, and library notes and appearance or language preferences are not deleted with the draft.",
+            "Your browser's clear-site-data controls can remove local drafts, the library, and preferences. Browser cleanup, the end of a private session, or changing devices can cause them to be lost, so export the notes or images you want to keep.",
           ],
         },
         {
@@ -262,8 +264,8 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "AI organization and optional illustrations",
           paragraphs: [
             "When you request AI organization, the application sends the entered or extracted text, template, output language, layout, and detail settings to this site's /api/structure endpoint. The Cloudflare Worker uses the configured Workers AI model to process them and return a note. Quick local layout does not send text to AI.",
-            "If AI illustrations are enabled, requesting one sends your description, called concept, to /api/doodle for model processing. Generated drawing primitives may be cached on the server. The cache key uses a hash of the description, and the cached content omits the description text.",
-            "The application's organization endpoint does not write source text or that model response to the publishing database, and application logs do not record those bodies. When AI Gateway is enabled, the application requests that gateway body logging be disabled. This does not mean the underlying platforms process or retain no request information. See the service-provider section below.",
+            "If AI illustrations are enabled, requesting one sends the note's illustration description or title, called concept, to /api/doodle for model processing. Generated drawing primitives may be cached on the server. The cache key uses a hash of the description, and the cached content omits the description text.",
+            "The application's organization endpoint does not write the source text or the model's output to the publishing database, and application logs do not record those bodies. When AI Gateway is enabled, the application requests that gateway body logging be disabled. This does not mean the underlying platforms process or retain no request information. See the service-provider section below.",
           ],
         },
         {
@@ -311,7 +313,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "retention-deletion",
           title: "Retention, deletion, and withdrawing a share",
           paragraphs: [
-            "Local data stays in the current browser until you remove it through the application or browser, or the browser stops retaining it. Published notes do not disappear when you close a page, and the current publishing feature has no universal automatic expiry. Retention of logs, platform backups, and caches depends on the relevant platform and deployment settings.",
+            "Local data such as drafts, the library, and preferences stays in the current browser until you remove it through the application or browser, or the browser stops retaining it. Published notes do not disappear when you close a page, and the current publishing feature has no universal automatic expiry. Retention of logs, platform backups, and caches depends on the relevant platform and deployment settings.",
             "Published notes can be deleted by an API client with the corresponding key or manageToken, or you can ask the maintainers for help. After a note is deleted, idempotency associations and necessary management records may remain to prevent delayed retries from recreating it. The current application does not automatically expire these association or management records. Revoking a key prevents further use of that key but does not automatically delete notes already published with it.",
             "Changing public to unlisted only removes public listing; the existing link remains accessible. Deletion or visibility changes cannot recall copies others have downloaded, captured, shared, or cached outside the service.",
           ],
@@ -386,7 +388,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "Acceptable use and other people's rights",
           paragraphs: [
             "Only submit and publish content you are authorized to process. Do not use the service for unlawful activities, to infringe others' rights, to disclose personal or confidential information without permission, or to distribute malicious code, spam, or requests intended to attack the service.",
-            "Manage drafts on shared devices, exported files, shared links, and any third-party agents you choose with care. Content being accessible through the service does not mean its legality or provenance has been endorsed.",
+            "You are responsible for drafts and library notes on shared devices, exported files, links you share, and any third-party agents you choose. The fact that content is available through the service does not mean the maintainers vouch for its legality or origin.",
           ],
         },
         {
@@ -402,7 +404,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "Removal, access limits, and service changes",
           paragraphs: [
             "Maintainers may investigate, restrict, remove, or disable content or API access to maintain the service, protect security, prevent abuse, address rights complaints, or comply with applicable law. They may also change or discontinue features. Such actions remain subject to applicable law.",
-            "You may delete notes you manage through the API with the corresponding credential, such as a manageToken, or contact maintainers for help. Disabling a key does not automatically take down existing notes. Deleting a note or changing its visibility cannot remove copies already obtained by others. The privacy policy explains the associated data handling.",
+            "You may delete notes you manage through the API with the corresponding credential, such as a manageToken, or contact maintainers for help. Revoking a key does not automatically take down notes already published. Deleting a note or changing its visibility cannot remove copies already obtained by others. The privacy policy explains the associated data handling.",
             "Features and terms may change as the service is maintained. This page identifies its update date. Review the relevant information before using new features or publishing methods.",
           ],
           links: [{ href: "/privacy#retention-deletion", label: "Learn about retention and deletion" }],
