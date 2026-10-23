@@ -889,7 +889,8 @@ input[type="range"] {
 
 .doodle-palette {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* 1fr 的最小宽度是内容宽度，插图按钮会把五列撑出面板；minmax(0, 1fr) 让各列平分可用宽度 */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -907,6 +908,7 @@ input[type="range"] {
 
 .doodle-option svg,
 .ai-doodle-preview svg {
+  display: block;
   width: 100%;
   height: 100%;
 }

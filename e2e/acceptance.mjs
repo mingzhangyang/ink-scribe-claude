@@ -124,6 +124,16 @@ check("F2", "字号/行距/字距可调", vars[0] === "17px" && vars[1] === "1.6
 
 // ---------- G. 贴纸 ----------
 await page.getByRole("tab", { name: "贴纸" }).click();
+const doodleGrid = await page.locator(".doodle-palette").evaluate((grid) => {
+  const panel = grid.getBoundingClientRect();
+  const buttons = [...grid.children].map((el) => el.getBoundingClientRect());
+  return {
+    overflow: grid.scrollWidth - grid.clientWidth,
+    lastRight: Math.round(Math.max(...buttons.map((b) => b.right)) - panel.right),
+    square: buttons.every((b) => Math.abs(b.width - b.height) < 1),
+  };
+});
+check("G7", "手绘插图库五列完整显示在面板内且按钮为正方形", doodleGrid.overflow <= 0 && doodleGrid.lastRight <= 0 && doodleGrid.square, JSON.stringify(doodleGrid));
 await page.getByTitle("和纸胶带 · 薄荷").click();
 const stickers = page.locator(".sticker");
 const first = stickers.nth(0);
