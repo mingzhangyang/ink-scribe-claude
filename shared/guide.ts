@@ -95,9 +95,9 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       rules: [
         { title: "直接提交可排版的文字", body: `标题不超过 ${NOTE_LIMITS.title} 字，最多 ${NOTE_LIMITS.maxSections} 个段落、每段 ${NOTE_LIMITS.content} 字。使用已去除首尾空白的纯文本，重点短语必须出现在所属段落实际显示的文字中，不包含列表标记。重叠时前面的重点词优先，每个短语都须至少有一次不与前项重叠的匹配。完整约束以 OpenAPI 为准，无效或超限内容会被拒绝，不会静默截断。` },
         { title: "预检不等于排版完成", body: "validation.layout: not_checked 表示服务端没有测量字体与页面。appearance.overflow 默认 expand，固定页面放不下时展开为长图；设为 error 时仍溢出会阻止导出。需要固定尺寸效果时，打开查看页确认排版。" },
-        { title: "重试保留同一份请求", body: "请求处理中可能返回 409 和 Retry-After；保留原键、原 JSON 字段顺序，从同一网络稍后重试。完成后返回原链接（200）和新的 manageToken，之前的 manageToken 随之失效；修改内容必须使用新键。作品被删除后，原请求重放返回 410，不会重新创建。" },
+        { title: "重试保留同一份请求", body: "请求处理中可能返回 409 和 Retry-After；保留原键、原 JSON 字段顺序，从同一网络稍后重试。完成后返回原链接（200），但不再返回 manageToken；修改内容必须使用新键。作品被删除后，原请求重放返回 410，不会重新创建。" },
         { title: "链接即访问权限", body: "unlisted 不出现在图库中，也不被搜索引擎收录，但任何持有链接的人都能读取，并非登录后才能查看的私有文档。发布记录不另外保存原文副本；主动保留在 note 中的原文摘录仍会保存和展示。" },
-        { title: "用 manageToken 删除", body: "向 DELETE /api/v1/notes/{id} 发送请求，并在 X-Manage-Token 头中带上 manageToken，成功返回 204。服务端只保存它的哈希，无法找回；遗失后请联系维护者处理。" },
+        { title: "用 manageToken 删除", body: "向 DELETE /api/v1/notes/{id} 发送请求，并在 X-Manage-Token 头中带上 manageToken，成功返回 204。服务端只保存它的哈希，无法找回。为防止响应丢失后无法删除，可以自己生成至少 32 位的随机值，发布时放在 X-Manage-Token 头中，它就是这篇笔记的 manageToken。遗失后请联系维护者处理。" },
       ],
       statusTitle: "常见响应与下一步",
       statusHeaders: ["状态", "如何处理"],
@@ -179,9 +179,9 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       rules: [
         { title: "Submit text ready for layout", body: `Titles allow ${NOTE_LIMITS.title} characters, with at most ${NOTE_LIMITS.maxSections} sections and ${NOTE_LIMITS.content} characters per section. Use trimmed plain text. Highlights must occur in the corresponding section's visible text without list markers. Earlier highlights take precedence on overlaps, so each phrase needs at least one non-overlapping occurrence. Read OpenAPI for every constraint. Invalid or excessive content is rejected, never silently truncated.` },
         { title: "Validation is not a layout measurement", body: "validation.layout: not_checked means the server has not measured fonts or page geometry. appearance.overflow defaults to expand, which changes an overflowing fixed page to a long page. error blocks image export if the fixed page still overflows. Open the view page when a specific page size matters." },
-        { title: "Keep retries identical", body: "A request in progress may return 409 and Retry-After. Keep the original key and JSON field order, then retry later from the same network. Completed requests replay the original link with 200 and a new manageToken, which replaces the previous one. Changed content needs a new key. Replaying a deleted publication returns 410 and does not recreate it." },
+        { title: "Keep retries identical", body: "A request in progress may return 409 and Retry-After. Keep the original key and JSON field order, then retry later from the same network. Completed requests replay the original link with 200, without the manageToken. Changed content needs a new key. Replaying a deleted publication returns 410 and does not recreate it." },
         { title: "The link is the access", body: "unlisted stays out of the gallery and search engines, but anyone with the link can read it; it is not a private document behind a sign-in screen. Publishing does not store a separate source-text copy. Excerpts you include in note are still stored and displayed." },
-        { title: "Delete with manageToken", body: "Send DELETE /api/v1/notes/{id} with the manageToken in the X-Manage-Token header. Success returns 204. The server stores only a hash and cannot recover the token; if it is lost, contact the maintainers." },
+        { title: "Delete with manageToken", body: "Send DELETE /api/v1/notes/{id} with the manageToken in the X-Manage-Token header. Success returns 204. The server stores only a hash and cannot recover the token. So that a lost response does not prevent deletion, you can generate a random value of at least 32 characters and send it in the X-Manage-Token header when publishing; it becomes that note's manageToken. If it is lost, contact the maintainers." },
       ],
       statusTitle: "Common responses and next steps",
       statusHeaders: ["Status", "What to do"],

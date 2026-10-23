@@ -183,9 +183,8 @@ describe("POST /api/v1/notes", () => {
     expect(response.status).toBe(422);
     expect(JSON.stringify(body)).not.toContain(source);
     expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
-    const reservation = await env.DB!.prepare("SELECT * FROM idempotency_keys WHERE idempotency_key = 'reject-source'").first();
-    expect(reservation).toMatchObject({ state: "pending", lease_until: 0, owner_token: null });
-    expect(JSON.stringify(reservation)).not.toContain(source);
+    // Validation precedes the reservation, so a rejected request does not bind its key.
+    expect(await env.DB!.prepare("SELECT * FROM idempotency_keys WHERE idempotency_key = 'reject-source'").first()).toBeNull();
     expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain(source);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(source);
   });
@@ -482,6 +481,7 @@ describe("reading, gallery and management", () => {
     const schema = body!.components.schemas.PublishRequest;
     expect(schema.required).toEqual(["schemaVersion", "note"]);
     expect(schema.properties).not.toHaveProperty("text");
+    expect(schema.properties.visibility.enum).toEqual(["unlisted"]);
     expect(schema.properties.note.properties.sections.items.properties.content.maxLength).toBe(900);
     const versions = body!.components.schemas.PublishedNote.allOf[1].oneOf;
     expect(versions.map((version: any) => version.properties.schemaVersion.const)).toEqual([1, 0]);
@@ -559,23 +559,50 @@ describe("anonymous publishing", () => {
     expect(replay.response.status).toBe(410);
   });
 
-  it("scopes idempotency keys to the client and rotates the manage token on replay", async () => {
+  it("scopes idempotency keys to the client and never reveals or replaces the manage token on replay", async () => {
     const headers = { "Idempotency-Key": "shared-key" };
     const first = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    // Anyone behind the same IP who knows the key and body gets the same note, but no deletion credential.
     const replay = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
     expect(replay.response.status).toBe(200);
     expect(replay.response.headers.get("Idempotent-Replayed")).toBe("true");
     expect(replay.body!.id).toBe(first.body!.id);
-    expect(replay.body!.manageToken).toMatch(/^imt_/);
-    expect(replay.body!.manageToken).not.toBe(first.body!.manageToken);
+    expect(replay.body).not.toHaveProperty("manageToken");
 
     const elsewhere = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers, ip: "192.0.2.50" }));
     expect(elsewhere.response.status).toBe(201);
     expect(elsewhere.body!.id).not.toBe(first.body!.id);
 
     const path = `/api/v1/notes/${first.body!.id}`;
-    expect((await call(anonymous("DELETE", path, { headers: { "X-Manage-Token": first.body!.manageToken } }))).response.status).toBe(404);
-    expect((await call(anonymous("DELETE", path, { headers: { "X-Manage-Token": replay.body!.manageToken } }))).response.status).toBe(204);
+    expect((await call(anonymous("DELETE", path, { headers: { "X-Manage-Token": first.body!.manageToken } }))).response.status).toBe(204);
+  });
+
+  it("accepts a client-chosen manage token so a lost response can still be deleted", async () => {
+    const token = "my-own-secret-token-0123456789abcdef";
+    const headers = { "Idempotency-Key": "own-token", "X-Manage-Token": token };
+    const first = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    expect(first.response.status).toBe(201);
+    expect(first.body!.manageToken).toBe(token);
+    const replay = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    expect(replay.body!.id).toBe(first.body!.id);
+    expect((await call(anonymous("DELETE", `/api/v1/notes/${first.body!.id}`, { headers: { "X-Manage-Token": token } }))).response.status).toBe(204);
+
+    const weak = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "X-Manage-Token": "short" } }));
+    expect(weak.response.status).toBe(400);
+    expect(await count("SELECT count(*) AS n FROM notes")).toBe(0);
+  });
+
+  it("leaves no reservation behind for rejected requests", async () => {
+    env.ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT = "1";
+    const invalid = publication({ note: { ...aiNote, sections: [] } });
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: invalid, headers: { "Idempotency-Key": "bad" } }))).response.status).toBe(422);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication({ visibility: "public" }), headers: { "Idempotency-Key": "public" } }))).response.status).toBe(422);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "first" } }))).response.status).toBe(201);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "over" } }))).response.status).toBe(429);
+    const keys = await env.DB!.prepare("SELECT idempotency_key FROM idempotency_keys").all<{ idempotency_key: string }>();
+    expect(keys.results.map((row) => row.idempotency_key)).toEqual(["first"]);
+    // A completed request still replays after the quota is spent.
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "first" } }))).response.status).toBe(200);
   });
 
   it("enforces daily quotas per client and for the whole site", async () => {

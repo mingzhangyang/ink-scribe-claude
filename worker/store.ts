@@ -174,15 +174,6 @@ export async function countAnonymousNotes(db: D1Database, clientHash: string, si
   return { total: Number(row?.total ?? 0), client: Number(row?.client ?? 0) };
 }
 
-/** Replaces an anonymous note's manage token, invalidating the previous one. */
-export async function replaceManageToken(db: D1Database, id: string, clientHash: string, tokenHash: string): Promise<boolean> {
-  const result = await db
-    .prepare(`UPDATE notes SET manage_token_hash = ? WHERE id = ? AND api_key_id = '${ANONYMOUS_OWNER}' AND client_hash = ?`)
-    .bind(tokenHash, id, clientHash)
-    .run();
-  return (result.meta.changes ?? 0) > 0;
-}
-
 export async function deleteAnonymousNote(db: D1Database, id: string, tokenHash: string): Promise<boolean> {
   // As with key deletion, the completed idempotency record stays behind as a tombstone.
   const result = await db
@@ -260,6 +251,11 @@ export async function listPublicNoteDates(db: D1Database, limit: number): Promis
 export type PublishClaim = { apiKeyId: string; key: string; token: string; noteId: string };
 export type PublishRequest = { note_id: string; request_hash: string; state: "pending" | "completed"; lease_until: number };
 
+export async function findPublishRequest(db: D1Database, apiKeyId: string, key: string): Promise<PublishRequest | null> {
+  return db.prepare(`SELECT note_id, request_hash, state, lease_until FROM idempotency_keys
+    WHERE api_key_id = ? AND idempotency_key = ?`).bind(apiKeyId, key).first<PublishRequest>();
+}
+
 /** Atomic reservation, with a fenced lease so a terminated Worker cannot strand a key. */
 export async function claimPublish(db: D1Database, apiKeyId: string, key: string, hash: string, now: number): Promise<
   { claim: PublishClaim } | { existing: PublishRequest }
@@ -274,8 +270,7 @@ export async function claimPublish(db: D1Database, apiKeyId: string, key: string
       AND idempotency_keys.request_hash = excluded.request_hash`)
     .bind(apiKeyId, key, hash, claim.noteId, now, claim.token, now + 120_000, now).run();
   if (result.meta.changes === 1) return { claim };
-  const existing = await db.prepare(`SELECT note_id, request_hash, state, lease_until FROM idempotency_keys
-    WHERE api_key_id = ? AND idempotency_key = ?`).bind(apiKeyId, key).first<PublishRequest>();
+  const existing = await findPublishRequest(db, apiKeyId, key);
   if (!existing) throw new Error("Publish reservation disappeared");
   return { existing };
 }

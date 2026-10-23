@@ -741,8 +741,12 @@ if (process.env.E2E_API_KEY) {
   check("V1c", "结构发布重试返回同一笔记与明确元数据", replayed.status() === 200 && replay.id === note.id && replay.meta?.replayed === true && replay.meta?.processing === "agent");
   const publicData = await (await p7.request.get(`${URL}api/notes/${note.id}`)).json();
   check("V1d", "公开 JSON 保留结构并不暴露原文字段", publicData.schemaVersion === 1 && JSON.stringify(publicData.note) === JSON.stringify(publishRequest.note) && !Object.hasOwn(publicData, "text"));
-  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: publishRequest });
-  check("V2", "没有密钥时拒绝发布", unauth.status() === 401);
+  const keyless = await p7.request.post(`${URL}api/v1/notes`, { data: { ...publishRequest, visibility: "public" } });
+  check("V2", "没有密钥时不能发布到公开图库", keyless.status() === 422 && (await keyless.json()).error?.issues?.[0]?.code === "ANONYMOUS_UNLISTED_ONLY");
+  const anonymous = await p7.request.post(`${URL}api/v1/notes`, { data: { ...publishRequest, visibility: "unlisted" } });
+  const anonymousNote = await anonymous.json();
+  const anonymousDelete = await p7.request.delete(`${URL}api/v1/notes/${anonymousNote.id}`, { headers: { "X-Manage-Token": anonymousNote.manageToken ?? "" } });
+  check("V2b", "没有密钥时可发布仅链接可见的笔记，并用 manageToken 删除", anonymous.status() === 201 && anonymousNote.visibility === "unlisted" && anonymousDelete.status() === 204, `POST ${anonymous.status()}，DELETE ${anonymousDelete.status()}`);
 
   const shareResponse = await p7.request.get(note.url);
   const html = await shareResponse.text();

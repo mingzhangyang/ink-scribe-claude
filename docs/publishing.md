@@ -143,12 +143,14 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | 每分钟限流 | 按客户端 IP 计数，与密钥调用使用同一个 Rate Limiting 绑定（当前每分钟 12 次） |
 | 每日上限 | 24 小时滚动窗口内每个 IP `ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT`（默认 20）篇、全站 `ANON_PUBLISH_DAILY_LIMIT`（默认 500）篇，超出返回 `429` 与 `Retry-After: 3600`。这是软上限，同一客户端的并发请求可能略微超出；已删除的作品不计入 |
 | 关闭 | 任一上限设为 `0`，免密钥发布与预检返回 `403 FEATURE_DISABLED` |
-| 删除 | `DELETE /api/v1/notes/:id`，请求头 `X-Manage-Token: <manageToken>`；缺少令牌返回 `401`，令牌错误或作品不存在返回 `404` |
+| 删除 | `DELETE /api/v1/notes/:id`，请求头 `X-Manage-Token: <manageToken>`；缺少令牌返回 `401`，令牌错误或作品不存在返回 `404`。发布时也可以用同一请求头提供自己的令牌 |
 | 其他操作 | 列出、查询和修改可见性需要密钥，免密钥调用返回 `401` |
 
 免密钥作品属于保留的 `anonymous` 发布者（由迁移 `0004` 创建，它的 `key_hash` 不是 SHA-256 摘要，任何 Bearer 令牌都无法认证为它）。每篇作品保存 `client_hash`（客户端 IP 的 SHA-256）与 `manage_token_hash`，不保存 IP 或 `manageToken` 明文。
 
-幂等键按客户端区分：占用记录的作用域是 `anonymous:<client_hash>`，不同 IP 使用相同的键互不影响；换了 IP 的重试会被当作新请求。因为只保存令牌哈希，同一客户端重放已完成的请求时会签发新的 `manageToken` 并使旧的失效。
+幂等键按客户端区分：占用记录的作用域是 `anonymous:<client_hash>`，不同 IP 使用相同的键互不影响；换了 IP 的重试会被当作新请求。重放已完成的请求只返回原笔记，不返回也不替换 `manageToken`：IP 和请求体都不能证明调用方就是原发布者，共用出口 IP 的其他客户端也可能发出同样的重放。发布时可以在 `X-Manage-Token` 头中提供自己生成的令牌（32–200 个字母、数字或 `. _ ~ -`），这样即使响应丢失也能删除；省略时由服务端生成。
+
+新请求先校验内容与每日上限，通过后才占用幂等键，被拒绝的请求不会留下占用记录。
 
 ## 密钥与公开内容
 

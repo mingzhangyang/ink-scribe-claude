@@ -13,17 +13,18 @@ import {
   decodeCursor,
   deleteAnonymousNote,
   deleteNote,
+  findPublishRequest,
   type ApiKeyRecord,
   claimPublish,
   releasePublish,
   type PublishClaim,
+  type PublishRequest as PublishReservation,
   type NoteRow,
   getNoteRow,
   insertNote,
   listNotes,
   newNoteId,
   newSecretToken,
-  replaceManageToken,
   sha256Hex,
   toPublished,
   toSummary,
@@ -34,6 +35,8 @@ const VISIBILITIES = ["public", "unlisted"] as const;
 const MAX_PAGE_SIZE = 50;
 const DAY_MS = 86_400_000;
 const MANAGE_TOKEN_HEADER = "X-Manage-Token";
+/** A client-chosen manage token must be long enough to be unguessable. */
+const MANAGE_TOKEN_PATTERN = /^[A-Za-z0-9._~-]{32,200}$/;
 
 /**
  * Who publishes. Anonymous clients are known only by a hash of their IP, which scopes their daily quota and their
@@ -68,8 +71,16 @@ async function assertAnonymousQuota(ctx: RouteContext, database: D1Database, cli
   }
 }
 
-async function issueManageToken(): Promise<{ token: string; hash: string }> {
-  const token = `imt_${newSecretToken()}`;
+/**
+ * The publisher may choose its own token, so it can still delete the note if the response is lost: a replay never
+ * reveals or replaces the token, because a client sharing the same IP could otherwise take it over.
+ */
+async function manageTokenFor(ctx: RouteContext): Promise<{ token: string; hash: string }> {
+  const supplied = ctx.request.headers.get(MANAGE_TOKEN_HEADER)?.trim();
+  if (supplied !== undefined && !MANAGE_TOKEN_PATTERN.test(supplied)) {
+    throw invalid(`${MANAGE_TOKEN_HEADER} 需为 32–200 个字母、数字或 . _ ~ - 字符；也可以省略，由服务端生成。`);
+  }
+  const token = supplied ?? `imt_${newSecretToken()}`;
   return { token, hash: await sha256Hex(token) };
 }
 
@@ -161,41 +172,25 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
   if (idempotencyKey !== undefined && !/^[\w.:-]{1,100}$/.test(idempotencyKey)) {
     throw invalid("Idempotency-Key 只能包含字母、数字和 _ . : -，长度不超过 100。");
   }
+  const manage = publisher.kind === "anonymous" ? await manageTokenFor(ctx) : undefined;
   const requestHash = await sha256Hex(JSON.stringify(body));
+  // Replays are answered before admission: a completed request replays under the contract it was published with,
+  // and a new request is validated and checked against quotas before it may leave a reservation behind.
+  if (idempotencyKey) {
+    const existing = await findPublishRequest(database, publisher.scope, idempotencyKey);
+    const takeover = existing?.state === "pending" && existing.request_hash === requestHash && existing.lease_until <= Date.now();
+    if (existing && !takeover) return replay(ctx, publisher, existing, requestHash);
+  }
+  const input = validatePublication(body, publisher);
+  if (publisher.kind === "anonymous") await assertAnonymousQuota(ctx, database, publisher.clientHash);
   let claim: PublishClaim | undefined;
   if (idempotencyKey) {
     const reservation = await claimPublish(database, publisher.scope, idempotencyKey, requestHash, Date.now());
-    if ("existing" in reservation) {
-      const existing = reservation.existing;
-      if (existing.request_hash !== requestHash) {
-        throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该 Idempotency-Key 已用于内容不同的请求。");
-      }
-      if (existing.state === "pending") {
-        throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该请求正在处理中，请使用相同的键稍后重试。", { retryAfterSeconds: 2 });
-      }
-      const row = await getNoteRow(database, existing.note_id);
-      if (!row) {
-        throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
-      }
-      const note = publishRow(ctx, row, publisher);
-      // Only a hash of the manage token is stored, so a replay issues a new one and the lost original stops working.
-      let manageToken: string | undefined;
-      if (publisher.kind === "anonymous") {
-        const issued = await issueManageToken();
-        if (!(await replaceManageToken(database, row.id, publisher.clientHash, issued.hash))) {
-          throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
-        }
-        manageToken = issued.token;
-      }
-      return jsonResponse({ ...note, ...(manageToken ? { manageToken } : {}), meta: {
-        ...(note.schemaVersion === 1 ? publicationMeta(ctx.requestId) : { requestId: ctx.requestId }),
-        replayed: true,
-      } }, 200, { "Idempotent-Replayed": "true" });
-    }
+    if ("existing" in reservation) return replay(ctx, publisher, reservation.existing, requestHash);
     claim = reservation.claim;
   }
   try {
-    return await createNote(ctx, publisher, body, claim);
+    return await createNote(ctx, publisher, input, manage, claim);
   } catch (error) {
     // An ambiguous commit may already be completed; the conditional release leaves it intact.
     // If storage is unavailable, lease expiry still permits recovery.
@@ -204,11 +199,32 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
   }
 }
 
-async function createNote(ctx: RouteContext, publisher: Publisher, body: unknown, claim?: PublishClaim): Promise<Response> {
+async function replay(ctx: RouteContext, publisher: Publisher, existing: PublishReservation, requestHash: string): Promise<Response> {
+  if (existing.request_hash !== requestHash) {
+    throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该 Idempotency-Key 已用于内容不同的请求。");
+  }
+  if (existing.state === "pending") {
+    throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该请求正在处理中，请使用相同的键稍后重试。", { retryAfterSeconds: 2 });
+  }
+  const row = await getNoteRow(db(ctx), existing.note_id);
+  if (!row) {
+    throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
+  }
+  const note = publishRow(ctx, row, publisher);
+  return jsonResponse({ ...note, meta: {
+    ...(note.schemaVersion === 1 ? publicationMeta(ctx.requestId) : { requestId: ctx.requestId }),
+    replayed: true,
+  } }, 200, { "Idempotent-Replayed": "true" });
+}
+
+async function createNote(
+  ctx: RouteContext,
+  publisher: Publisher,
+  input: PublishRequest,
+  manage?: { token: string; hash: string },
+  claim?: PublishClaim,
+): Promise<Response> {
   const database = db(ctx);
-  const input = validatePublication(body, publisher);
-  if (publisher.kind === "anonymous") await assertAnonymousQuota(ctx, database, publisher.clientHash);
-  const manage = publisher.kind === "anonymous" ? await issueManageToken() : undefined;
   const settings: Settings = {
     ...DEFAULT_SETTINGS,
     seed: crypto.getRandomValues(new Uint32Array(1))[0],
