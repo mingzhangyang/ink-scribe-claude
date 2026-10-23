@@ -1,6 +1,7 @@
 import type { DoodleSpec } from "./doodle.ts";
 import type { NoteStructure } from "./note.ts";
 import type { Detail, Language, NoteStyle, Template } from "./options.ts";
+import type { ValidationIssue } from "./publishing.ts";
 
 export type StructureRequest = {
   text: string;
@@ -43,6 +44,7 @@ export type PublicConfig = {
 
 export const ERROR_CODES = [
   "INVALID_REQUEST",
+  "VALIDATION_FAILED",
   "INVALID_JSON",
   "METHOD_NOT_ALLOWED",
   "UNSUPPORTED_MEDIA_TYPE",
@@ -69,6 +71,7 @@ export type ApiErrorBody = {
     message: string;
     requestId?: string;
     retryAfterSeconds?: number;
+    issues?: ValidationIssue[];
   };
 };
 
@@ -90,10 +93,20 @@ export type PublishedNoteSummary = {
 };
 
 export type PublishedNote = PublishedNoteSummary & {
+  /** 0: notes published before the strict agent contract; 1: validated, lossless content. */
+  schemaVersion: 0 | 1;
   note: import("./note.ts").NoteStructure;
   settings: import("./settings.ts").Settings;
   stickers: import("./stickers.ts").StickerItem[];
   doodle?: import("./doodle.ts").DoodleSpec;
+};
+
+export type PublishValidation = { structure: "passed"; layout: "not_checked" };
+
+export type PublishValidationResponse = {
+  valid: true;
+  schemaVersion: 1;
+  validation: PublishValidation;
 };
 
 export type NoteListResponse = {

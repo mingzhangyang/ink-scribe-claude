@@ -35,6 +35,43 @@ async function newPage(options = {}, init) {
   return { context, page };
 }
 
+async function waitForNoteReady(page) {
+  await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30_000 });
+}
+
+// Measure actual text ranges independently of the renderer's status flag. Rotated handwriting
+// may extend into a visible region's padding; only clipped regions and the paper edge matter.
+function inspectNoteLayout(el, expected = []) {
+  const bounds = el.getBoundingClientRect();
+  const tolerance = 2 * bounds.width / el.offsetWidth;
+  const text = el.innerText.replace(/\s+/g, "");
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let clipped = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!node.textContent.trim() || node.parentElement?.closest("svg, .sticker-layer, [data-export-ignore]")) continue;
+    range.selectNodeContents(node);
+    if ([...range.getClientRects()].some((r) => r.width > 0 && r.height > 0 &&
+      (r.top < bounds.top - tolerance || r.bottom > bounds.bottom + tolerance || r.left < bounds.left - tolerance || r.right > bounds.right + tolerance))) clipped++;
+  }
+  const overflowing = [...el.querySelectorAll("[data-fit]")].filter((region) => {
+    const style = getComputedStyle(region);
+    return (style.overflowY !== "visible" && region.scrollHeight > region.clientHeight + 2)
+      || (style.overflowX !== "visible" && region.scrollWidth > region.clientWidth + 2);
+  }).length;
+  return {
+    status: el.dataset.renderStatus,
+    height: el.offsetHeight,
+    width: el.offsetWidth,
+    expanded: el.dataset.renderExpanded,
+    pageSize: el.dataset.pageSize,
+    missing: expected.filter((value) => !text.includes(value.replace(/\s+/g, ""))).length,
+    clipped,
+    overflowing,
+  };
+}
+
 // ---------- A. 首屏 ----------
 {
   const { page, context } = await newPage();
@@ -193,23 +230,16 @@ const rot1 = await stickers.nth(0).evaluate((el) => el.style.transform);
 check("G6", "贴纸重叠时选中贴纸的旋转手柄不被遮挡且可用", !covered && rot0 !== rot1 && (await stickers.nth(0).getAttribute("class")).includes("is-selected"), `${rot0} → ${rot1}`);
 await page.keyboard.press("Delete");
 
-// ---------- R1. 溢出时“精简后重新生成” ----------
+// ---------- R1. 字体就绪后自动适配，避免以裁切后的画布导出 ----------
 await page.getByRole("tab", { name: "样式" }).click();
 await page.locator(".range-field").filter({ hasText: "字号" }).locator("input").fill("28");
 await page.locator(".range-field").filter({ hasText: "行距" }).locator("input").fill("2.4");
-await page.waitForTimeout(300);
-const condenseBtn = page.getByRole("button", { name: "精简后重新生成" });
-const hasCondense = (await condenseBtn.count()) === 1;
-if (hasCondense) {
-  const [res] = await Promise.all([page.waitForResponse("**/api/structure"), condenseBtn.click()]);
-  const body = JSON.parse(res.request().postData());
-  await page.waitForTimeout(500);
-  check("R1", "内容溢出时提供“精简后重新生成”，并以精简档位重新请求", body.detail === "concise", `detail=${body.detail}`);
-} else {
-  check("R1", "内容溢出时提供“精简后重新生成”，并以精简档位重新请求", false, "按钮不存在");
-}
+await waitForNoteReady(page);
+const autoFit = await page.locator(".note-page").evaluate(inspectNoteLayout);
+check("R1", "大字号内容在字体就绪后自动适配且没有裁切", autoFit.status === "ready" && autoFit.clipped === 0 && autoFit.overflowing === 0, JSON.stringify(autoFit));
 await page.locator(".range-field").filter({ hasText: "字号" }).locator("input").fill("17");
 await page.locator(".range-field").filter({ hasText: "行距" }).locator("input").fill("1.6");
+await waitForNoteReady(page);
 
 // ---------- H. 导出 ----------
 await page.getByRole("tab", { name: "导出" }).click();
@@ -231,7 +261,7 @@ await jpg.saveAs(`${SP}/accept.jpg`);
 const jb = fs.readFileSync(`${SP}/accept.jpg`);
 check("H4", "导出 JPG", jb[0] === 0xff && jb[1] === 0xd8 && jpg.suggestedFilename().endsWith(".jpg"), `${jb.length} bytes`);
 const b64 = fs.readFileSync(`${SP}/accept-1x.png`).toString("base64");
-const handlePixels = await page.evaluate(async (data) => {
+const exportPixels = await page.evaluate(async (data) => {
   const img = new Image();
   img.src = `data:image/png;base64,${data}`;
   await img.decode();
@@ -246,9 +276,41 @@ const handlePixels = await page.evaluate(async (data) => {
     // 选框与手柄使用 #2563EB，当前墨水为复古棕、纸张为牛皮纸，正常内容不会出现该色
     if (Math.abs(px[i] - 0x25) < 18 && Math.abs(px[i + 1] - 0x63) < 18 && Math.abs(px[i + 2] - 0xeb) < 18) count++;
   }
-  return count;
+  // The 1x canvas has 56px side padding. Sample blank margins, away from the content,
+  // stickers and kraft's horizontal rules (y % 30 === 0). Allow the paper's noise texture.
+  const kraft = [0xd8, 0xbf, 0x98];
+  const rows = [12, 192, 642, Math.floor((img.height - 30) / 30) * 30 + 12];
+  const sums = [0, 0, 0, 0];
+  let samples = 0;
+  let paperLike = 0;
+  let opaque = 0;
+  for (const left of [16, img.width - 26]) {
+    for (const top of rows) {
+      for (let y = top; y < top + 10; y++) {
+        for (let x = left; x < left + 10; x++) {
+          const offset = (y * img.width + x) * 4;
+          const [r, g, b, a] = px.subarray(offset, offset + 4);
+          samples++;
+          sums[0] += r;
+          sums[1] += g;
+          sums[2] += b;
+          sums[3] += a;
+          if (a >= 250) opaque++;
+          if (a >= 250 && r >= g + 10 && g >= b + 20 &&
+            Math.abs(r - kraft[0]) <= 45 && Math.abs(g - kraft[1]) <= 45 && Math.abs(b - kraft[2]) <= 45) paperLike++;
+        }
+      }
+    }
+  }
+  return { handlePixels: count, paper: { samples, paperLike, opaque, meanRgba: sums.map((sum) => Math.round(sum / samples)) } };
 }, b64);
-check("H5", "导出图片不包含贴纸选框与手柄", framesBeforeExport === 1 && handlePixels === 0, `导出前选框 ${framesBeforeExport} 个，导出图中选框色像素 ${handlePixels}`);
+check("H5", "导出图片不包含贴纸选框与手柄", framesBeforeExport === 1 && exportPixels.handlePixels === 0, `导出前选框 ${framesBeforeExport} 个，导出图中选框色像素 ${exportPixels.handlePixels}`);
+check(
+  "H6",
+  "导出牛皮纸保留暖棕纸纹，背景不变黑或透明",
+  exportPixels.paper.paperLike >= exportPixels.paper.samples * 0.9 && exportPixels.paper.opaque >= exportPixels.paper.samples * 0.99,
+  JSON.stringify(exportPixels.paper),
+);
 
 // ---------- J. 剪贴板 ----------
 await page.getByRole("button", { name: "复制到剪贴板" }).click();
@@ -481,20 +543,69 @@ await context.close();
 if (process.env.E2E_API_KEY) {
   const { page: p7, context: c7 } = await newPage();
   const auth = { Authorization: `Bearer ${process.env.E2E_API_KEY}` };
+  const contractAuth = { Authorization: `Bearer ${process.env.E2E_CONTRACT_API_KEY ?? process.env.E2E_API_KEY}` };
   const title = `E2E 公开笔记 ${Date.now()}`;
-  const created = await p7.request.post(`${URL}api/v1/notes`, {
-    headers: { ...auth, "Idempotency-Key": `e2e-${Date.now()}` },
-    data: {
-      note: { title, sections: [{ heading: "要点", content: "这是通过 API 发布的笔记。\n- 列表项", highlights: ["API"] }], summary: "总结一句话" },
-      template: "lecture-summary",
-      visibility: "public",
-      appearance: { paper: "kraft", ink: "brown", layout: "free-journal" },
-      stickers: [{ type: "star", x: 700, y: 120, variant: "gold" }],
+  const publishRequest = {
+    schemaVersion: 1,
+    note: {
+      title,
+      date: "2026年10月22日",
+      cues: [{ keyword: "发布", note: "agent 提供已整理的结构" }],
+      sections: [{ heading: "要点", content: "这是通过 API 发布的笔记。\n- 列表项", highlights: ["API"] }],
+      summary: "总结一句话",
+      doodleTheme: "book",
     },
+    template: "lecture-summary",
+    visibility: "public",
+    appearance: { paper: "kraft", ink: "brown", layout: "free-journal" },
+    stickers: [{ id: "e2e-star", type: "star", x: 700, y: 120, rotation: 0, scale: 1, variant: "gold" }],
+  };
+  const beforeValidation = await (await p7.request.get(`${URL}api/v1/notes?limit=50`, { headers: contractAuth })).json();
+  const validated = await p7.request.post(`${URL}api/v1/notes/validate`, { headers: contractAuth, data: publishRequest });
+  const validation = await validated.json();
+  const afterValidation = await (await p7.request.get(`${URL}api/v1/notes?limit=50`, { headers: contractAuth })).json();
+  check(
+    "V0a",
+    "agent 可预检结构，明确未验证排版且不创建笔记",
+    validated.status() === 200 && validation.valid === true && validation.schemaVersion === 1 &&
+      validation.validation?.structure === "passed" && validation.validation?.layout === "not_checked" &&
+      !Object.hasOwn(validation, "note") && JSON.stringify(beforeValidation) === JSON.stringify(afterValidation),
+    `HTTP ${validated.status()}`,
+  );
+
+  for (const field of ["schemaVersion", "note"]) {
+    const incomplete = { ...publishRequest };
+    delete incomplete[field];
+    const response = await p7.request.post(`${URL}api/v1/notes`, { headers: contractAuth, data: incomplete });
+    const body = await response.json();
+    check(`V0-${field}`, `缺少 ${field} 时返回可修正的字段错误`, response.status() === 422 && body.error?.code === "VALIDATION_FAILED" && body.error.issues?.some((issue) => issue.path === field), `HTTP ${response.status()}`);
+  }
+  const rejectedSource = `E2E_SOURCE_MUST_NOT_BE_ACCEPTED_${Date.now()}`;
+  for (const [name, data] of [["text-only", { text: rejectedSource }], ["text-and-note", { ...publishRequest, text: rejectedSource }]]) {
+    const response = await p7.request.post(`${URL}api/v1/notes`, { headers: contractAuth, data });
+    const body = await response.json();
+    check(`V0-${name}`, `拒绝 ${name} 旧调用且不回显原文`, response.status() === 422 && body.error?.code === "VALIDATION_FAILED" && body.error.issues?.some((issue) => issue.path === "text") && !JSON.stringify(body).includes(rejectedSource), `HTTP ${response.status()}`);
+  }
+  const oversized = { ...publishRequest, note: { ...publishRequest.note, sections: [{ content: "字".repeat(901), highlights: [] }] } };
+  const rejectedOversize = await p7.request.post(`${URL}api/v1/notes/validate`, { headers: contractAuth, data: oversized });
+  const oversizeError = await rejectedOversize.json();
+  check("V0b", "超长正文被拒绝而不静默截断", rejectedOversize.status() === 422 && oversizeError.error?.issues?.some((issue) => issue.path === "note.sections[0].content"), `HTTP ${rejectedOversize.status()}`);
+
+  const idempotencyKey = `e2e-${Date.now()}`;
+  const created = await p7.request.post(`${URL}api/v1/notes`, {
+    headers: { ...auth, "Idempotency-Key": idempotencyKey },
+    data: publishRequest,
   });
   const note = await created.json();
-  check("V1", "API 密钥发布笔记并返回链接", created.status() === 201 && /\/n\/[A-Za-z0-9_-]{22}$/.test(note.url), `${created.status()} ${note.url}`);
-  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: { note: { title: "x", sections: [{ content: "y" }] } } });
+  check("V1", "agent 无需原文即可发布完整结构并返回链接", created.status() === 201 && note.schemaVersion === 1 && /\/n\/[A-Za-z0-9_-]{22}$/.test(note.url), `${created.status()} ${note.url}`);
+  if (created.status() !== 201) throw new Error(`Agent publication failed: ${JSON.stringify(note)}`);
+  check("V1b", "发布保留已整理内容并声明结构验证范围", JSON.stringify(note.note) === JSON.stringify(publishRequest.note) && note.meta?.processing === "agent" && note.meta?.validation?.layout === "not_checked" && !Object.hasOwn(note, "text") && !Object.hasOwn(note.meta, "model"));
+  const replayed = await p7.request.post(`${URL}api/v1/notes`, { headers: { ...auth, "Idempotency-Key": idempotencyKey }, data: publishRequest });
+  const replay = await replayed.json();
+  check("V1c", "结构发布重试返回同一笔记与明确元数据", replayed.status() === 200 && replay.id === note.id && replay.meta?.replayed === true && replay.meta?.processing === "agent");
+  const publicData = await (await p7.request.get(`${URL}api/notes/${note.id}`)).json();
+  check("V1d", "公开 JSON 保留结构并不暴露原文字段", publicData.schemaVersion === 1 && JSON.stringify(publicData.note) === JSON.stringify(publishRequest.note) && !Object.hasOwn(publicData, "text"));
+  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: publishRequest });
   check("V2", "没有密钥时拒绝发布", unauth.status() === 401);
 
   const shareResponse = await p7.request.get(note.url);
@@ -503,7 +614,7 @@ if (process.env.E2E_API_KEY) {
   check("V3b", "分享链接的 HTML 直接包含笔记正文与 Article 结构化数据", html.includes(`<h1>${title}</h1>`) && html.includes("<li>列表项</li>") && html.includes('"@type":"Article"') && html.includes(`<link rel="canonical" href="${note.url}"`));
 
   await p7.goto(note.url, { waitUntil: "networkidle" });
-  await p7.waitForSelector(".note-page");
+  await waitForNoteReady(p7);
   const view = await p7.evaluate(() => ({
     title: document.querySelector(".note-title")?.textContent ?? "",
     cls: document.querySelector(".note-page")?.className ?? "",
@@ -532,18 +643,103 @@ if (process.env.E2E_API_KEY) {
   }));
   check("V6", "从查看页把笔记（含外观与贴纸）载入编辑器", editor.badge.includes("已发布") && editor.stickers === 1 && editor.cls.includes("paper-kraft"), JSON.stringify(editor));
 
-  const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, { headers: auth, data: { note: { title: `E2E 隐藏 ${Date.now()}`, sections: [{ content: "仅链接可见" }] } } })).json();
+  const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, {
+    headers: auth,
+    data: { schemaVersion: 1, note: { title: `E2E 隐藏 ${Date.now()}`, cues: [], sections: [{ content: "仅链接可见", highlights: [] }], summary: "" } },
+  })).json();
   const gallery = await (await p7.request.get(`${URL}api/gallery?limit=50`)).json();
   const unlistedHtml = await (await p7.request.get(unlisted.url)).text();
   check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
 
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
-  await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
+  const unlistedRemoved = await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
+  const unlistedGone = await p7.request.get(`${URL}api/notes/${unlisted.id}`);
+  check("V8", "仅链接可见的笔记也能删除且不能继续读取", unlistedRemoved.status() === 204 && unlistedGone.status() === 404, `DELETE ${unlistedRemoved.status()}，GET ${unlistedGone.status()}`);
   await p7.goto(note.url, { waitUntil: "networkidle" });
   const goneText = await p7.locator(".empty-state").innerText({ timeout: 10000 }).catch(async () => `[未找到提示] ${(await p7.locator("main").innerText()).slice(0, 80)}`);
   check("V9", "删除后链接显示“不存在”", removed.status() === 204 && goneText.includes("不存在"), `DELETE ${removed.status()}；${goneText}`);
   check("V10", "发布与查看流程无脚本错误", p7.errors.length === 0, p7.errors.join("; "));
   await c7.close();
+}
+
+// ---------- W. agent 的完整长内容在全部版式中可读、可导出 ----------
+if (process.env.E2E_API_KEY) {
+  const { page: p12, context: c12 } = await newPage();
+  const auth = { Authorization: `Bearer ${process.env.E2E_DENSE_API_KEY ?? process.env.E2E_API_KEY}` };
+  const fillText = (length, start, end) => start + "完整排版内容。".repeat(length).slice(0, length - start.length - end.length) + end;
+  const denseNote = {
+    title: "长内容完整性验收",
+    date: "2026年10月22日",
+    cues: Array.from({ length: 8 }, (_, i) => ({ keyword: `线索 ${i + 1}`, note: fillText(120, `线索${i + 1}：`, `线索${i + 1}结束`) })),
+    sections: Array.from({ length: 6 }, (_, i) => ({
+      heading: `段落 ${i + 1}`,
+      content: fillText(900, `正文${i + 1}：`, `正文${i + 1}结束`),
+      highlights: ["完整排版"],
+    })),
+    summary: fillText(400, "最后的总结：", "全文保留结束"),
+  };
+  const expectedText = [...denseNote.cues.map((cue) => cue.note), ...denseNote.sections.map((section) => section.content), denseNote.summary];
+  const ids = [];
+
+  for (const layout of ["hybrid-cornell", "classic-cornell", "free-journal", "minimal"]) {
+    const response = await p12.request.post(`${URL}api/v1/notes`, {
+      headers: auth,
+      data: {
+        schemaVersion: 1,
+        note: denseNote,
+        appearance: { layout, pageSize: "a4", overflow: "expand", naturalness: 0, doodleMode: "none", fontSize: 19, lineHeight: 1.75 },
+      },
+    });
+    const publication = await response.json();
+    if (response.status() !== 201) throw new Error(`Dense ${layout} publication failed: ${JSON.stringify(publication)}`);
+    ids.push(publication.id);
+    await p12.goto(publication.url, { waitUntil: "networkidle" });
+    await waitForNoteReady(p12);
+    const geometry = await p12.locator(".note-page").evaluate(inspectNoteLayout, expectedText);
+    check(
+      `W-${layout}`,
+      `${layout} 最大合法正文、线索与总结全部可见`,
+      geometry.expanded === "true" && geometry.pageSize === "long" && geometry.height > 1188 && geometry.missing === 0 && geometry.clipped === 0 && geometry.overflowing === 0,
+      JSON.stringify(geometry),
+    );
+    const [download] = await Promise.all([
+      p12.waitForEvent("download", { timeout: 60_000 }),
+      p12.getByRole("button", { name: "下载图片", exact: true }).click(),
+    ]);
+    const file = `${SP}/published-${layout}.png`;
+    await download.saveAs(file);
+    const dimensions = pngSize(file);
+    check(
+      `W-export-${layout}`,
+      `${layout} PNG 覆盖适配后的完整页面`,
+      dimensions.sig === "PNG" && dimensions.h > 1188 && dimensions.w * dimensions.h <= 16_000_000 &&
+        // Canvas rounds both scaled dimensions to whole pixels; width rounding is amplified by a long page's aspect ratio.
+        Math.abs(dimensions.h - geometry.height * dimensions.w / geometry.width) <= 1 + geometry.height / geometry.width,
+      `${dimensions.w}×${dimensions.h}; page ${geometry.width}×${geometry.height}`,
+    );
+  }
+
+  const strictResponse = await p12.request.post(`${URL}api/v1/notes`, {
+    headers: auth,
+    data: { schemaVersion: 1, note: denseNote, appearance: { layout: "classic-cornell", pageSize: "a4", overflow: "error", naturalness: 0, doodleMode: "none" } },
+  });
+  const strict = await strictResponse.json();
+  if (strictResponse.status() !== 201) throw new Error(`Strict layout publication failed: ${JSON.stringify(strict)}`);
+  ids.push(strict.id);
+  await p12.goto(strict.url, { waitUntil: "networkidle" });
+  await p12.locator('.note-page[data-render-status="overflow"]').waitFor({ timeout: 30_000 });
+  check(
+    "W-strict",
+    "固定页面溢出明确提示并禁用导出",
+    await p12.locator('.note-fit-status[data-fit-status="overflow"]').isVisible() &&
+      await p12.getByRole("button", { name: "下载图片", exact: true }).isDisabled() &&
+      await p12.locator(".note-page").getAttribute("data-page-size") === "a4",
+  );
+  check("W-errors", "长内容与严格页面流程无脚本错误", p12.errors.length === 0, p12.errors.join("; "));
+  const cleanupStatuses = [];
+  for (const id of ids) cleanupStatuses.push((await p12.request.delete(`${URL}api/v1/notes/${id}`, { headers: auth })).status());
+  check("W-cleanup", "全部长内容测试笔记成功删除", cleanupStatuses.every((status) => status === 204), cleanupStatuses.join(", "));
+  await c12.close();
 }
 
 // ---------- S. SEO 与 GEO ----------
@@ -580,7 +776,7 @@ if (process.env.E2E_API_KEY) {
   check("S5", "图标、OG 图与 Web App Manifest 可访问", Object.values(assets).every((v) => v === "ok") && manifest.icons?.length === 3, JSON.stringify(assets));
 
   const llms = await (await p8.request.get(`${URL}llms.txt`)).text();
-  check("S6", "llms.txt 介绍产品、页面与 API", llms.includes("## 页面") && llms.includes("/api/v1/notes"));
+  check("S6", "llms.txt 介绍产品、页面与结构发布/预检", llms.includes("## 页面") && llms.includes("/api/v1/notes/validate") && llms.includes("schemaVersion"));
   check("S7", "SEO 页面无脚本错误", p8.errors.length === 0, p8.errors.join("; "));
   await c8.close();
 }

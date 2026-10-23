@@ -38,7 +38,7 @@ export function Underline({ seed, width = 100, className }: { seed: number; widt
 
 export function NoteTitle({ note, seed, naturalness, style }: { note: NoteStructure; seed: number; naturalness: number; style?: CSSProperties }) {
   return (
-    <h1 className="note-title" style={{ ...blockJitter(seed, naturalness, 0.8, 3), ...style }}>
+    <h1 className="note-title" style={{ ...blockJitter(seed, naturalness, 0.8, 3), ...style }} data-fit>
       <HandText text={note.title} seed={seed} naturalness={naturalness} />
       <Underline seed={seed} width={300} />
     </h1>
@@ -48,7 +48,7 @@ export function NoteTitle({ note, seed, naturalness, style }: { note: NoteStruct
 export function NoteDate({ date, seed, naturalness, label }: { date?: string; seed: number; naturalness: number; label?: string }) {
   if (!date) return null;
   return (
-    <div className="note-date">
+    <div className="note-date" data-fit>
       {label ? <span className="note-date-label">{label}：</span> : null}
       <HandText text={date} seed={seed + 3} naturalness={naturalness} />
     </div>
@@ -69,12 +69,12 @@ export function CueList({
   if (cues.length === 0) return null;
   if (variant === "chips" || variant === "tags") {
     return (
-      <div className={`cue-${variant}`}>
+      <div className={`cue-${variant}`} data-fit>
         {cues.map((cue, i) => (
           <span key={i} className={`cue-chip cue-chip-${i % 3}`} style={blockJitter(seed + i * 17, naturalness, 2.2, 1)}>
             {variant === "tags" ? "#" : null}
             <HandText text={cue.keyword} seed={seed + i} naturalness={naturalness} />
-            {variant === "chips" && cue.note && Array.from(cue.note).length <= 18 ? (
+            {cue.note ? (
               <small>
                 <HandText text={cue.note} seed={seed + i + 50} naturalness={naturalness} />
               </small>

@@ -188,6 +188,7 @@
 
 /* ---------- 公共部件 ---------- */
 .note-header {
+  min-width: 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
@@ -195,6 +196,7 @@
 }
 
 .note-title {
+  min-width: 0;
   margin: 0;
   font-size: calc(var(--fs) * 2.05);
   line-height: 1.25;
@@ -204,10 +206,12 @@
 }
 
 .note-date {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
   font-size: calc(var(--fs) * 0.85);
   color: var(--ink-muted);
-  white-space: nowrap;
+  white-space: normal;
   padding-bottom: 0.6em;
 }
 
@@ -441,7 +445,7 @@
   position: relative;
   justify-content: center;
   text-align: center;
-  padding: 8px 110px 0;
+  padding: 8px 0 0;
 }
 
 .journal-title-tape {
@@ -456,16 +460,15 @@
 .journal-header .note-title {
   position: relative;
   max-width: 100%;
+  flex: 1;
 }
 
 .journal-stamp {
-  position: absolute;
-  right: 0;
-  top: -6px;
+  flex: none;
   display: grid;
   place-items: center;
   width: 96px;
-  height: 96px;
+  min-height: 96px;
   padding: 10px;
   border: 2px dashed var(--doodle-accent);
   border-radius: 50%;
@@ -474,6 +477,7 @@
 }
 
 .journal-stamp .note-date {
+  max-width: 100%;
   padding: 0;
   white-space: normal;
   color: inherit;
@@ -490,7 +494,9 @@
 }
 
 .cue-chip {
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -603,7 +609,8 @@
 }
 
 .cue-tags .cue-chip {
-  flex-direction: row;
+  flex-direction: column;
+  align-items: flex-start;
   padding: 0;
   background: none;
   font-size: inherit;
@@ -625,6 +632,11 @@
 }
 
 /* ---------- 长图模式：区域高度随内容增长 ---------- */
+.note-page.is-long .note-body {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
 .note-page.is-long .layout-grid {
   grid-template-rows: auto auto auto;
 }
@@ -634,6 +646,21 @@
 .note-page.is-long .note-cues {
   overflow: visible;
   max-height: none;
+}
+
+/* Fixed-height multicolumn fragmentation can create off-canvas columns. A long page uses
+   intrinsic grid rows, so each card and every later row contributes to the page height. */
+.note-page.is-long .journal-cards {
+  flex: none;
+  columns: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px 24px;
+}
+
+.note-page.is-long .journal-card {
+  margin-bottom: 0;
 }
 
 /* ---------- 贴纸 ---------- */

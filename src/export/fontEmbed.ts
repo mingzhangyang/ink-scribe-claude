@@ -96,8 +96,7 @@ async function toDataUrl(url: string): Promise<string> {
 /** 等待页面用到的字形全部加载完成（包括按需加载的 unicode-range 分片）。 */
 export async function ensureFontsLoaded(families: string[], text: string): Promise<void> {
   if (!("fonts" in document)) return;
-  const sample = text.length > 20_000 ? text.slice(0, 20_000) : text;
-  await Promise.all(families.map((family) => document.fonts.load(`20px "${family}"`, sample).catch(() => [])));
+  await Promise.all(families.map((family) => document.fonts.load(`20px "${family}"`, text)));
   await document.fonts.ready;
 }
 
@@ -105,20 +104,16 @@ export async function buildFontEmbedCss(families: string[], text: string): Promi
   const faces = findFontFaces(families, text);
   const css = await Promise.all(
     faces.map(async (face) => {
-      try {
-        const data = await toDataUrl(face.url);
-        return [
-          "@font-face{",
-          `font-family:"${face.family}";`,
-          `font-style:${face.style};`,
-          `font-weight:${face.weight};`,
-          `src:url(${data}) format("${face.format}");`,
-          face.unicodeRange ? `unicode-range:${face.unicodeRange};` : "",
-          "}",
-        ].join("");
-      } catch {
-        return "";
-      }
+      const data = await toDataUrl(face.url);
+      return [
+        "@font-face{",
+        `font-family:"${face.family}";`,
+        `font-style:${face.style};`,
+        `font-weight:${face.weight};`,
+        `src:url(${data}) format("${face.format}");`,
+        face.unicodeRange ? `unicode-range:${face.unicodeRange};` : "",
+        "}",
+      ].join("");
     }),
   );
   return css.join("\n");

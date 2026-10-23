@@ -98,6 +98,14 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
         </select>
       </label>
 
+      <label className="field">
+        <span>{t.style.overflow}</span>
+        <select value={settings.overflow} onChange={(e) => set({ overflow: e.target.value as Settings["overflow"] })}>
+          <option value="expand">{t.style.overflowExpand}</option>
+          <option value="error">{t.style.overflowError}</option>
+        </select>
+      </label>
+
       <div className="field-row">
         <label className="field">
           <span>{t.style.zhFont}</span>

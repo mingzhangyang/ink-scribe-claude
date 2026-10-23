@@ -14,15 +14,15 @@ import {
 } from "./parts.tsx";
 
 /**
- * 四种版式共用同一份 NoteStructure。带 data-fit 的区域会参与溢出检测：
- * 当文字超出页面时，工作台会提示自动缩小字号或切换为长图。
+ * 四种版式共用同一份 NoteStructure。编辑器、分享页与导出使用相同的 data-fit 区域，
+ * 先测量真实字体下的布局，再按策略适配字号、扩展长图或阻止裁切的导出。
  */
 
 function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   const numbers = headingNumbers(note.sections);
   return (
-    <div className="note-body layout-grid">
-      <header className="note-header">
+    <div className="note-body layout-grid" data-fit>
+      <header className="note-header" data-fit>
         <NoteTitle note={note} seed={seed} naturalness={naturalness} />
         <NoteDate date={note.date} seed={seed} naturalness={naturalness} />
       </header>
@@ -54,8 +54,8 @@ function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps)
 function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   const numbers = headingNumbers(note.sections);
   return (
-    <div className="note-body layout-grid">
-      <header className="note-header">
+    <div className="note-body layout-grid" data-fit>
+      <header className="note-header" data-fit>
         <div className="classic-field">
           <span className="classic-field-label">{labels.topic}</span>
           <NoteTitle note={note} seed={seed} naturalness={naturalness} />
@@ -85,8 +85,8 @@ function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps
 
 function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   return (
-    <div className="note-body journal-body">
-      <header className="note-header journal-header">
+    <div className="note-body journal-body" data-fit>
+      <header className="note-header journal-header" data-fit>
         <TapeDecoration className="journal-title-tape" color="#FBCFE8" />
         <NoteTitle note={note} seed={seed} naturalness={naturalness} />
         {note.date ? (
@@ -127,7 +127,7 @@ function Minimal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   return (
     <div className="note-body minimal-body" data-fit>
       <DoodleSlot doodle={doodle} seed={seed} naturalness={naturalness} className="doodle-corner" />
-      <header className="note-header minimal-header">
+      <header className="note-header minimal-header" data-fit>
         <NoteTitle note={note} seed={seed} naturalness={naturalness} />
         <div className="minimal-meta">
           <NoteDate date={note.date} seed={seed} naturalness={naturalness} />

@@ -41,9 +41,9 @@ export const HandText = memo(function HandText({ text, highlights = [], seed, na
       {runs.map((run, i) => {
         const content = animate ? jitter(run.text, rand, perChar) : run.text;
         return run.highlight === null ? (
-          <span key={i}>{content}</span>
+          <span key={i} data-fit-text>{content}</span>
         ) : (
-          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3}`}>
+          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3}`} data-fit-text>
             {content}
           </mark>
         );

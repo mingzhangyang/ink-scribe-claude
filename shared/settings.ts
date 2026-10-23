@@ -16,6 +16,7 @@ import {
 } from "./appearance.ts";
 
 export const DOODLE_MODES = ["auto", "theme", "ai", "none"] as const;
+export const OVERFLOW_POLICIES = ["expand", "error"] as const;
 
 export type Settings = {
   layout: NoteStyle;
@@ -30,6 +31,8 @@ export type Settings = {
   /** 0–1，控制手写抖动、旋转与墨色深浅变化的幅度。 */
   naturalness: number;
   pageSize: PageSizeId;
+  /** Fit fixed pages first; expand preserves all content, error blocks an overflowing export. */
+  overflow: (typeof OVERFLOW_POLICIES)[number];
   doodleMode: (typeof DOODLE_MODES)[number];
   doodleTheme: DoodleTheme;
   seed: number;
@@ -47,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: "yellow",
   naturalness: 0.55,
   pageSize: "a4",
+  overflow: "expand",
   doodleMode: "auto",
   doodleTheme: "lightbulb",
   seed: 7,
@@ -81,6 +85,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     accent: pick(ids(ACCENTS), r.accent, d.accent),
     naturalness: range(r.naturalness, 0, 1, d.naturalness),
     pageSize: pick(ids(PAGE_SIZES), r.pageSize, d.pageSize),
+    overflow: pick(OVERFLOW_POLICIES, r.overflow, d.overflow),
     doodleMode: pick(DOODLE_MODES, r.doodleMode, d.doodleMode),
     doodleTheme: pick(DOODLE_THEMES, r.doodleTheme, d.doodleTheme),
     seed: typeof r.seed === "number" && Number.isSafeInteger(r.seed) ? r.seed : d.seed,

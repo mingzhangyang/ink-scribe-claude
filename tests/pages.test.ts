@@ -20,6 +20,7 @@ const ORIGIN = "https://ink.example";
 
 function published(overrides: Partial<PublishedNote> = {}): PublishedNote {
   return {
+    schemaVersion: 0,
     id: "AAAAAAAAAAAAAAAAAAAAAA",
     url: `${ORIGIN}/n/AAAAAAAAAAAAAAAAAAAAAA`,
     title: "番茄工作法",

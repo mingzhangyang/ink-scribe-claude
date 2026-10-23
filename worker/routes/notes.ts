@@ -1,9 +1,8 @@
-import type { NoteListResponse, NoteVisibility, PublishedNote } from "../../shared/api.ts";
-import { normalizeDoodleSpec, type DoodleSpec } from "../../shared/doodle.ts";
-import { normalizeNoteStructure, type NoteStructure } from "../../shared/note.ts";
-import { isOneOf, STYLES, TEMPLATES, type Template } from "../../shared/options.ts";
-import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from "../../shared/settings.ts";
-import { normalizeStickers } from "../../shared/stickers.ts";
+import type { NoteListResponse, PublishedNote, PublishValidation, PublishValidationResponse } from "../../shared/api.ts";
+import type { NoteStructure } from "../../shared/note.ts";
+import { isOneOf, TEMPLATES } from "../../shared/options.ts";
+import { PUBLISH_SCHEMA_VERSION, validatePublishRequest, type PublishRequest } from "../../shared/publishing.ts";
+import { DEFAULT_SETTINGS, type Settings } from "../../shared/settings.ts";
 import { detectLanguage } from "../../shared/text.ts";
 import { AppError, jsonResponse, readJsonBody } from "../http.ts";
 import type { RouteContext } from "../router.ts";
@@ -23,7 +22,6 @@ import {
   toSummary,
   updateVisibility,
 } from "../store.ts";
-import { generateNoteFromText, validateStructureRequest } from "./structure.ts";
 
 const VISIBILITIES = ["public", "unlisted"] as const;
 const MAX_PAGE_SIZE = 50;
@@ -37,33 +35,28 @@ function invalid(message: string): AppError {
   return new AppError(400, "INVALID_REQUEST", message);
 }
 
-/**
- * 校验 API 传入的外观设置。与本地设置的宽松回退不同，这里对未知字段和无效取值直接报错，
- * 让调用方（通常是 AI agent）能立即发现拼写错误。数值超出范围时钳制到合法区间。
- */
-export function validateAppearance(input: unknown, fallbackLayout?: string): Settings {
-  if (input !== undefined && (input === null || typeof input !== "object" || Array.isArray(input))) {
-    throw invalid("appearance 必须是对象。");
+// This checks the portable document contract; geometry is measured by the shared browser renderer.
+const VALIDATION: PublishValidation = { structure: "passed", layout: "not_checked" };
+
+function validatePublication(raw: unknown): PublishRequest {
+  const result = validatePublishRequest(raw);
+  if (!result.ok) {
+    throw new AppError(422, "VALIDATION_FAILED", "发布数据不符合契约，请根据 issues 修正后重新提交。", { issues: result.issues });
   }
-  const raw = { ...((input as Record<string, unknown> | undefined) ?? {}) };
-  if (raw.layout === undefined && fallbackLayout) raw.layout = fallbackLayout;
-  const known = Object.keys(DEFAULT_SETTINGS);
-  const unknown = Object.keys(raw).filter((key) => !known.includes(key));
-  if (unknown.length > 0) throw invalid(`appearance 包含未知字段：${unknown.join(", ")}。可用字段：${known.join(", ")}。`);
-  const settings = sanitizeSettings({ ...DEFAULT_SETTINGS, seed: Math.floor(Math.random() * 100_000), ...raw });
-  for (const [key, value] of Object.entries(raw)) {
-    const sanitized = settings[key as keyof Settings];
-    if (typeof sanitized === "string" && sanitized !== value) {
-      throw invalid(`appearance.${key} 的取值 ${JSON.stringify(value)} 无效。`);
-    }
-    if (typeof sanitized === "number" && typeof value !== "number") {
-      throw invalid(`appearance.${key} 必须是数字。`);
-    }
-  }
-  return settings;
+  return result.value;
 }
 
-/** 原文没有日期时，以发布时间（按配置的时区）作为笔记日期。 */
+function publicationMeta(requestId: string) {
+  return { requestId, processing: "agent" as const, validation: VALIDATION };
+}
+
+export async function handleValidateNote(ctx: RouteContext): Promise<Response> {
+  validatePublication(await readJsonBody(ctx.request, ctx.config.maxBodyBytes));
+  const result: PublishValidationResponse = { valid: true, schemaVersion: PUBLISH_SCHEMA_VERSION, validation: VALIDATION };
+  return jsonResponse(result);
+}
+
+/** 笔记没有日期时，以发布时间（按配置的时区）作为笔记日期。 */
 function withDate(note: NoteStructure, language: "zh" | "en", timeZone: string): NoteStructure {
   if (note.date) return note;
   const now = new Date();
@@ -104,9 +97,7 @@ async function published(ctx: RouteContext, id: string, apiKeyId?: string): Prom
 export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
   const database = db(ctx);
   const apiKey = ctx.apiKey!;
-  const raw = await readJsonBody(ctx.request, ctx.config.maxBodyBytes);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw invalid("请求体必须是 JSON 对象。");
-  const body = raw as Record<string, unknown>;
+  const body = await readJsonBody(ctx.request, ctx.config.maxBodyBytes);
 
   const idempotencyKey = ctx.request.headers.get("Idempotency-Key")?.trim();
   if (idempotencyKey !== undefined && !/^[\w.:-]{1,100}$/.test(idempotencyKey)) {
@@ -129,7 +120,10 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
         throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
       }
       const note = publishRow(ctx, row, apiKey.id);
-      return jsonResponse({ ...note, meta: { requestId: ctx.requestId, replayed: true } }, 200, { "Idempotent-Replayed": "true" });
+      return jsonResponse({ ...note, meta: {
+        ...(note.schemaVersion === 1 ? publicationMeta(ctx.requestId) : { requestId: ctx.requestId }),
+        replayed: true,
+      } }, 200, { "Idempotent-Replayed": "true" });
     }
     claim = reservation.claim;
   }
@@ -143,42 +137,19 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
   }
 }
 
-async function createNote(ctx: RouteContext, body: Record<string, unknown>, claim?: PublishClaim): Promise<Response> {
+async function createNote(ctx: RouteContext, body: unknown, claim?: PublishClaim): Promise<Response> {
   const database = db(ctx);
   const apiKey = ctx.apiKey!;
-  const hasText = body.text !== undefined;
-  const hasNote = body.note !== undefined;
-  if (hasText === hasNote) throw invalid("请提供 text（原文，由服务整理）或 note（已整理好的 NoteStructure）其中之一。");
-
-  const visibility = body.visibility ?? "unlisted";
-  if (!isOneOf(VISIBILITIES, visibility)) throw invalid("visibility 只能是 public 或 unlisted。");
-  if (body.style !== undefined && !isOneOf(STYLES, body.style)) throw invalid(`style 取值无效，可选值：${STYLES.join(", ")}。`);
-  const settings = validateAppearance(body.appearance, body.style as string | undefined);
-  const stickers = normalizeStickers(body.stickers);
-
-  let doodle: DoodleSpec | undefined;
-  if (body.doodle !== undefined) {
-    const result = normalizeDoodleSpec(body.doodle);
-    if (!result.ok) throw invalid(`doodle 无效：${result.errors.join("；")}`);
-    doodle = result.value;
-  }
-
-  let note: NoteStructure;
-  let template: Template;
-  let meta: Record<string, unknown> = {};
-  if (hasText) {
-    const input = validateStructureRequest({ ...body, style: settings.layout }, ctx.config.maxInputChars);
-    const generated = await generateNoteFromText(ctx, input);
-    note = generated.note;
-    template = input.template;
-    meta = { model: generated.model, attempts: generated.attempts, warnings: generated.warnings };
-  } else {
-    const result = normalizeNoteStructure(body.note);
-    if (!result.ok) throw invalid(`note 不符合 NoteStructure：${result.errors.join("；")}`);
-    note = result.value;
-    template = isOneOf(TEMPLATES, body.template) ? body.template : "general";
-    meta = { warnings: result.warnings };
-  }
+  const input = validatePublication(body);
+  const settings: Settings = {
+    ...DEFAULT_SETTINGS,
+    seed: crypto.getRandomValues(new Uint32Array(1))[0],
+    ...input.appearance,
+  };
+  const visibility = input.visibility ?? "unlisted";
+  const template = input.template ?? "general";
+  // Publishing consumes an already prepared document and never calls a model.
+  let note = input.note;
 
   const language = noteLanguage(note);
   note = withDate(note, language, ctx.config.defaultTimezone);
@@ -186,20 +157,20 @@ async function createNote(ctx: RouteContext, body: Record<string, unknown>, clai
   const now = Date.now();
   const committed = await insertNote(database, {
     id,
+    schemaVersion: PUBLISH_SCHEMA_VERSION,
     apiKeyId: apiKey.id,
-    visibility: visibility as NoteVisibility,
+    visibility,
     language,
     template,
     note,
     settings,
-    stickers,
-    doodle,
+    stickers: input.stickers ?? [],
     now,
   }, claim);
   if (!committed) throw new AppError(409, "IDEMPOTENCY_CONFLICT", "请求已由另一次重试接管，请使用相同的键重试。", { retryAfterSeconds: 2 });
   ctx.log.template = template;
   const result = await published(ctx, id);
-  return jsonResponse({ ...result, meta: { requestId: ctx.requestId, ...meta } }, 201, { Location: result.url });
+  return jsonResponse({ ...result, meta: publicationMeta(ctx.requestId) }, 201, { Location: result.url });
 }
 
 // ---------- GET /api/v1/notes ----------

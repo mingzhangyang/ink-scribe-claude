@@ -4,7 +4,7 @@
 
 - **前端**：Vite + React + TypeScript，纯客户端排版、贴纸编辑与图片导出
 - **服务端**：Cloudflare Worker（同时托管静态资源与 `/api/*`），不依赖 Node.js / Express 常驻服务
-- **AI**：只通过 Cloudflare Workers AI binding 调用，模型 ID 与调用参数全部配置化
+- **站内 AI 整理**：通过 Cloudflare Workers AI binding 调用，模型 ID 与调用参数全部配置化；agent 也可用自己的模型整理，直接发布完整结构
 
 ## 功能
 
@@ -21,9 +21,9 @@
 | AI 插图（可选） | `POST /api/doodle` 只返回受限图元规格（线、箭头、圆、矩形、折线），经校验后由本地生成器绘制，默认关闭 |
 | 本地草稿 | 自动保存原文、笔记、样式、贴纸与插图，刷新后恢复；存储失败可重试，多标签页冲突暂停保存；可删除并关闭自动保存 |
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
-| 溢出处理 | 自动检测文字超出页面，一键缩小字号、切换为长图，或以“精简”档位重新生成 |
+| 溢出处理 | 字体就绪后按实际尺寸适配页面；默认先缩小字号、再展开长图；固定页模式溢出时提示并阻止导出，保留全文 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
-| 发布与分享 | 用 API 密钥调用 `POST /api/v1/notes`（传原文或已整理的结构），返回查看链接 `/n/<id>`；链接带标题与摘要的 Open Graph 信息。详见 [docs/publishing.md](docs/publishing.md) |
+| Agent 发布与分享 | 任意持有 API 密钥的 agent 调用 `POST /api/v1/notes`，提交 `schemaVersion: 1` 与已整理的 `note` 结构；不传原文，严格校验后保存，不调用 AI。`POST /api/v1/notes/validate` 可预检，发布返回查看链接 `/n/<id>`。详见 [docs/publishing.md](docs/publishing.md) |
 | 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
 | SEO 与 GEO | 首页、图库与笔记查看页由 Worker 注入标题、canonical、Open Graph、JSON-LD 和可读正文；提供 `robots.txt`、`sitemap.xml` 与 `llms.txt`；标志、图标与 OG 图由代码生成（`npm run brand`）。详见 [docs/seo.md](docs/seo.md) |
 | 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
@@ -53,7 +53,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（84 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 验证文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、agent 预检与发布、四种版式长内容、图库、界面语言与主题、移动端。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
@@ -76,7 +76,7 @@ Cloudflare Workers AI ── 配置化模型 ID，JSON 模式结构化输出
 ```
 
 ```text
-shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、选项枚举、本地整理器
+shared/      前后端共享：发布契约与严格校验、NoteStructure / DoodleSpec 规范化、选项枚举、本地整理器
 worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志、
              发布接口与存储（D1）、页面 SEO 信息与站点地图
 migrations/  D1 数据库迁移
@@ -119,11 +119,11 @@ docs/        API、部署、模型评测、字体与导出说明
 
 - 浏览器从不直接调用模型，也不接触任何凭据。
 - 原文只用于本次请求：服务端不持久化，日志与 Analytics Engine 指标只记录长度、耗时、token 数、错误码等元数据（有单元测试保证日志不含原文）。
-- 模型输出经过严格规范化：只保留契约字段、清理 HTML/控制字符、限制长度与数量，重点词必须逐字出现在正文中。
+- 网页生成的模型输出经过规范化：只保留契约字段、清理 HTML/控制字符、限制长度与数量，重点词必须逐字出现在正文中。agent 发布采用单独的严格契约；不合规数据返回带字段路径的 `422`，不会静默截断或丢弃内容。
 - 插图只接受受限图元规格；SVG 由本地生成器以 React 元素渲染，不使用 `innerHTML`，不允许脚本、事件处理器、外部资源或 URL。
 - AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
 - 上传的文件只在浏览器内解析（PDF 使用按需加载的 pdf.js，CMap 文件同源提供），文件本身不会发送到服务器。
-- 发布接口只接受 API 密钥（只存哈希、可吊销）；笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`；入库与读取时都会再次规范化。
+- 发布接口只接受 API 密钥（只存哈希、可吊销）；必传契约版本和完整结构，不接收原文。笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`，持有链接者仍可读取；新作品入库与读取均按其契约版本校验。
 - 编辑器默认将原文、笔记、样式、贴纸与插图作为草稿保存在本机 IndexedDB，不上传服务器；刷新后自动恢复。可随时“删除草稿并停止保存”，进入不留存模式。外观偏好仍保存在 localStorage。
 
 ## 文档

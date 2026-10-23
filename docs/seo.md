@@ -39,8 +39,8 @@
 
 - `/robots.txt`：允许所有爬虫（包括 AI 爬虫）访问页面，禁止抓取 `/api/`（OpenAPI 规范除外），并指向站点地图。
 - `/sitemap.xml`：首页、图库和最多 10000 条公开笔记（带 `lastmod`）。`unlisted` 笔记不会出现。
-- `/llms.txt`：给大模型与 AI agent 的站点说明，包括产品介绍、主要页面、API 用法和最近 20 条公开笔记；`index.html` 中以 `<link rel="alternate" type="text/markdown">` 指向它。
-- `/api/v1/openapi.json`：机器可读的 API 规范。
+- `/llms.txt`：给大模型与 AI agent 的站点说明，包括产品介绍、主要页面、完整结构的预检/发布流程和最近 20 条公开笔记；`index.html` 中以 `<link rel="alternate" type="text/markdown">` 指向它。发布只提交契约版本与已整理的笔记，并明确区分数据验证与浏览器排版。
+- `/api/v1/openapi.json`：机器可读的 API 规范，与发布验证器共享字段、长度、枚举及图元契约。发布不接收原文；原文不出现在公开 JSON、笔记 HTML、结构化数据或 `llms.txt` 中。
 
 ## 上线后
 

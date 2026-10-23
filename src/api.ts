@@ -9,6 +9,7 @@ import type {
 } from "../shared/api.ts";
 import { normalizeDoodleSpec, type DoodleSpec } from "../shared/doodle.ts";
 import { normalizeNoteStructure, type NoteStructure } from "../shared/note.ts";
+import { validatePublishedContent } from "../shared/publishing.ts";
 import { sanitizeSettings, type Settings } from "../shared/settings.ts";
 import { normalizeStickers, type StickerItem } from "../shared/stickers.ts";
 import type { RequestError } from "./state/store.ts";
@@ -146,6 +147,14 @@ function safeSummary(raw: Record<string, unknown>): PublishedNoteSummary | null 
 export async function fetchPublishedNote(id: string): Promise<ViewableNote> {
   const raw = (await getJson(`/api/notes/${encodeURIComponent(id)}`)) as Record<string, unknown> | undefined;
   const summary = raw ? safeSummary(raw) : null;
+  if (raw?.schemaVersion === 1) {
+    const content = validatePublishedContent({ note: raw.note, settings: raw.settings, stickers: raw.stickers });
+    if (!summary || !content.ok) throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "笔记数据无效。" });
+    return { summary, ...content.value, doodle: null };
+  }
+  if (raw?.schemaVersion !== undefined && raw.schemaVersion !== 0) {
+    throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "不支持的笔记版本。" });
+  }
   const note = normalizeNoteStructure(raw?.note);
   if (!summary || !note.ok) throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "笔记数据无效。" });
   const doodle = normalizeDoodleSpec(raw?.doodle);
