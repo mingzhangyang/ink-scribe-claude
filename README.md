@@ -108,7 +108,7 @@ docs/        API、部署、模型评测、字体与导出说明
 | `DOODLE_API_ENABLED` | `false` | 是否启用 `/api/doodle` |
 | `DOODLE_CACHE_TTL_SECONDS` | `86400` | AI 插图缓存时长（只缓存校验后的图元，缓存键为哈希） |
 | `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
-| `PUBLIC_BASE_URL` | `https://ink-scribe.orangely.xyz` | 分享链接使用的站点地址；为空时使用请求的域名。本地开发与 mock 构建中自动清空 |
+| `PUBLIC_BASE_URL` | `https://scribe.orangely.xyz` | 分享链接使用的站点地址；为空时使用请求的域名。本地开发与 mock 构建中自动清空 |
 | `DEFAULT_TIMEZONE` | `Asia/Shanghai` | 发布时自动补全笔记日期使用的时区 |
 | `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥每分钟的请求上限 |
 

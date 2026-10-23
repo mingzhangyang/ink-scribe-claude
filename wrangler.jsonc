@@ -6,10 +6,10 @@
   "observability": { "enabled": true },
 
   // 自定义域名：orangely.xyz 需托管在同一 Cloudflare 账户，部署时会自动创建 DNS 记录与证书。
-  // 两个域名提供同样的内容；分享链接、canonical 与站点地图统一使用 PUBLIC_BASE_URL（主域名）。
+  // 两个域名提供同样的内容；分享链接、canonical 与站点地图统一使用 PUBLIC_BASE_URL（主域名 scribe.orangely.xyz）。
   "routes": [
-    { "pattern": "ink-scribe.orangely.xyz", "custom_domain": true },
-    { "pattern": "scribe.orangely.xyz", "custom_domain": true }
+    { "pattern": "scribe.orangely.xyz", "custom_domain": true },
+    { "pattern": "ink-scribe.orangely.xyz", "custom_domain": true }
   ],
 
   // 前端由 Vite 构建为静态资源；API 与需要注入 SEO 信息的页面优先交给 Worker，其余路径走静态资源并在未命中时回退到 index.html（SPA）。
@@ -63,7 +63,7 @@
     "DOODLE_CACHE_TTL_SECONDS": "86400",
     "ALLOWED_ORIGINS": "",
     // 分享链接使用的站点地址；留空则使用请求的域名。本地开发与 mock 构建中会被清空
-    "PUBLIC_BASE_URL": "https://ink-scribe.orangely.xyz",
+    "PUBLIC_BASE_URL": "https://scribe.orangely.xyz",
     "DEFAULT_TIMEZONE": "Asia/Shanghai",
     "API_RATE_LIMIT_PER_MINUTE": "30"
   }

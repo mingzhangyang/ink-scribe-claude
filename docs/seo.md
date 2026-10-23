@@ -33,7 +33,7 @@
 
 浏览器加载脚本后，React 会替换 `#root` 中的正文，所以用户看到的仍是应用本身；正文只是给不执行脚本的访问者看的同一份内容，不是隐藏文本。所有用户内容都经过 HTML 转义，JSON-LD 中的 `<`、`>`、`&` 也会转义，避免提前闭合 `<script>`。
 
-`og:url`、canonical 与站点地图中的地址都使用 `PUBLIC_BASE_URL`（默认 `https://ink-scribe.orangely.xyz`），为空时使用请求的域名。
+`og:url`、canonical 与站点地图中的地址都使用 `PUBLIC_BASE_URL`（默认 `https://scribe.orangely.xyz`），为空时使用请求的域名。
 
 ## 爬虫入口
 
@@ -44,7 +44,7 @@
 
 ## 上线后
 
-1. 在 [Google Search Console](https://search.google.com/search-console) 与 [Bing Webmaster Tools](https://www.bing.com/webmasters)（Copilot 与多家 AI 搜索使用必应索引）验证 `ink-scribe.orangely.xyz` 并提交 `https://ink-scribe.orangely.xyz/sitemap.xml`；面向中文用户时，可同样提交到[百度搜索资源平台](https://ziyuan.baidu.com/)。
+1. 在 [Google Search Console](https://search.google.com/search-console) 与 [Bing Webmaster Tools](https://www.bing.com/webmasters)（Copilot 与多家 AI 搜索使用必应索引）验证 `scribe.orangely.xyz` 并提交 `https://scribe.orangely.xyz/sitemap.xml`；面向中文用户时，可同样提交到[百度搜索资源平台](https://ziyuan.baidu.com/)。
 2. 用 [Rich Results Test](https://search.google.com/test/rich-results) 或 [Schema Markup Validator](https://validator.schema.org/) 检查首页与一条公开笔记的结构化数据。
 3. 把一条笔记链接发到常用的聊天工具里，确认预览显示标题、摘要与 OG 图；预览有缓存时可用各平台的调试工具刷新。
 4. 如果在 Cloudflare 控制台开启了 “AI Crawl Control / 阻止 AI 爬虫”，GEO 相关的内容将无法被 AI 搜索抓取，请按需要调整。

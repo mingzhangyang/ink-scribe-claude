@@ -10,7 +10,7 @@ import { COLORS, logoSvg } from "./marks.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const OUT = path.join(ROOT, "public");
-const SITE_HOST = "ink-scribe.orangely.xyz";
+const SITE_HOST = "scribe.orangely.xyz";
 
 const svgUri = (svg) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 const fontCss = [

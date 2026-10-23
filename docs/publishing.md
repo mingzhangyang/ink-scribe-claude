@@ -16,7 +16,7 @@ npm run keys -- create --name "我的发布脚本" --remote   # 密钥只显示�
 ```
 
 - 不为每条笔记生成预览图：图库以标题与摘要的文字卡片展示，链接预览显示标题、摘要与统一的站点分享图；查看页可在浏览器中下载高清图片。
-- 返回的链接使用 `PUBLIC_BASE_URL`（默认 `https://ink-scribe.orangely.xyz`）；更换域名时同时修改它与 `wrangler.jsonc` 中的 `routes`。本地开发与 mock 构建中该值会被清空，链接指向本机。
+- 返回的链接使用 `PUBLIC_BASE_URL`（默认 `https://scribe.orangely.xyz`）；更换域名时同时修改它与 `wrangler.jsonc` 中的 `routes`。本地开发与 mock 构建中该值会被清空，链接指向本机。
 - 本地开发：`npm run db:migrate` 创建本地表，`npm run keys -- create --name 本地` 生成本地密钥。
 
 ## 发布一条笔记
