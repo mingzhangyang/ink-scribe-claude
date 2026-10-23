@@ -4,7 +4,7 @@ import { errorMessage, useT } from "../i18n/index.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
-import { NoteFitStatus } from "./note/NoteFitStatus.tsx";
+import { NoteFitNotice, NoteFitStatus } from "./note/NoteFitStatus.tsx";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
 export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
@@ -31,7 +31,7 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
   const t = useT();
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200, scrollbar: 0 });
+  const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200, scrollbar: 0, scrollbarBottom: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
   const [pageHeight, setPageHeight] = useState(1188);
   const fixedHeight = pageHeightFor(fit?.settings ?? settings);
@@ -50,6 +50,8 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
       height: element.clientHeight,
       // 浮在画布右上角的缩放控件要避开竖向滚动条
       scrollbar: element.offsetWidth - element.clientWidth - element.clientLeft * 2,
+      // 浮在画布底部的适配提示要避开放大后出现的横向滚动条
+      scrollbarBottom: element.offsetHeight - element.clientHeight - element.clientTop * 2,
     }));
     observer.observe(element);
     return () => observer.disconnect();
@@ -187,6 +189,9 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
               </div>
             ) : null}
           </div>
+        </div>
+        <div className="fit-notice-anchor" style={{ paddingBottom: 12 + viewport.scrollbarBottom }}>
+          <NoteFitNotice fit={fit} />
         </div>
       </div>
     </section>
