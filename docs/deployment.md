@@ -44,6 +44,14 @@ npm run deploy          # = vite build && wrangler deploy
 | `DB` | `d1_databases` | 已发布的笔记与 API 密钥；部署前 `wrangler d1 create ink-scribe` 并填入 `database_id`，再执行 `npm run db:migrate:remote` |
 | `METRICS` | `analytics_engine_datasets`（默认注释） | 可选：写入调用量、延迟、token 用量，用于成本监控 |
 
+### Workers Builds（连接 GitHub 自动构建）
+
+在 Cloudflare 控制台把仓库连接到 `ink-scribe` Worker 时：
+
+- **Build command** 设为 `npm run build`。`wrangler.jsonc` 中的 `assets` 没有 `directory`，完整的部署配置由 `vite build` 生成到 `dist/ink_scribe/wrangler.json`；跳过构建直接运行 wrangler 会报 `The assets property … is missing the required directory property`。
+- 部署命令保持默认：生产分支 `npx wrangler deploy`，其他分支 `npx wrangler preview`（Worker Previews）。
+- 预览使用 `wrangler.jsonc` 中的 `previews` 块：变量与生产一致但 `PUBLIC_BASE_URL` 为空，限流使用独立的命名空间，**不绑定 D1**，因此预览不会读写生产的笔记与 API 密钥（图库为空，发布接口返回 503）。修改顶层 `vars` 时要同步修改 `previews.vars`。
+
 ### 自定义域名
 
 `routes` 中以 `custom_domain: true` 绑定 `scribe.orangely.xyz`（主域名）与 `ink-scribe.orangely.xyz`：`wrangler deploy` 会自动创建 DNS 记录并签发证书。前提是 `orangely.xyz` 托管在部署所用的 Cloudflare 账户中，且这两个子域名下没有已存在的 DNS 记录。两个域名提供同样的内容，界面与 API 都可以直接使用（同源请求按请求的域名判断）；`*.workers.dev` 地址也仍然可用。返回的分享链接、canonical 与站点地图统一使用 `PUBLIC_BASE_URL`，因此搜索引擎只收录主域名，不会把两个域名当作重复内容。主域名原为 `ink-scribe.orangely.xyz`，之前分发的该域名分享链接继续可用。

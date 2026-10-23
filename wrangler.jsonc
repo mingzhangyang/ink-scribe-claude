@@ -66,5 +66,42 @@
     "PUBLIC_BASE_URL": "https://scribe.orangely.xyz",
     "DEFAULT_TIMEZONE": "Asia/Shanghai",
     "API_RATE_LIMIT_PER_MINUTE": "30"
+  },
+
+  // Worker Previews（Workers Builds 为非生产分支执行 `wrangler preview`）。预览不继承上面的绑定与变量，需要在这里单独声明：
+  // - vars 与生产保持一致（修改上面的 vars 时同步修改这里），只把 PUBLIC_BASE_URL 留空，分享链接指向预览自己的地址；
+  // - 限流使用独立的 namespace_id，预览流量不占用生产额度；
+  // - 不绑定 D1：预览不读写生产的笔记与 API 密钥。编辑器与 AI 整理照常可用，图库为空，发布接口返回 503 STORAGE_UNAVAILABLE。
+  //   需要在预览中测试发布时，可另建数据库（npx wrangler d1 create ink-scribe-preview）并在这里加上 d1_databases。
+  "previews": {
+    "ai": { "binding": "AI" },
+    "ratelimits": [
+      {
+        "name": "RATE_LIMITER",
+        "namespace_id": "1002",
+        "simple": { "limit": 12, "period": 60 }
+      }
+    ],
+    "vars": {
+      "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "AI_DOODLE_MODEL": "",
+      "AI_API_STYLE": "",
+      "AI_RESPONSE_FORMAT": "",
+      "AI_EXTRA_PARAMS": "",
+      "AI_TEMPERATURE": "0.3",
+      "AI_MAX_OUTPUT_TOKENS": "2048",
+      "AI_TIMEOUT_MS": "45000",
+      "AI_MAX_RETRIES": "1",
+      "AI_GATEWAY_ID": "",
+      "MAX_INPUT_CHARS": "12000",
+      "MAX_BODY_BYTES": "81920",
+      "RATE_LIMIT_PER_MINUTE": "12",
+      "DOODLE_API_ENABLED": "false",
+      "DOODLE_CACHE_TTL_SECONDS": "86400",
+      "ALLOWED_ORIGINS": "",
+      "PUBLIC_BASE_URL": "",
+      "DEFAULT_TIMEZONE": "Asia/Shanghai",
+      "API_RATE_LIMIT_PER_MINUTE": "30"
+    }
   }
 }
