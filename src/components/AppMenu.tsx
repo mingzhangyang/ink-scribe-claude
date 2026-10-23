@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { CONTACT_EMAIL, DISCORD_INVITE } from "../../shared/contact.ts";
 import { useT } from "../i18n/index.ts";
 import { linkProps, type Route } from "../router.ts";
 import { LOCALES, THEMES, usePreferences, type ThemePreference } from "../state/preferences.ts";
@@ -154,6 +155,20 @@ export function AppMenu({ route, mock }: { route: Route; mock: boolean }) {
             </span>
           </div>
         ) : null}
+        <div className="menu-contact">
+          <p className="menu-group-title">{t.app.contactLabel}</p>
+          <a className="contact-link" href={`mailto:${CONTACT_EMAIL}`}>
+            <span>{t.app.contactEmail}</span>
+            <span className="contact-value">{CONTACT_EMAIL}</span>
+          </a>
+          <a className="contact-link" href={DISCORD_INVITE} target="_blank" rel="noopener noreferrer">
+            <span>Discord</span>
+            <span className="contact-value">
+              {t.app.contactDiscord}
+              <span aria-hidden="true"> ↗</span>
+            </span>
+          </a>
+        </div>
         <nav className="menu-legal" aria-label={t.app.legalLabel}>
           {legalPages.map((page) => renderPageLink(page, "menu-legal-link"))}
         </nav>

@@ -1,4 +1,6 @@
 /** Policy text is shared by the interactive pages and readable Worker HTML. */
+import { CONTACT_EMAIL, DISCORD_INVITE } from "./contact.ts";
+
 export type LegalLocale = "zh" | "en";
 export type LegalPageId = "privacy" | "terms";
 export type LegalLink = { href: string; label: string };
@@ -22,6 +24,7 @@ export type LegalContent = {
 };
 
 const PROJECT_ISSUES = "https://github.com/mingzhangyang/ink-scribe-claude/issues";
+const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`;
 const CLOUDFLARE_PRIVACY = "https://www.cloudflare.com/privacypolicy/";
 const WORKERS_AI_DATA_USAGE = "https://developers.cloudflare.com/workers-ai/platform/data-usage/";
 const GITHUB_PRIVACY = "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement";
@@ -120,11 +123,15 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "联系、请求与政策更新",
           paragraphs: [
-            "如有隐私疑问，或希望查询、纠正、删除与自己有关的数据，可通过项目 GitHub 反馈入口联系维护者。涉及敏感内容或删除请求时，请先只说明请求类型，并向维护者索取私下联系渠道；处理时可能需要核实你的身份或对相关作品的权限。",
-            "不要在公开 issue 中粘贴原文、API 密钥、manageToken、个人敏感信息或未公开笔记的链接。GitHub 反馈入口是公开渠道，并非私密表单。",
+            `如有隐私疑问，或希望查询、纠正、删除与自己有关的数据，请发送邮件至 ${CONTACT_EMAIL}。处理时可能需要核实你的身份或对相关作品的权限。`,
+            "一般问题和建议也可以在 Discord 社区或项目 GitHub 反馈入口提出。这两个都是公开渠道，并非私密表单：不要在其中粘贴原文、API 密钥、manageToken、个人敏感信息或未公开笔记的链接，涉及这些内容的请求请通过邮件联系。",
             "功能或数据处理方式变化时，本政策可能更新，并在页面标注新的更新日期。你在适用法律下享有的权利不因本说明受到限制。",
           ],
-          links: [{ href: PROJECT_ISSUES, label: "联系项目维护者（GitHub 公开反馈）" }],
+          links: [
+            { href: CONTACT_MAILTO, label: `发送邮件（${CONTACT_EMAIL}）` },
+            { href: DISCORD_INVITE, label: "加入 Discord 社区" },
+            { href: PROJECT_ISSUES, label: "GitHub 公开反馈" },
+          ],
         },
       ],
       relatedTitle: "相关页面",
@@ -207,9 +214,13 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "问题与反馈",
           paragraphs: [
-            "如对使用条款、内容权利或访问限制有疑问，可通过项目 GitHub 反馈入口联系维护者。涉及删除、侵权材料或其他敏感事项时，请先索取私下联系渠道，不要在公开 issue 中提供原文、API 密钥、manageToken、个人敏感信息或未公开链接。",
+            `如对使用条款、内容权利或访问限制有疑问，请发送邮件至 ${CONTACT_EMAIL}；删除请求、侵权投诉等敏感事项也请通过邮件联系。一般反馈可以在 Discord 社区或项目 GitHub 反馈入口提出，它们是公开渠道，不要在其中提供原文、API 密钥、manageToken、个人敏感信息或未公开链接。`,
           ],
-          links: [{ href: PROJECT_ISSUES, label: "联系项目维护者（GitHub 公开反馈）" }],
+          links: [
+            { href: CONTACT_MAILTO, label: `发送邮件（${CONTACT_EMAIL}）` },
+            { href: DISCORD_INVITE, label: "加入 Discord 社区" },
+            { href: PROJECT_ISSUES, label: "GitHub 公开反馈" },
+          ],
         },
       ],
       relatedTitle: "相关页面",
@@ -309,11 +320,15 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "Contact, requests, and policy updates",
           paragraphs: [
-            "For privacy questions, or to ask about accessing, correcting, or deleting data relating to you, contact the maintainers through the project's GitHub feedback page. For sensitive matters or deletion requests, initially state only the kind of request and ask for a private contact channel. Your identity or authority over the relevant note may need to be verified.",
-            "Do not paste source text, API keys, manageTokens, sensitive personal information, or unlisted note links into a public issue. The GitHub feedback page is a public channel, not a private form.",
+            `For privacy questions, or to ask about accessing, correcting, or deleting data relating to you, email ${CONTACT_EMAIL}. Your identity or authority over the relevant note may need to be verified.`,
+            "General questions and suggestions are also welcome in the Discord community or on the project's GitHub feedback page. Both are public channels, not private forms: do not paste source text, API keys, manageTokens, sensitive personal information, or unlisted note links there, and use email for requests that involve them.",
             "This policy may change as features or data practices change, with a new update date shown on this page. This notice does not limit rights you have under applicable law.",
           ],
-          links: [{ href: PROJECT_ISSUES, label: "Contact the maintainers (public GitHub feedback)" }],
+          links: [
+            { href: CONTACT_MAILTO, label: `Email us (${CONTACT_EMAIL})` },
+            { href: DISCORD_INVITE, label: "Join the Discord community" },
+            { href: PROJECT_ISSUES, label: "Public GitHub feedback" },
+          ],
         },
       ],
       relatedTitle: "Related pages",
@@ -396,9 +411,13 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "Questions and feedback",
           paragraphs: [
-            "For questions about these terms, content rights, or access restrictions, contact the maintainers through the project's GitHub feedback page. For deletion requests, rights complaints, or other sensitive matters, first ask for a private contact channel. Do not put source text, API keys, manageTokens, sensitive personal information, or unlisted links in a public issue.",
+            `For questions about these terms, content rights, or access restrictions, email ${CONTACT_EMAIL}; please use email for deletion requests, rights complaints, and other sensitive matters too. General feedback is welcome in the Discord community or on the project's GitHub feedback page. Those are public channels, so do not put source text, API keys, manageTokens, sensitive personal information, or unlisted links there.`,
           ],
-          links: [{ href: PROJECT_ISSUES, label: "Contact the maintainers (public GitHub feedback)" }],
+          links: [
+            { href: CONTACT_MAILTO, label: `Email us (${CONTACT_EMAIL})` },
+            { href: DISCORD_INVITE, label: "Join the Discord community" },
+            { href: PROJECT_ISSUES, label: "Public GitHub feedback" },
+          ],
         },
       ],
       relatedTitle: "Related pages",
