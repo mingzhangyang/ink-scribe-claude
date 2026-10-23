@@ -257,6 +257,23 @@ describe("library in the editor", () => {
     expect(c.store.getState().libraryLink).toBeNull();
   });
 
+  it("keeps a restored link and its conflict when regenerating the same text without a baseline", async () => {
+    const entry = await saveEntry(null, document);
+    await writeDraft(null, document, true, false, { id: entry.id, revision: entry.revision });
+    await saveEntry({ id: entry.id, revision: entry.revision }, edited("另一个标签页"));
+    const c = await boot();
+    await c.checkLibraryLink();
+    expect(c.useLibraryStatus.getState()).toMatchObject({ status: "conflict", baseline: null });
+    c.store.getState().setResult(edited("重新生成").note!, null, "local");
+    expect(c.store.getState().libraryLink?.id).toBe(entry.id);
+    expect(c.useLibraryStatus.getState().status).toBe("conflict");
+
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "local");
+    expect(c.store.getState().libraryLink).toBeNull();
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+  });
+
   it("detects a deleted entry after reload", async () => {
     const entry = await saveEntry(null, document);
     await writeDraft(null, document, true, false, { id: entry.id, revision: entry.revision });

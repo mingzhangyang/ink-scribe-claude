@@ -37,9 +37,12 @@ useNoteStore.subscribe((next, previous) => {
         saving = null;
         set({ status: "idle" });
       }
+      // Without the linked revision's baseline (a restored draft whose entry changed or is gone), the note being
+      // replaced is still the one linked to it, so its source decides.
       const link = next.libraryLink;
       const { baseline } = useLibraryStatus.getState();
-      if (link && (baseline?.revision !== link.revision || baseline.source !== from)) {
+      const linkedSource = baseline?.revision === link?.revision ? baseline?.source : previous.generatedFrom;
+      if (link && linkedSource !== from) {
         useNoteStore.getState().setLibraryLink(null);
         set({ status: "idle", baseline: null });
       }
