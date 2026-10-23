@@ -3,6 +3,8 @@ import { loadFontCss } from "../fonts.ts";
 import { getMessages } from "../i18n/index.ts";
 import { buildFontEmbedCss, ensureFontsLoaded } from "./fontEmbed.ts";
 import { effectiveScale } from "./scale.ts";
+import { preparePaperTexture } from "./paperTexture.ts";
+import { measureNoteOverflow } from "../lib/note-fit.ts";
 
 export type ExportFormat = "png" | "jpeg";
 export type ExportScale = 1 | 2 | 3;
@@ -37,12 +39,14 @@ function snapshotNode(node: HTMLElement): HTMLElement {
 }
 
 export async function renderNoteBlob(node: HTMLElement, options: ExportOptions): Promise<{ blob: Blob; scale: number }> {
+  if (node.dataset.renderStatus !== "ready") throw new Error("Note layout is not ready for export");
   const snapshot = snapshotNode(node);
   try {
     const text = `${snapshot.textContent ?? ""}${CSS_GENERATED_CHARS}`;
     await Promise.all(options.families.map(loadFontCss));
     await ensureFontsLoaded(options.families, text);
-    const cssText = await buildFontEmbedCss(options.families, text);
+    if (measureNoteOverflow(snapshot)) throw new Error("Note content does not fit the export canvas");
+    const [cssText] = await Promise.all([buildFontEmbedCss(options.families, text), preparePaperTexture(snapshot)]);
     const width = snapshot.offsetWidth;
     const height = snapshot.offsetHeight;
     const scale = effectiveScale(width, height, options.scale);

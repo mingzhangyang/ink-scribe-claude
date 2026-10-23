@@ -1,15 +1,18 @@
 import type { ApiErrorBody, ErrorCode } from "../shared/api.ts";
+import type { ValidationIssue } from "../shared/publishing.ts";
 
 export class AppError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
   readonly retryAfterSeconds?: number;
+  readonly issues?: ValidationIssue[];
 
-  constructor(status: number, code: ErrorCode, message: string, options: { retryAfterSeconds?: number; cause?: unknown } = {}) {
+  constructor(status: number, code: ErrorCode, message: string, options: { retryAfterSeconds?: number; issues?: ValidationIssue[]; cause?: unknown } = {}) {
     super(message, { cause: options.cause });
     this.status = status;
     this.code = code;
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.issues = options.issues;
   }
 }
 
@@ -31,6 +34,7 @@ export function errorResponse(error: AppError, requestId: string, extraHeaders: 
       message: error.message,
       requestId,
       ...(error.retryAfterSeconds ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+      ...(error.issues ? { issues: error.issues } : {}),
     },
   };
   const headers: Record<string, string> = { ...extraHeaders };
@@ -106,7 +110,7 @@ export async function readJsonBody(request: Request, maxBytes: number): Promise<
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes)) as unknown;
   } catch {
     throw new AppError(400, "INVALID_JSON", "请求体不是合法的 JSON。");
   }

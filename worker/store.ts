@@ -1,15 +1,17 @@
 import type { NoteVisibility, PublishedNote, PublishedNoteSummary } from "../shared/api.ts";
 import { normalizeDoodleSpec, type DoodleSpec } from "../shared/doodle.ts";
 import { normalizeNoteStructure, type NoteStructure } from "../shared/note.ts";
+import { validatePublishedContent } from "../shared/publishing.ts";
 import { sanitizeSettings, type Settings } from "../shared/settings.ts";
 import { normalizeStickers, type StickerItem } from "../shared/stickers.ts";
 
-/** D1 数据访问层。所有读取到的 JSON 都会再次规范化，保证即使库中数据异常也不会把非法内容交给前端。 */
+/** D1 数据访问层。新版快照严格校验且不改写；旧版数据继续使用兼容规范化。 */
 
 export type ApiKeyRecord = { id: string; name: string; revokedAt: number | null };
 
 export type NoteRow = {
   id: string;
+  schema_version: 0 | 1;
   api_key_id: string;
   visibility: NoteVisibility;
   title: string;
@@ -27,6 +29,7 @@ export type NoteRow = {
 
 export type NewNote = {
   id: string;
+  schemaVersion: 0 | 1;
   apiKeyId: string;
   visibility: NoteVisibility;
   language: "zh" | "en";
@@ -78,8 +81,8 @@ function noteInsert(db: D1Database, input: NewNote, claim?: PublishClaim): D1Pre
   return db
     .prepare(
       `INSERT INTO notes (id, api_key_id, visibility, title, summary, language, template, layout, note_json, settings_json,
-        stickers_json, doodle_json, image_status, created_at, updated_at)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        stickers_json, doodle_json, image_status, created_at, updated_at, schema_version)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
        ${claim ? "WHERE EXISTS (SELECT 1 FROM idempotency_keys WHERE api_key_id = ? AND idempotency_key = ? AND owner_token = ? AND state = 'pending')" : ""}`,
     )
     .bind(
@@ -99,6 +102,7 @@ function noteInsert(db: D1Database, input: NewNote, claim?: PublishClaim): D1Pre
       "disabled",
       input.now,
       input.now,
+      input.schemaVersion,
       ...(claim ? [claim.apiKeyId, claim.key, claim.token] : []),
     );
 }
@@ -265,11 +269,22 @@ function parseJson(text: string | null): unknown {
 }
 
 export function toPublished(row: NoteRow, origin: string): PublishedNote | null {
+  if (row.schema_version === 1) {
+    const content = validatePublishedContent({
+      note: parseJson(row.note_json),
+      settings: parseJson(row.settings_json),
+      stickers: parseJson(row.stickers_json),
+    });
+    if (!content.ok) return null;
+    return { ...toSummary(row, origin), schemaVersion: 1, ...content.value };
+  }
+  if (row.schema_version !== 0) return null;
   const note = normalizeNoteStructure(parseJson(row.note_json));
   if (!note.ok) return null;
   const doodle = normalizeDoodleSpec(parseJson(row.doodle_json));
   return {
     ...toSummary(row, origin),
+    schemaVersion: 0,
     note: note.value,
     settings: sanitizeSettings(parseJson(row.settings_json)),
     stickers: normalizeStickers(parseJson(row.stickers_json)),

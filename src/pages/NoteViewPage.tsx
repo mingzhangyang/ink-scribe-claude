@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.ts";
 import { NotePage } from "../components/note/NotePage.tsx";
+import { NoteFitStatus } from "../components/note/NoteFitStatus.tsx";
+import type { NoteFitState } from "../components/note/useNoteFit.ts";
 import { byId, PAGE_WIDTH, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
@@ -20,6 +22,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   const [width, setWidth] = useState(PAGE_WIDTH);
   const [pageHeight, setPageHeight] = useState(1188);
   const [exporting, setExporting] = useState(false);
+  const [fit, setFit] = useState<NoteFitState | null>(null);
   const loadShared = useNoteStore((s) => s.loadShared);
   const t = useT();
 
@@ -95,12 +98,13 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
       onSelectSticker={noop}
       onChangeSticker={noop}
       onRemoveSticker={noop}
+      onFitChange={setFit}
     />
   );
   const scale = Math.min(1, width / PAGE_WIDTH);
 
   async function download() {
-    if (!pageRef.current) return;
+    if (!pageRef.current || fit?.status !== "ready") return;
     setExporting(true);
     try {
       const { blob } = await renderNoteBlob(pageRef.current, {
@@ -146,7 +150,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
           <button type="button" className="btn btn-small btn-secondary" onClick={() => void copyLink()}>
             {t.view.copyLink}
           </button>
-          <button type="button" className="btn btn-small btn-secondary" disabled={exporting} onClick={() => void download()}>
+          <button type="button" className="btn btn-small btn-secondary" disabled={exporting || fit?.status !== "ready"} onClick={() => void download()}>
             {exporting ? t.view.exporting : t.view.download}
           </button>
           <button type="button" className="btn btn-small" onClick={openInEditor}>
@@ -154,6 +158,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
           </button>
         </div>
       </div>
+      <NoteFitStatus fit={fit} />
       <div className="view-frame" ref={frameRef}>
         <div className="page-frame" style={{ width: PAGE_WIDTH * scale, height: pageHeight * scale }}>
           <div className="page-scaler" style={{ transform: `scale(${scale})` }}>

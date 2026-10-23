@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { PublishedNote } from "../shared/api.ts";
+import { LEGAL_CONTENT } from "../shared/legal.ts";
 import type { Env } from "../worker/env.ts";
 import { llmsTxt } from "../worker/openapi.ts";
 import {
   contentToHtml,
+  escapeHtml,
   galleryPage,
+  guidePage,
   handlePage,
   headTags,
   homePage,
   jsonLdScript,
+  legalPage,
   notePage,
   noteNotFoundPage,
   robotsTxt,
@@ -20,6 +24,7 @@ const ORIGIN = "https://ink.example";
 
 function published(overrides: Partial<PublishedNote> = {}): PublishedNote {
   return {
+    schemaVersion: 0,
     id: "AAAAAAAAAAAAAAAAAAAAAA",
     url: `${ORIGIN}/n/AAAAAAAAAAAAAAAAAAAAAA`,
     title: "番茄工作法",
@@ -120,6 +125,64 @@ describe("gallery page", () => {
   });
 });
 
+describe("usage guide page", () => {
+  it.each(["zh", "en"] as const)("serves the complete %s guide without requiring JavaScript", (locale) => {
+    const meta = guidePage(ORIGIN, locale);
+    expect(meta.status).toBe(200);
+    expect(meta.canonical).toBe(`${ORIGIN}/guide`);
+    expect(meta.lang).toBe(locale === "zh" ? "zh-CN" : "en");
+    expect(meta.robots).toBeUndefined();
+    for (const id of ["users", "agents", "faq"]) {
+      expect(meta.body).toContain(`id="${id}"`);
+      expect(meta.body).toContain(`href="#${id}"`);
+    }
+    expect(meta.body).toContain("/api/v1/openapi.json");
+    expect(meta.body).toContain("/llms.txt");
+    expect(meta.body).toContain("/api/v1/notes/validate");
+    expect(meta.body).toContain("Idempotency-Key");
+    expect(meta.body).toContain("schemaVersion");
+    expect(meta.body).toMatch(/<pre\b[^>]*>[\s\S]*?<code\b/);
+    const head = headTags(meta, ORIGIN);
+    expect(head).toContain(`<link rel="canonical" href="${ORIGIN}/guide" />`);
+    expect(head).toContain(`"url":"${ORIGIN}/guide"`);
+  });
+
+  it("uses the requested language in page metadata and readable body", () => {
+    const zh = guidePage(ORIGIN);
+    const en = guidePage(ORIGIN, "en");
+    expect(zh.title).not.toBe(en.title);
+    expect(zh.description).not.toBe(en.description);
+    expect(zh.body).not.toBe(en.body);
+    expect(headTags(en, ORIGIN)).toContain('<meta property="og:locale" content="en_US" />');
+  });
+});
+
+describe("privacy and terms pages", () => {
+  it.each([
+    ["privacy", "zh"], ["privacy", "en"], ["terms", "zh"], ["terms", "en"],
+  ] as const)("renders the same %s/%s sections and references for readers without JavaScript", (page, locale) => {
+    const meta = legalPage(ORIGIN, page, locale);
+    const content = LEGAL_CONTENT[locale][page];
+    expect(meta.status).toBe(200);
+    expect(meta.canonical).toBe(`${ORIGIN}/${page}`);
+    expect(meta.lang).toBe(locale === "zh" ? "zh-CN" : "en");
+    expect(meta.vary).toBe("Accept-Language");
+    expect(meta.robots).toBeUndefined();
+    expect(meta.title).toBe(content.documentTitle);
+    expect(meta.body).toContain(escapeHtml(content.title));
+    expect(new Set(content.sections.map((section) => section.id)).size).toBe(content.sections.length);
+    for (const section of content.sections) {
+      expect(meta.body).toContain(`id="${section.id}"`);
+      expect(meta.body).toContain(`href="#${section.id}"`);
+      expect(meta.body).toContain(escapeHtml(section.title));
+    }
+    for (const link of content.relatedLinks) expect(meta.body).toContain(`href="${escapeHtml(link.href)}"`);
+    const head = headTags(meta, ORIGIN);
+    expect(head).toContain(`<link rel="canonical" href="${ORIGIN}/${page}" />`);
+    expect(head).toContain(`"url":"${ORIGIN}/${page}"`);
+  });
+});
+
 describe("robots.txt, sitemap.xml and llms.txt", () => {
   it("points crawlers at the sitemap and keeps them out of the API", () => {
     const robots = robotsTxt(ORIGIN);
@@ -128,9 +191,12 @@ describe("robots.txt, sitemap.xml and llms.txt", () => {
     expect(robots).toContain("Allow: /api/v1/openapi.json");
   });
 
-  it("lists the home page, gallery and public notes in the sitemap", () => {
+  it("lists public product pages and public notes in the sitemap", () => {
     const xml = sitemapXml(ORIGIN, [{ id: "AAAAAAAAAAAAAAAAAAAAAA", updatedAt: "2026-10-21T08:00:00.000Z" }]);
     expect(xml).toContain(`<url><loc>${ORIGIN}/</loc></url>`);
+    expect(xml).toContain(`<loc>${ORIGIN}/guide</loc>`);
+    expect(xml).toContain(`<loc>${ORIGIN}/privacy</loc>`);
+    expect(xml).toContain(`<loc>${ORIGIN}/terms</loc>`);
     expect(xml).toContain(`<url><loc>${ORIGIN}/gallery</loc><lastmod>2026-10-21T08:00:00.000Z</lastmod></url>`);
     expect(xml).toContain(`<url><loc>${ORIGIN}/n/AAAAAAAAAAAAAAAAAAAAAA</loc><lastmod>2026-10-21T08:00:00.000Z</lastmod></url>`);
   });
@@ -160,6 +226,9 @@ describe("robots.txt, sitemap.xml and llms.txt", () => {
   it("describes the product and recent public notes in llms.txt", () => {
     const text = llmsTxt(ORIGIN, [published({ title: "[链接] 标题" })]);
     expect(text).toContain("## 页面");
+    expect(text).toContain(`${ORIGIN}/guide`);
+    expect(text).toContain(`${ORIGIN}/privacy`);
+    expect(text).toContain(`${ORIGIN}/terms`);
     expect(text).toContain(`- [链接 标题](${ORIGIN}/n/AAAAAAAAAAAAAAAAAAAAAA)：`);
     expect(llmsTxt(ORIGIN)).not.toContain("最近的公开笔记");
   });

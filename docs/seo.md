@@ -20,7 +20,7 @@
 
 ## 服务端注入的页面信息
 
-前端是 SPA，但搜索引擎、聊天工具的链接预览和多数 AI 爬虫不执行 JavaScript。首页 `/`、图库 `/gallery` 和笔记查看页 `/n/:id` 因此先经过 Worker（[`worker/pages.ts`](../worker/pages.ts)）：它取出 `index.html`，用 HTMLRewriter 注入本页的信息后返回。
+前端是 SPA，但搜索引擎、聊天工具的链接预览和多数 AI 爬虫不执行 JavaScript。首页 `/`、图库 `/gallery`、使用说明 `/guide`、隐私政策 `/privacy`、使用条款 `/terms` 和笔记查看页 `/n/:id` 因此先经过 Worker（[`worker/pages.ts`](../worker/pages.ts)）：它取出 `index.html`，用 HTMLRewriter 注入本页的信息后返回。
 
 | 内容 | 首页 | 图库 | 笔记查看页 |
 | --- | --- | --- | --- |
@@ -31,6 +31,10 @@
 | `<html lang>` | `zh-CN` | `zh-CN` | 按笔记语言（`zh-CN` / `en`） |
 | robots | 允许收录 | 允许收录 | `unlisted` 笔记为 `noindex, nofollow`；不存在的笔记返回 404 与 `noindex` |
 
+使用说明 `/guide` 与 `/guide/` 都返回完整的网页教程、agent 发布流程、JSON / curl 示例与常见问题，canonical 统一为 `/guide`，结构化数据为 `WebPage` 与 `BreadcrumbList`。Worker 与 React 共用 [`shared/guide.ts`](../shared/guide.ts) 的双语文案和请求示例，示例使用实际发布校验器测试。初始 HTML 按 `Accept-Language` 的首选语言选择中文或英文（缺省为中文），返回 `Vary: Accept-Language`；交互页面继续使用浏览器中保存的语言偏好。`/guide#users`、`/guide#agents` 和 `/guide#faq` 可直接定位对应章节。
+
+隐私政策 `/privacy` 与使用条款 `/terms` 使用相同的语言规则，也支持尾斜杠和章节锚点。正文、更新日期与相关链接由 [`shared/legal.ts`](../shared/legal.ts) 供 Worker 和 React 共用；完整初始 HTML 包含所有章节，`WebPage` 中提供 `dateModified`。菜单底部、首页 HTML、`llms.txt` 与站点地图都提供政策入口。
+
 浏览器加载脚本后，React 会替换 `#root` 中的正文，所以用户看到的仍是应用本身；正文只是给不执行脚本的访问者看的同一份内容，不是隐藏文本。所有用户内容都经过 HTML 转义，JSON-LD 中的 `<`、`>`、`&` 也会转义，避免提前闭合 `<script>`。
 
 `og:url`、canonical 与站点地图中的地址都使用 `PUBLIC_BASE_URL`（默认 `https://scribe.orangely.xyz`），为空时使用请求的域名。
@@ -38,9 +42,9 @@
 ## 爬虫入口
 
 - `/robots.txt`：允许所有爬虫（包括 AI 爬虫）访问页面，禁止抓取 `/api/`（OpenAPI 规范除外），并指向站点地图。
-- `/sitemap.xml`：首页、图库和最多 10000 条公开笔记（带 `lastmod`）。`unlisted` 笔记不会出现。
-- `/llms.txt`：给大模型与 AI agent 的站点说明，包括产品介绍、主要页面、API 用法和最近 20 条公开笔记；`index.html` 中以 `<link rel="alternate" type="text/markdown">` 指向它。
-- `/api/v1/openapi.json`：机器可读的 API 规范。
+- `/sitemap.xml`：首页、图库、使用说明、隐私政策、使用条款和最多 10000 条公开笔记（带 `lastmod`）。`unlisted` 笔记不会出现。
+- `/llms.txt`：给大模型与 AI agent 的站点说明，包括产品介绍、主要页面、完整结构的预检/发布流程和最近 20 条公开笔记；`index.html` 中以 `<link rel="alternate" type="text/markdown">` 指向它。发布只提交契约版本与已整理的笔记，并明确区分数据验证与浏览器排版。
+- `/api/v1/openapi.json`：机器可读的 API 规范，与发布验证器共享字段、长度、枚举及图元契约。发布不接收独立原文 `text` 字段，也不另外保存或公开原文副本；主动放进 `note` 的原文摘录仍会作为笔记内容出现在公开 JSON、笔记 HTML 等响应中。
 
 ## 上线后
 

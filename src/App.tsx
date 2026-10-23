@@ -1,37 +1,19 @@
 import { useEffect, useState } from "react";
 import type { PublicConfig } from "../shared/api.ts";
 import { fetchPublicConfig } from "./api.ts";
+import { AppMenu } from "./components/AppMenu.tsx";
 import { useT } from "./i18n/index.ts";
 import { EditorPage } from "./pages/EditorPage.tsx";
 import { GalleryPage } from "./pages/GalleryPage.tsx";
+import { GuidePage } from "./pages/GuidePage.tsx";
+import { LegalPage } from "./pages/LegalPage.tsx";
 import { LibraryPage } from "./pages/LibraryPage.tsx";
 import { NoteViewPage } from "./pages/NoteViewPage.tsx";
 import { linkProps, useRoute } from "./router.ts";
-import { resolveTheme, THEMES, usePreferences, type ThemePreference } from "./state/preferences.ts";
+import { resolveTheme, usePreferences } from "./state/preferences.ts";
 
 const DEFAULT_CONFIG: PublicConfig = { maxInputChars: 12_000, doodleEnabled: false, mock: false };
 const THEME_COLORS = { light: "#f4f2ee", dark: "#18181b" } as const;
-
-/** 主题图标：跟随系统（半明半暗）、浅色（太阳）、深色（月亮）。 */
-function ThemeIcon({ theme }: { theme: ThemePreference }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      {theme === "system" ? (
-        <>
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" />
-        </>
-      ) : theme === "light" ? (
-        <>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </>
-      ) : (
-        <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-      )}
-    </svg>
-  );
-}
 
 /** 把外观偏好写到 <html data-theme>；跟随系统时监听系统配色变化。 */
 function useAppliedTheme() {
@@ -49,33 +31,6 @@ function useAppliedTheme() {
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, [theme]);
-}
-
-function PreferenceControls() {
-  const t = useT();
-  const locale = usePreferences((s) => s.locale);
-  const theme = usePreferences((s) => s.theme);
-  const setLocale = usePreferences((s) => s.setLocale);
-  const setTheme = usePreferences((s) => s.setTheme);
-  const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-  const themeLabel = t.app.themeButton(t.app.themeNames[theme], t.app.themeNames[nextTheme]);
-  return (
-    <div className="pref-controls" role="group" aria-label={t.app.preferencesLabel}>
-      <button type="button" className="pref-btn" onClick={() => setTheme(nextTheme)} title={themeLabel} aria-label={themeLabel}>
-        <ThemeIcon theme={theme} />
-      </button>
-      <button
-        type="button"
-        className="pref-btn pref-lang"
-        lang={locale === "zh" ? "en" : "zh-CN"}
-        onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-        title={t.app.switchLanguage}
-        aria-label={t.app.switchLanguage}
-      >
-        {t.app.switchLanguageShort}
-      </button>
-    </div>
-  );
 }
 
 export function App() {
@@ -114,28 +69,14 @@ export function App() {
             <p>{t.app.tagline}</p>
           </div>
         </a>
-        <nav className="app-nav" aria-label={t.app.navLabel}>
-          <a className={`nav-link${route.name === "editor" ? " is-active" : ""}`} {...linkProps("/")}>
-            {t.app.editor}
-          </a>
-          <a className={`nav-link${route.name === "gallery" ? " is-active" : ""}`} {...linkProps("/gallery")}>
-            {t.app.gallery}
-          </a>
-          <a className={`nav-link${route.name === "library" ? " is-active" : ""}`} {...linkProps("/library")}>
-            {t.app.library}
-          </a>
-          {config.mock ? (
-            <span className="badge badge-warn" title={t.app.mockTitle}>
-              {t.app.mockBadge}
-            </span>
-          ) : null}
-          <PreferenceControls />
-        </nav>
+        <AppMenu route={route} mock={config.mock} />
       </header>
 
       {route.name === "editor" ? <EditorPage config={config} onToast={setToast} /> : null}
       {route.name === "gallery" ? <GalleryPage /> : null}
       {route.name === "library" ? <LibraryPage /> : null}
+      {route.name === "guide" ? <GuidePage /> : null}
+      {route.name === "privacy" || route.name === "terms" ? <LegalPage page={route.name} /> : null}
       {route.name === "note" ? <NoteViewPage id={route.id} onToast={setToast} /> : null}
       {route.name === "not-found" ? (
         <main className="page-center">

@@ -21,6 +21,8 @@ const aiNote = {
   doodleTheme: "book" as const,
 };
 
+const publication = (overrides: Record<string, unknown> = {}) => ({ schemaVersion: 1, note: aiNote, ...overrides });
+
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 let env: Env;
@@ -86,70 +88,117 @@ describe("API key authentication", () => {
 });
 
 describe("POST /api/v1/notes", () => {
-  it("structures text with Workers AI and returns a share link", async () => {
-    const { response, body } = await call(
-      request("POST", "/api/v1/notes", {
-        body: { text: "需要整理的原文，内容足够长。", template: "reading-notes", appearance: { paper: "kraft", ink: "brown" } },
-      }),
-    );
+  it("publishes prepared content without original text or any model call", async () => {
+    const { response, body } = await call(request("POST", "/api/v1/notes", {
+      body: publication({ template: "reading-notes", appearance: { paper: "kraft", ink: "brown" } }),
+    }));
     expect(response.status).toBe(201);
     expect(body!.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(body!.url).toBe(`https://notes.example/n/${body!.id}`);
     expect(response.headers.get("Location")).toBe(body!.url);
+    expect(body!.schemaVersion).toBe(1);
     expect(body!.visibility).toBe("unlisted");
     expect(body!.template).toBe("reading-notes");
-    expect(body!.note.title).toBe("整理后的标题");
-    expect(body!.note.date).toBeTruthy();
-    expect(body!.settings).toMatchObject({ paper: "kraft", ink: "brown", layout: "hybrid-cornell" });
+    expect(body!.note).toEqual({ ...aiNote, date: expect.any(String) });
+    expect(body!.settings).toMatchObject({ paper: "kraft", ink: "brown", layout: "hybrid-cornell", overflow: "expand" });
+    expect(body!.meta).toMatchObject({ processing: "agent", validation: { structure: "passed", layout: "not_checked" } });
     expect(body).not.toHaveProperty("image");
-    expect(body!.meta.model).toBeDefined();
-  });
-
-  it("accepts a pre-structured note and sanitizes it", async () => {
-    const { response, body } = await call(
-      request("POST", "/api/v1/notes", {
-        body: {
-          note: { title: "<img src=x onerror=alert(1)>标题", sections: [{ content: "正文 <script>x</script>", highlights: ["正文"] }], summary: "" },
-          stickers: [{ type: "tape", x: 99999, y: 10, variant: "mint" }, { type: "iframe", x: 1 }],
-          style: "minimal",
-        },
-      }),
-    );
-    expect(response.status).toBe(201);
-    expect(body!.note.title).toBe("标题");
-    expect(body!.note.sections[0].content).toBe("正文 x");
-    expect(body!.settings.layout).toBe("minimal");
-    expect(body!.stickers).toHaveLength(1);
-    expect(body!.stickers[0]).toMatchObject({ type: "tape", x: 880, variant: "mint" });
+    expect(body).not.toHaveProperty("text");
+    expect(body!.meta).not.toHaveProperty("model");
     expect(env.AI.run).not.toHaveBeenCalled();
   });
 
-  it("validates the request strictly so agents notice mistakes", async () => {
+  it("preserves valid text, highlight casing and drawings through storage and public reads", async () => {
+    const note = { ...aiNote, title: "Exact Note", date: "2026-10-23", doodleTheme: undefined,
+      sections: [{ content: "Keep JavaScript and <Type> intact.", highlights: ["javascript"] }],
+      doodleSpec: { concept: "circle", elements: [
+        { type: "circle", cx: 50, cy: 50, r: 10, stroke: "ink", fill: "none", width: 2 },
+      ] },
+    };
+    const stickers = [{ id: "star-1", type: "star", x: 700, y: 90, rotation: 12.3, scale: 0.75, variant: "gold" }];
+    const { response, body } = await call(request("POST", "/api/v1/notes", {
+      body: publication({ note, stickers, appearance: { seed: 42, overflow: "error" } }),
+    }));
+    expect(response.status).toBe(201);
+    const expectedNote = JSON.parse(JSON.stringify(note));
+    expect(body!.note).toEqual(expectedNote);
+    expect(body!.stickers).toEqual(stickers);
+    expect(body!.settings).toMatchObject({ seed: 42, overflow: "error" });
+    const read = await call(request("GET", `/api/notes/${body!.id}`, { key: null }));
+    expect(read.body!.note).toEqual(expectedNote);
+    expect(read.body!.stickers).toEqual(stickers);
+    expect(read.body).not.toHaveProperty("text");
+    const stored = await env.DB!.prepare("SELECT note_json, schema_version FROM notes WHERE id = ?")
+      .bind(body!.id).first<{ note_json: string; schema_version: number }>();
+    expect(JSON.parse(stored!.note_json)).toEqual(expectedNote);
+    expect(stored!.schema_version).toBe(1);
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing, unknown and lossy fields with actionable paths and no writes", async () => {
     const cases: Array<[unknown, string]> = [
-      [{}, "text"],
-      [{ text: "abc", note: aiNote }, "text"],
-      [{ text: "原文内容", appearance: { papr: "kraft" } }, "papr"],
-      [{ text: "原文内容", appearance: { paper: "neon" } }, "appearance.paper"],
-      [{ text: "原文内容", visibility: "secret" }, "visibility"],
-      [{ note: { title: "" } }, "note"],
-      [{ text: "原文内容", doodle: { elements: [] } }, "doodle"],
+      [{}, "schemaVersion"],
+      [{ schemaVersion: 1 }, "note"],
+      [{ note: aiNote }, "schemaVersion"],
+      [publication({ text: "private source" }), "text"],
+      [publication({ appearance: { papr: "kraft" } }), "appearance.papr"],
+      [publication({ appearance: { paper: "neon" } }), "appearance.paper"],
+      [publication({ appearance: { fontSize: 100 } }), "appearance.fontSize"],
+      [publication({ visibility: "secret" }), "visibility"],
+      [publication({ note: { ...aiNote, title: "<b>title</b>" } }), "note.title"],
+      [publication({ note: { ...aiNote, sections: [{ content: "a".repeat(901), highlights: [] }] } }), "note.sections[0].content"],
+      [publication({ note: { ...aiNote, sections: [{ content: "正文", highlights: ["missing"] }] } }), "note.sections[0].highlights[0]"],
+      [publication({ doodle: { elements: [] } }), "doodle"],
     ];
-    for (const [body, hint] of cases) {
+    for (const [body, path] of cases) {
       const result = await call(request("POST", "/api/v1/notes", { body }));
-      expect(result.response.status, JSON.stringify(body)).toBe(400);
-      expect(result.body!.error.message).toContain(hint);
+      expect(result.response.status, JSON.stringify(body)).toBe(422);
+      expect(result.body!.error.code).toBe("VALIDATION_FAILED");
+      expect(result.body!.error.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path })]));
+      expect(JSON.stringify(result.body)).not.toContain("private source");
     }
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed UTF-8 instead of replacing submitted characters", async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify(publication({ note: { ...aiNote, title: "marker" } })));
+    const marker = new TextEncoder().encode("marker");
+    const position = bytes.findIndex((_, index) => marker.every((byte, offset) => bytes[index + offset] === byte));
+    bytes[position] = 0xff;
+    const { response, body } = await call(new Request("https://notes.example/api/v1/notes", {
+      method: "POST", headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" }, body: bytes,
+    }));
+    expect(response.status).toBe(400);
+    expect(body!.error.code).toBe("INVALID_JSON");
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+
+  it("does not persist rejected original text in notes, reservations or logs", async () => {
+    const source = "private source marker that must never be echoed";
+    const { response, body } = await call(request("POST", "/api/v1/notes", {
+      body: publication({ text: source }), headers: { "Idempotency-Key": "reject-source" },
+    }));
+    expect(response.status).toBe(422);
+    expect(JSON.stringify(body)).not.toContain(source);
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+    const reservation = await env.DB!.prepare("SELECT * FROM idempotency_keys WHERE idempotency_key = 'reject-source'").first();
+    expect(reservation).toMatchObject({ state: "pending", lease_until: 0, owner_token: null });
+    expect(JSON.stringify(reservation)).not.toContain(source);
+    expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain(source);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(source);
   });
 
   it("replays idempotent requests and rejects reused keys with different bodies", async () => {
-    const body = { note: aiNote };
+    const body = publication();
     const first = await call(request("POST", "/api/v1/notes", { body, headers: { "Idempotency-Key": "daily-1" } }));
     const replay = await call(request("POST", "/api/v1/notes", { body, headers: { "Idempotency-Key": "daily-1" } }));
     expect(first.response.status).toBe(201);
     expect(replay.response.status).toBe(200);
     expect(replay.response.headers.get("Idempotent-Replayed")).toBe("true");
     expect(replay.body!.id).toBe(first.body!.id);
-    const conflict = await call(request("POST", "/api/v1/notes", { body: { note: { ...aiNote, title: "别的" } }, headers: { "Idempotency-Key": "daily-1" } }));
+    const conflict = await call(request("POST", "/api/v1/notes", { body: publication({ note: { ...aiNote, title: "别的" } }), headers: { "Idempotency-Key": "daily-1" } }));
     expect(conflict.response.status).toBe(409);
     expect(conflict.body!.error.code).toBe("IDEMPOTENCY_CONFLICT");
     // 同一个键在另一个密钥下互不影响
@@ -158,28 +207,36 @@ describe("POST /api/v1/notes", () => {
     expect(other.body!.id).not.toBe(first.body!.id);
   });
 
-  it("reserves concurrent requests before calling AI, then replays the committed result", async () => {
-    let finish!: (value: { response: typeof aiNote }) => void;
+  it("reserves concurrent agent requests before writing and replays one committed result", async () => {
+    let finish!: () => void;
     let started!: () => void;
     const entered = new Promise<void>((resolve) => { started = resolve; });
-    env.AI.run = vi.fn(() => { started(); return new Promise((resolve) => { finish = resolve; }); }) as typeof env.AI.run;
-    const options = { body: { text: "足够长的会议原文，用于测试并发发布。" }, headers: { "Idempotency-Key": "parallel" } };
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    const originalInsert = noteStore.insertNote;
+    vi.spyOn(noteStore, "insertNote").mockImplementationOnce(async (...args) => {
+      started();
+      await pending;
+      return originalInsert(...args);
+    });
+    const options = { body: publication(), headers: { "Idempotency-Key": "parallel" } };
     const first = call(request("POST", "/api/v1/notes", options));
     await entered;
     const duplicate = await call(request("POST", "/api/v1/notes", options));
     expect(duplicate.response.status).toBe(409);
     expect(duplicate.response.headers.get("Retry-After")).toBe("2");
-    expect(env.AI.run).toHaveBeenCalledTimes(1);
-    finish({ response: aiNote });
+    expect(env.AI.run).not.toHaveBeenCalled();
+    finish();
     const created = await first;
     const replay = await call(request("POST", "/api/v1/notes", options));
     expect(created.response.status).toBe(201);
     expect(replay.body!.id).toBe(created.body!.id);
+    expect(replay.body!.note).toEqual(created.body!.note);
+    expect(replay.body!.settings).toEqual(created.body!.settings);
     expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(1);
   });
 
   it("does not resurrect deleted notes on delayed retries", async () => {
-    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "deleted" } };
+    const options = { body: publication(), headers: { "Idempotency-Key": "deleted" } };
     const created = await call(request("POST", "/api/v1/notes", options));
     await call(request("DELETE", `/api/v1/notes/${created.body!.id}`));
     const replay = await call(request("POST", "/api/v1/notes", options));
@@ -188,7 +245,7 @@ describe("POST /api/v1/notes", () => {
   });
 
   it("uses one replay snapshot when deletion races the read", async () => {
-    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "delete-race" } };
+    const options = { body: publication(), headers: { "Idempotency-Key": "delete-race" } };
     const created = await call(request("POST", "/api/v1/notes", options));
     const original = noteStore.getNoteRow;
     const spy = vi.spyOn(noteStore, "getNoteRow").mockImplementation(async (db, id) => {
@@ -206,7 +263,7 @@ describe("POST /api/v1/notes", () => {
 
   it("rolls back failed commits and allows a same-key retry", async () => {
     await env.DB!.exec("CREATE TRIGGER fail_commit BEFORE UPDATE OF state ON idempotency_keys WHEN NEW.state = 'completed' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;");
-    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "retry" } };
+    const options = { body: publication(), headers: { "Idempotency-Key": "retry" } };
     expect((await call(request("POST", "/api/v1/notes", options))).response.status).toBe(500);
     expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
     await env.DB!.exec("DROP TRIGGER fail_commit;");
@@ -215,11 +272,97 @@ describe("POST /api/v1/notes", () => {
 
 });
 
+describe("POST /api/v1/notes/validate", () => {
+  it("shares strict validation without creating notes, reservations or invoking AI", async () => {
+    const { response, body } = await call(request("POST", "/api/v1/notes/validate", {
+      body: publication(), headers: { "Idempotency-Key": "preflight" },
+    }));
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ valid: true, schemaVersion: 1, validation: { structure: "passed", layout: "not_checked" } });
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM idempotency_keys").first<{ n: number }>())!.n).toBe(0);
+    const invalid = publication({ note: { ...aiNote, sections: [] } });
+    const preflight = await call(request("POST", "/api/v1/notes/validate", { body: invalid }));
+    const publish = await call(request("POST", "/api/v1/notes", { body: invalid }));
+    expect(preflight.response.status).toBe(422);
+    expect(preflight.body!.error.issues).toEqual(publish.body!.error.issues);
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+
+  it("requires a valid key and applies the publisher's rate limit", async () => {
+    expect((await call(request("POST", "/api/v1/notes/validate", { key: null, body: publication() }))).response.status).toBe(401);
+    env.API_RATE_LIMIT_PER_MINUTE = "1";
+    expect((await call(request("POST", "/api/v1/notes/validate", { body: publication() }))).response.status).toBe(200);
+    expect((await call(request("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(429);
+  });
+
+  it.each([null, [], 42])("returns the same field errors for a non-object JSON body: %j", async (body) => {
+    const preflight = await call(request("POST", "/api/v1/notes/validate", { body }));
+    const publish = await call(request("POST", "/api/v1/notes", { body }));
+    expect(preflight.response.status).toBe(422);
+    expect(publish.response.status).toBe(422);
+    expect(publish.body!.error.code).toBe("VALIDATION_FAILED");
+    expect(publish.body!.error.issues).toEqual([{ path: "$", code: "INVALID_TYPE", message: "Expected an object." }]);
+    expect(preflight.body!.error.issues).toEqual(publish.body!.error.issues);
+  });
+});
+
 describe("reading, gallery and management", () => {
   async function create(visibility: "public" | "unlisted", key = KEY, title = "标题") {
-    const { body } = await call(request("POST", "/api/v1/notes", { key, body: { note: { ...aiNote, title }, visibility } }));
+    const { body } = await call(request("POST", "/api/v1/notes", { key, body: publication({ note: { ...aiNote, title }, visibility }) }));
     return body!;
   }
+
+  it("keeps legacy illustrations readable and completed requests replayable", async () => {
+    const legacyRequest = { text: "previous source" };
+    const reservation = await claimPublish(env.DB!, "key_owner", "legacy-request", sha(JSON.stringify(legacyRequest)), Date.now());
+    if (!("claim" in reservation)) throw new Error("Expected a legacy reservation");
+    const id = reservation.claim.noteId;
+    const doodle = { concept: "legacy circle", elements: [
+      { type: "circle" as const, cx: 50, cy: 50, r: 10, stroke: "ink" as const, fill: "none" as const, width: 2 },
+    ] };
+    await insertNote(env.DB!, {
+      id, schemaVersion: 0, apiKeyId: "key_owner", visibility: "unlisted", language: "zh", template: "general",
+      note: aiNote, settings: { ...DEFAULT_SETTINGS, doodleMode: "ai" }, stickers: [], doodle, now: Date.now(),
+    }, reservation.claim);
+    const { response, body } = await call(request("GET", `/api/notes/${id}`, { key: null }));
+    expect(response.status).toBe(200);
+    expect(body!.schemaVersion).toBe(0);
+    expect(body!.settings.doodleMode).toBe("ai");
+    expect(body!.doodle).toEqual(doodle);
+    expect(body!.note).toEqual(aiNote);
+    const replay = await call(request("POST", "/api/v1/notes", {
+      body: legacyRequest, headers: { "Idempotency-Key": "legacy-request" },
+    }));
+    expect(replay.response.status).toBe(200);
+    expect(replay.body!.id).toBe(id);
+    expect(replay.body!.schemaVersion).toBe(0);
+    expect(replay.body!.meta.replayed).toBe(true);
+    expect(replay.body!.meta).not.toHaveProperty("processing");
+    expect(replay.body!.meta).not.toHaveProperty("validation");
+    expect(replay.body).not.toHaveProperty("text");
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+
+  it("refuses corrupt version 1 snapshots instead of rewriting their content or settings", async () => {
+    const note = await create("unlisted");
+    const corruptNote = { ...note.note, sections: [{ content: "x".repeat(901), highlights: [] }] };
+    await env.DB!.prepare("UPDATE notes SET note_json = ? WHERE id = ?")
+      .bind(JSON.stringify(corruptNote), note.id).run();
+    const read = await call(request("GET", `/api/notes/${note.id}`, { key: null }));
+    expect(read.response.status).toBe(500);
+    expect(read.body!.error.code).toBe("INTERNAL_ERROR");
+    expect(read.body).not.toHaveProperty("note");
+    const stored = await env.DB!.prepare("SELECT note_json FROM notes WHERE id = ?")
+      .bind(note.id).first<{ note_json: string }>();
+    expect(JSON.parse(stored!.note_json)).toEqual(corruptNote);
+
+    await env.DB!.prepare("UPDATE notes SET note_json = ?, settings_json = ? WHERE id = ?")
+      .bind(JSON.stringify(note.note), JSON.stringify({ ...note.settings, doodleMode: "ai" }), note.id).run();
+    const invalidSettings = await call(request("GET", `/api/v1/notes/${note.id}`));
+    expect(invalidSettings.response.status).toBe(500);
+    expect(invalidSettings.body!.error.code).toBe("INTERNAL_ERROR");
+  });
 
   it("serves public and unlisted notes by id but lists only public ones in the gallery", async () => {
     const pub = await create("public", KEY, "公开");
@@ -271,7 +414,7 @@ describe("reading, gallery and management", () => {
 
   it("builds share links from PUBLIC_BASE_URL when configured", async () => {
     env.PUBLIC_BASE_URL = "https://ink.example.com/";
-    const { body } = await call(request("POST", "/api/v1/notes", { body: { note: aiNote } }));
+    const { body } = await call(request("POST", "/api/v1/notes", { body: publication() }));
     expect(body!.url).toBe(`https://ink.example.com/n/${body!.id}`);
   });
 
@@ -280,6 +423,17 @@ describe("reading, gallery and management", () => {
     const { body } = await call(request("GET", "/api/v1/openapi.json", { key: null }));
     expect(body!.servers).toEqual([{ url: "https://ink.example.com" }]);
     expect(Object.keys(body!.paths)).toContain("/api/v1/notes");
+    expect(Object.keys(body!.paths)).toContain("/api/v1/notes/validate");
+    const schema = body!.components.schemas.PublishRequest;
+    expect(schema.required).toEqual(["schemaVersion", "note"]);
+    expect(schema.properties).not.toHaveProperty("text");
+    expect(schema.properties.note.properties.sections.items.properties.content.maxLength).toBe(900);
+    const versions = body!.components.schemas.PublishedNote.allOf[1].oneOf;
+    expect(versions.map((version: any) => version.properties.schemaVersion.const)).toEqual([1, 0]);
+    expect(versions[0].properties.settings.$ref).toBe("#/components/schemas/Settings");
+    expect(versions[1].properties.settings.$ref).toBe("#/components/schemas/LegacySettings");
+    expect(body!.components.schemas.Settings.properties.doodleMode.enum).not.toContain("ai");
+    expect(body!.components.schemas.LegacySettings.properties.doodleMode.enum).toContain("ai");
   });
 });
 
@@ -290,7 +444,7 @@ describe("publish lease fencing", () => {
     const next = await claimPublish(env.DB!, "key_owner", "lease", "hash", 120_001);
     if (!("claim" in first) || !("claim" in next)) throw new Error("Expected both reservations");
     await releasePublish(env.DB!, first.claim);
-    const input = { id: first.claim.noteId, apiKeyId: "key_owner", visibility: "unlisted" as const,
+    const input = { id: first.claim.noteId, schemaVersion: 1 as const, apiKeyId: "key_owner", visibility: "unlisted" as const,
       language: "zh" as const, template: "general", note: aiNote, settings: DEFAULT_SETTINGS, stickers: [], now: 120_002 };
     expect(await insertNote(env.DB!, input, first.claim)).toBe(false);
     expect(await insertNote(env.DB!, { ...input, id: next.claim.noteId }, next.claim)).toBe(true);

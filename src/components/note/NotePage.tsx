@@ -1,15 +1,15 @@
-import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
+import { forwardRef, useCallback, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import { TEMPLATE_DEFAULT_THEME } from "../../../shared/themes.ts";
-import { ACCENTS, byId, fontStack, INKS, PAGE_SIZES, PAGE_WIDTH, PAPERS, usedFamilies } from "../../config/appearance.ts";
+import { ACCENTS, byId, fontStack, INKS, PAGE_SIZES, PAGE_WIDTH, PAPERS } from "../../config/appearance.ts";
 import { builtinDoodle } from "../../doodles/library.ts";
-import { loadFontCss } from "../../fonts.ts";
 import type { Settings } from "../../state/store.ts";
 import { StickerLayer } from "../../stickers/StickerLayer.tsx";
 import type { StickerItem } from "../../stickers/types.ts";
 import { LAYOUTS } from "./layouts.tsx";
 import { labelsFor } from "./parts.tsx";
+import { useNoteFit, type NoteFitState } from "./useNoteFit.ts";
 
 type Props = {
   note: NoteStructure;
@@ -22,6 +22,7 @@ type Props = {
   onSelectSticker: (id: string | null) => void;
   onChangeSticker: (id: string, patch: Partial<StickerItem>) => void;
   onRemoveSticker: (id: string) => void;
+  onFitChange?: (fit: NoteFitState) => void;
 };
 
 export function pageHeightFor(settings: Settings): number | null {
@@ -46,9 +47,13 @@ export function resolveDoodle(note: NoteStructure, settings: Settings, aiDoodle:
  * 导出时直接对该节点按 1x/2x/3x 渲染，保证字体、贴纸位置和旋转完全一致。
  */
 export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
-  { note, settings, stickers, aiDoodle, selectedStickerId, interactive, displayScale, onSelectSticker, onChangeSticker, onRemoveSticker },
+  { note, settings: authoredSettings, stickers, aiDoodle, selectedStickerId, interactive, displayScale, onSelectSticker, onChangeSticker, onRemoveSticker, onFitChange },
   ref,
 ) {
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const fit = useNoteFit(node, note, authoredSettings, aiDoodle);
+  const settings = fit.settings;
+  useLayoutEffect(() => { onFitChange?.(fit); }, [fit, onFitChange]);
   const height = pageHeightFor(settings);
   const paper = byId(PAPERS, settings.paper);
   const labels = useMemo(() => labelsFor(note), [note]);
@@ -57,7 +62,6 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   const minHeight = height ?? byId(PAGE_SIZES, "a4").height ?? 1188;
 
   // 长图的高度随内容变化：测量实际高度，让贴纸的拖动范围覆盖整页
-  const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [measuredHeight, setMeasuredHeight] = useState(minHeight);
   const setRefs = useCallback(
     (element: HTMLDivElement | null) => {
@@ -75,10 +79,6 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
     observer.observe(node);
     return () => observer.disconnect();
   }, [node, height]);
-
-  useEffect(() => {
-    for (const family of usedFamilies(settings.zhFont, settings.enFont)) void loadFontCss(family);
-  }, [settings.zhFont, settings.enFont]);
 
   const style = {
     width: PAGE_WIDTH,
@@ -101,6 +101,10 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
       ref={setRefs}
       // 界面是中文，笔记可能是英文：按笔记内容标注语言，读屏软件才能用正确的发音朗读
       lang={labels.lang}
+      aria-busy={fit.status === "pending"}
+      data-render-status={fit.status}
+      data-page-size={settings.pageSize}
+      data-render-expanded={fit.expanded}
       className={`note-page paper-${paper.id} layout-${settings.layout}${height ? "" : " is-long"}`}
       style={style}
       onPointerDown={(event) => {

@@ -5,10 +5,18 @@ import { createHash, randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://127.0.0.1:${PORT}/`;
-// 每次运行生成一个测试用 API 密钥，写入本地 D1（只保存哈希）
-const API_KEY = `isk_e2e_${randomBytes(16).toString("hex")}`;
+// 各场景使用独立的测试密钥，保留真实的每密钥限流阈值，避免验收互相消耗额度。
+// 所有密钥只写入本地 D1 的哈希，不使用生产密钥。
+const API_KEYS = Object.fromEntries(["main", "contract", "dense"].map((name) => [name, `isk_e2e_${randomBytes(16).toString("hex")}`]));
 // 下载的文件名包含中文，需要 UTF-8 locale，否则浏览器会改名为 "download"
-const env = { ...process.env, LANG: process.env.LANG || "C.UTF-8", E2E_BASE_URL: BASE_URL, E2E_API_KEY: API_KEY };
+const env = {
+  ...process.env,
+  LANG: process.env.LANG || "C.UTF-8",
+  E2E_BASE_URL: BASE_URL,
+  E2E_API_KEY: API_KEYS.main,
+  E2E_CONTRACT_API_KEY: API_KEYS.contract,
+  E2E_DENSE_API_KEY: API_KEYS.dense,
+};
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit", env });
@@ -30,10 +38,13 @@ async function waitForServer(url, timeoutMs) {
 
 if (!process.argv.includes("--skip-build")) run("npx", ["vite", "build", "--mode", "mock"]);
 run("npx", ["wrangler", "d1", "migrations", "apply", "ink-scribe", "--local"]);
-const keyHash = createHash("sha256").update(API_KEY).digest("hex");
+const keyRows = Object.entries(API_KEYS).map(([name, value]) => {
+  const hash = createHash("sha256").update(value).digest("hex");
+  return `('key_e2e_${name}', 'e2e ${name}', '${hash}', ${Date.now()})`;
+});
 run("npx", [
   "wrangler", "d1", "execute", "ink-scribe", "--local", "--command",
-  `INSERT OR REPLACE INTO api_keys (id, name, key_hash, created_at) VALUES ('key_e2e', 'e2e', '${keyHash}', ${Date.now()})`,
+  `INSERT OR REPLACE INTO api_keys (id, name, key_hash, created_at) VALUES ${keyRows.join(", ")}`,
 ]);
 
 // 预览服务只在本机通信，不需要外网；去掉代理变量，避免请求转发经过代理时偶发 “fetch failed”

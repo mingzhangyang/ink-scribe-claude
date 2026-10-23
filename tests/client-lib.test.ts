@@ -20,6 +20,13 @@ describe("splitHighlights", () => {
     ]);
   });
 
+  it("keeps earlier highlight priority and all text when a later phrase overlaps", () => {
+    expect(splitHighlights("Alpha beta gamma.", ["Alpha beta", "beta gamma"])).toEqual([
+      { text: "Alpha beta", highlight: 0 },
+      { text: " gamma.", highlight: null },
+    ]);
+  });
+
   it("is case-insensitive and keeps original casing", () => {
     expect(splitHighlights("Active Recall works", ["active recall"])).toEqual([
       { text: "Active Recall", highlight: 0 },

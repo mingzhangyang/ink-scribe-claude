@@ -4,7 +4,7 @@ import { loadConfig, type AppConfig } from "./config.ts";
 import type { Env } from "./env.ts";
 import { AppError, assertAllowedOrigin, discardUnreadBody, errorResponse, jsonResponse } from "./http.ts";
 import { logEvent, logRequest, recordMetrics, type RequestLog } from "./log.ts";
-import { OPENAPI_SPEC } from "./openapi.ts";
+import { openApiSpec } from "./openapi.ts";
 import { enforceRateLimit } from "./rate-limit.ts";
 import { handleDoodle } from "./routes/doodle.ts";
 import {
@@ -15,6 +15,7 @@ import {
   handleListNotes,
   handlePatchNote,
   handlePublicNote,
+  handleValidateNote,
 } from "./routes/notes.ts";
 import { handleStructure } from "./routes/structure.ts";
 import { findApiKey, touchApiKey, type ApiKeyRecord } from "./store.ts";
@@ -74,10 +75,11 @@ const ROUTES: Route[] = [
     access: "public",
     methods: {
       GET: async ({ origin }) =>
-        jsonResponse({ ...OPENAPI_SPEC, servers: [{ url: origin }] }, 200, { "Cache-Control": "public, max-age=300" }),
+        jsonResponse({ ...openApiSpec(), servers: [{ url: origin }] }, 200, { "Cache-Control": "public, max-age=300" }),
     },
   },
   { name: "/api/v1/notes", pattern: /^\/api\/v1\/notes$/, access: "key", methods: { POST: handleCreateNote, GET: handleListNotes } },
+  { name: "/api/v1/notes/validate", pattern: /^\/api\/v1\/notes\/validate$/, access: "key", methods: { POST: handleValidateNote } },
   {
     name: "/api/v1/notes/:id",
     pattern: new RegExp(`^/api/v1/notes/${ID}$`),

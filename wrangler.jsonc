@@ -16,7 +16,7 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/", "/gallery", "/gallery/", "/n/*", "/api/*", "/llms.txt", "/robots.txt", "/sitemap.xml"]
+    "run_worker_first": ["/", "/gallery", "/gallery/", "/guide", "/guide/", "/privacy", "/privacy/", "/terms", "/terms/", "/n/*", "/api/*", "/llms.txt", "/robots.txt", "/sitemap.xml"]
   },
 
   // Workers AI binding：所有模型调用都在 Worker 内发起，浏览器不接触任何凭据。

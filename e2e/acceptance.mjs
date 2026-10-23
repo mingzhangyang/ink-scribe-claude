@@ -4,6 +4,7 @@
 import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
+import { verifyFontRetry } from "./font-retry.mjs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
 const URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173/";
@@ -33,6 +34,55 @@ async function newPage(options = {}, init) {
     if (m.type() === "error" && !/status of (4|5)\d\d/.test(m.text())) page.errors.push(m.text());
   });
   return { context, page };
+}
+
+async function waitForNoteReady(page) {
+  await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30_000 });
+}
+
+async function openAppMenu(page) {
+  const toggle = page.locator(".app-menu-toggle");
+  if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+  await page.locator(".app-menu-panel").waitFor({ state: "visible" });
+}
+
+async function setAppPreference(page, preference, value) {
+  await openAppMenu(page);
+  await page.locator(`input[name="app-menu-${preference}"][value="${value}"]`).check();
+  await page.locator(".app-menu-toggle").click();
+}
+
+// Measure actual text ranges independently of the renderer's status flag. Rotated handwriting
+// may extend into a visible region's padding; only clipped regions and the paper edge matter.
+function inspectNoteLayout(el, expected = []) {
+  const bounds = el.getBoundingClientRect();
+  const tolerance = 2 * bounds.width / el.offsetWidth;
+  const text = el.innerText.replace(/\s+/g, "");
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let clipped = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!node.textContent.trim() || node.parentElement?.closest("svg, .sticker-layer, [data-export-ignore]")) continue;
+    range.selectNodeContents(node);
+    if ([...range.getClientRects()].some((r) => r.width > 0 && r.height > 0 &&
+      (r.top < bounds.top - tolerance || r.bottom > bounds.bottom + tolerance || r.left < bounds.left - tolerance || r.right > bounds.right + tolerance))) clipped++;
+  }
+  const overflowing = [...el.querySelectorAll("[data-fit]")].filter((region) => {
+    const style = getComputedStyle(region);
+    return (style.overflowY !== "visible" && region.scrollHeight > region.clientHeight + 2)
+      || (style.overflowX !== "visible" && region.scrollWidth > region.clientWidth + 2);
+  }).length;
+  return {
+    status: el.dataset.renderStatus,
+    height: el.offsetHeight,
+    width: el.offsetWidth,
+    expanded: el.dataset.renderExpanded,
+    pageSize: el.dataset.pageSize,
+    missing: expected.filter((value) => !text.includes(value.replace(/\s+/g, ""))).length,
+    clipped,
+    overflowing,
+  };
 }
 
 // ---------- A. 首屏 ----------
@@ -96,6 +146,7 @@ const fontInfo = await page.evaluate((t) => ({
   zhLoaded: document.fonts.check('20px "Ma Shan Zheng"', t),
 }), zhTitle);
 check("E1", "切换中英文字体，中文字体分片在生产构建中按需加载", fontInfo.stack.startsWith('Caveat, "Ma Shan Zheng"') && fontInfo.zhLoaded, JSON.stringify(fontInfo));
+await verifyFontRetry({ newPage, check, url: URL, outputDir: SP, mode: "editor" });
 
 await page.selectOption(".sample-picker select", "en-lecture");
 await page.getByRole("button", { name: /转化为手写笔记/ }).click();
@@ -137,6 +188,13 @@ check("G7", "手绘插图库五列完整显示在面板内且按钮为正方形"
 await page.getByTitle("和纸胶带 · 薄荷").click();
 const stickers = page.locator(".sticker");
 const first = stickers.nth(0);
+// 贴纸位于正文适配之外：拖动、缩放、旋转都不应让已完成的适配回到 pending
+await waitForNoteReady(page);
+await page.locator(".note-page").evaluate((el) => {
+  window.__fitStatuses = [];
+  window.__fitObserver = new MutationObserver(() => window.__fitStatuses.push(el.dataset.renderStatus));
+  window.__fitObserver.observe(el, { attributes: true, attributeFilter: ["data-render-status"] });
+});
 const before = await first.evaluate((el) => ({ left: el.style.left, top: el.style.top }));
 const box = await first.boundingBox();
 await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -158,6 +216,11 @@ await page.mouse.up();
 const transform = await first.evaluate((el) => el.style.transform);
 const m = transform.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
 check("G3", "旋转与缩放贴纸", !!m && Number(m[2]) > 1 && Math.abs(Number(m[1])) > 20, transform);
+const fitDuringDrag = await page.evaluate(() => {
+  window.__fitObserver.disconnect();
+  return window.__fitStatuses;
+});
+check("G8", "拖动、缩放和旋转贴纸不会重新适配页面", fitDuringDrag.length === 0, fitDuringDrag.join(","));
 await page.getByTitle("便利贴 · 黄").click();
 await page.getByRole("button", { name: "添加插图：书本·阅读" }).click();
 check("G1", "添加贴纸与插图", (await stickers.count()) === 3);
@@ -193,23 +256,90 @@ const rot1 = await stickers.nth(0).evaluate((el) => el.style.transform);
 check("G6", "贴纸重叠时选中贴纸的旋转手柄不被遮挡且可用", !covered && rot0 !== rot1 && (await stickers.nth(0).getAttribute("class")).includes("is-selected"), `${rot0} → ${rot1}`);
 await page.keyboard.press("Delete");
 
-// ---------- R1. 溢出时“精简后重新生成” ----------
+// ---------- R1. 字体就绪后自动适配，避免以裁切后的画布导出 ----------
 await page.getByRole("tab", { name: "样式" }).click();
 await page.locator(".range-field").filter({ hasText: "字号" }).locator("input").fill("28");
 await page.locator(".range-field").filter({ hasText: "行距" }).locator("input").fill("2.4");
-await page.waitForTimeout(300);
-const condenseBtn = page.getByRole("button", { name: "精简后重新生成" });
-const hasCondense = (await condenseBtn.count()) === 1;
-if (hasCondense) {
-  const [res] = await Promise.all([page.waitForResponse("**/api/structure"), condenseBtn.click()]);
-  const body = JSON.parse(res.request().postData());
-  await page.waitForTimeout(500);
-  check("R1", "内容溢出时提供“精简后重新生成”，并以精简档位重新请求", body.detail === "concise", `detail=${body.detail}`);
-} else {
-  check("R1", "内容溢出时提供“精简后重新生成”，并以精简档位重新请求", false, "按钮不存在");
+await waitForNoteReady(page);
+const autoFit = await page.locator(".note-page").evaluate(inspectNoteLayout);
+check("R1", "大字号内容在字体就绪后自动适配且没有裁切", autoFit.status === "ready" && autoFit.clipped === 0 && autoFit.overflowing === 0, JSON.stringify(autoFit));
+
+// Observe transitions as well as the final state: an unnecessary fit can finish between pointer events.
+// Use a known long document; the generated sample can fit A4 after typography adaptation.
+await page.getByRole("tab", { name: "内容" }).click();
+const originalFitContent = await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).inputValue();
+await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).fill("- Stable text.\n".repeat(60).trim());
+await waitForNoteReady(page);
+await page.getByRole("tab", { name: "贴纸" }).click();
+await page.evaluate(() => {
+  const node = document.querySelector(".note-page");
+  const snapshot = () => ({
+    status: node.dataset.renderStatus,
+    expanded: node.dataset.renderExpanded,
+    pageSize: node.dataset.pageSize,
+    height: node.offsetHeight,
+    fontSize: node.style.getPropertyValue("--fs"),
+    lineHeight: node.style.getPropertyValue("--lh"),
+  });
+  const originalLoad = document.fonts.load;
+  const probe = { before: snapshot(), fontLoads: 0, transitions: [] };
+  document.fonts.load = function (...args) {
+    probe.fontLoads++;
+    return originalLoad.apply(this, args);
+  };
+  const collect = (records) => {
+    for (const record of records) {
+      probe.transitions.push({ attribute: record.attributeName, old: record.oldValue, value: node.getAttribute(record.attributeName) });
+    }
+  };
+  const observer = new MutationObserver(collect);
+  observer.observe(node, { attributes: true, attributeOldValue: true, attributeFilter: ["data-render-status", "data-page-size", "data-render-expanded", "style"] });
+  window.finishStickerFitProbe = () => {
+    collect(observer.takeRecords());
+    observer.disconnect();
+    document.fonts.load = originalLoad;
+    delete window.finishStickerFitProbe;
+    return { ...probe, after: snapshot() };
+  };
+});
+await page.getByTitle("和纸胶带 · 薄荷").click();
+const movingSticker = page.locator(".sticker-tape");
+const geometryBefore = await movingSticker.evaluate((el) => ({ left: el.style.left, top: el.style.top, transform: el.style.transform }));
+const dragBox = await movingSticker.boundingBox();
+await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+await page.mouse.down();
+await page.mouse.move(dragBox.x + dragBox.width / 2 + 70, dragBox.y + dragBox.height / 2 + 40, { steps: 10 });
+await page.mouse.up();
+const geometryMoved = await movingSticker.evaluate((el) => ({ left: el.style.left, top: el.style.top }));
+for (const handle of [".handle-rotate", ".handle-scale"]) {
+  const bounds = await page.locator(handle).boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 60, bounds.y + 35, { steps: 10 });
+  await page.mouse.up();
 }
+const geometryAfter = await movingSticker.evaluate((el) => el.style.transform);
+await movingSticker.focus();
+await page.keyboard.press("Delete");
+const stickerFit = await page.evaluate(() => window.finishStickerFitProbe());
+const parsedBefore = geometryBefore.transform.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
+const parsedAfter = geometryAfter.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
+check(
+  "R2",
+  "扩展长图增删、拖动、旋转及缩放贴纸时保持排版就绪且不重新加载字体",
+  stickerFit.before.expanded === "true" && stickerFit.before.pageSize === "long" &&
+    geometryBefore.left !== geometryMoved.left && geometryBefore.top !== geometryMoved.top &&
+    parsedBefore && parsedAfter && parsedBefore[1] !== parsedAfter[1] && parsedBefore[2] !== parsedAfter[2] &&
+    stickerFit.fontLoads === 0 && stickerFit.transitions.length === 0 &&
+    JSON.stringify(stickerFit.before) === JSON.stringify(stickerFit.after),
+  JSON.stringify(stickerFit),
+);
+await page.getByRole("tab", { name: "内容" }).click();
+await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).fill(originalFitContent);
+await page.getByRole("tab", { name: "样式" }).click();
 await page.locator(".range-field").filter({ hasText: "字号" }).locator("input").fill("17");
 await page.locator(".range-field").filter({ hasText: "行距" }).locator("input").fill("1.6");
+await waitForNoteReady(page);
 
 // ---------- H. 导出 ----------
 await page.getByRole("tab", { name: "导出" }).click();
@@ -231,7 +361,7 @@ await jpg.saveAs(`${SP}/accept.jpg`);
 const jb = fs.readFileSync(`${SP}/accept.jpg`);
 check("H4", "导出 JPG", jb[0] === 0xff && jb[1] === 0xd8 && jpg.suggestedFilename().endsWith(".jpg"), `${jb.length} bytes`);
 const b64 = fs.readFileSync(`${SP}/accept-1x.png`).toString("base64");
-const handlePixels = await page.evaluate(async (data) => {
+const exportPixels = await page.evaluate(async (data) => {
   const img = new Image();
   img.src = `data:image/png;base64,${data}`;
   await img.decode();
@@ -246,9 +376,41 @@ const handlePixels = await page.evaluate(async (data) => {
     // 选框与手柄使用 #2563EB，当前墨水为复古棕、纸张为牛皮纸，正常内容不会出现该色
     if (Math.abs(px[i] - 0x25) < 18 && Math.abs(px[i + 1] - 0x63) < 18 && Math.abs(px[i + 2] - 0xeb) < 18) count++;
   }
-  return count;
+  // The 1x canvas has 56px side padding. Sample blank margins, away from the content,
+  // stickers and kraft's horizontal rules (y % 30 === 0). Allow the paper's noise texture.
+  const kraft = [0xd8, 0xbf, 0x98];
+  const rows = [12, 192, 642, Math.floor((img.height - 30) / 30) * 30 + 12];
+  const sums = [0, 0, 0, 0];
+  let samples = 0;
+  let paperLike = 0;
+  let opaque = 0;
+  for (const left of [16, img.width - 26]) {
+    for (const top of rows) {
+      for (let y = top; y < top + 10; y++) {
+        for (let x = left; x < left + 10; x++) {
+          const offset = (y * img.width + x) * 4;
+          const [r, g, b, a] = px.subarray(offset, offset + 4);
+          samples++;
+          sums[0] += r;
+          sums[1] += g;
+          sums[2] += b;
+          sums[3] += a;
+          if (a >= 250) opaque++;
+          if (a >= 250 && r >= g + 10 && g >= b + 20 &&
+            Math.abs(r - kraft[0]) <= 45 && Math.abs(g - kraft[1]) <= 45 && Math.abs(b - kraft[2]) <= 45) paperLike++;
+        }
+      }
+    }
+  }
+  return { handlePixels: count, paper: { samples, paperLike, opaque, meanRgba: sums.map((sum) => Math.round(sum / samples)) } };
 }, b64);
-check("H5", "导出图片不包含贴纸选框与手柄", framesBeforeExport === 1 && handlePixels === 0, `导出前选框 ${framesBeforeExport} 个，导出图中选框色像素 ${handlePixels}`);
+check("H5", "导出图片不包含贴纸选框与手柄", framesBeforeExport === 1 && exportPixels.handlePixels === 0, `导出前选框 ${framesBeforeExport} 个，导出图中选框色像素 ${exportPixels.handlePixels}`);
+check(
+  "H6",
+  "导出牛皮纸保留暖棕纸纹，背景不变黑或透明",
+  exportPixels.paper.paperLike >= exportPixels.paper.samples * 0.9 && exportPixels.paper.opaque >= exportPixels.paper.samples * 0.99,
+  JSON.stringify(exportPixels.paper),
+);
 
 // ---------- J. 剪贴板 ----------
 await page.getByRole("button", { name: "复制到剪贴板" }).click();
@@ -417,6 +579,42 @@ await context.close();
   await c4.close();
 }
 
+// ---------- N-FONT. 字体文件下载失败后，网络恢复即可重试 ----------
+{
+  const { page: pf, context: cf } = await newPage();
+  await pf.goto(URL, { waitUntil: "networkidle" });
+  await pf.selectOption(".sample-picker select", "zh-reading");
+  await pf.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await pf.waitForSelector(".badge-ai");
+  await waitForNoteReady(pf);
+  // 只拦截字体文件；按需加载的样式表照常返回，模拟字体分片下载时断网
+  const fontFiles = /ma-shan-zheng.*\.woff2?(\?.*)?$/;
+  let blocked = 0;
+  await pf.route(fontFiles, (route) => {
+    blocked += 1;
+    return route.abort("internetdisconnected");
+  });
+  await pf.getByRole("tab", { name: "样式" }).click();
+  await pf.locator(".field").filter({ hasText: "中文字体" }).locator("select").selectOption("ma-shan-zheng");
+  await pf.locator('.note-page[data-render-status="font-error"]').waitFor({ timeout: 30_000 });
+  await pf.getByRole("tab", { name: "导出" }).click();
+  const exportBlocked = await pf.getByRole("button", { name: "下载图片", exact: true }).isDisabled();
+  await pf.unroute(fontFiles);
+  await pf.locator('.note-fit-status[data-fit-status="font-error"]').getByRole("button", { name: "重试" }).click();
+  await waitForNoteReady(pf);
+  const recovered = await pf.evaluate(() => {
+    const title = document.querySelector(".note-title").textContent.replace(/\s+/g, "");
+    return document.fonts.check('20px "Ma Shan Zheng"', title);
+  });
+  check(
+    "N-FONT",
+    "字体下载失败时阻止导出，恢复网络后重试即可加载字体并解除阻止",
+    blocked > 0 && exportBlocked && recovered && await pf.getByRole("button", { name: "下载图片", exact: true }).isEnabled(),
+    `blocked ${blocked}, export blocked ${exportBlocked}, recovered ${recovered}`,
+  );
+  await cf.close();
+}
+
 // ---------- U. 上传文件生成笔记（文件在浏览器本地解析） ----------
 {
   const { page: p6, context: c6 } = await newPage();
@@ -481,20 +679,69 @@ await context.close();
 if (process.env.E2E_API_KEY) {
   const { page: p7, context: c7 } = await newPage();
   const auth = { Authorization: `Bearer ${process.env.E2E_API_KEY}` };
+  const contractAuth = { Authorization: `Bearer ${process.env.E2E_CONTRACT_API_KEY ?? process.env.E2E_API_KEY}` };
   const title = `E2E 公开笔记 ${Date.now()}`;
-  const created = await p7.request.post(`${URL}api/v1/notes`, {
-    headers: { ...auth, "Idempotency-Key": `e2e-${Date.now()}` },
-    data: {
-      note: { title, sections: [{ heading: "要点", content: "这是通过 API 发布的笔记。\n- 列表项", highlights: ["API"] }], summary: "总结一句话" },
-      template: "lecture-summary",
-      visibility: "public",
-      appearance: { paper: "kraft", ink: "brown", layout: "free-journal" },
-      stickers: [{ type: "star", x: 700, y: 120, variant: "gold" }],
+  const publishRequest = {
+    schemaVersion: 1,
+    note: {
+      title,
+      date: "2026年10月22日",
+      cues: [{ keyword: "发布", note: "agent 提供已整理的结构" }],
+      sections: [{ heading: "要点", content: "这是通过 API 发布的笔记。\n- 列表项", highlights: ["API"] }],
+      summary: "总结一句话",
+      doodleTheme: "book",
     },
+    template: "lecture-summary",
+    visibility: "public",
+    appearance: { paper: "kraft", ink: "brown", layout: "free-journal" },
+    stickers: [{ id: "e2e-star", type: "star", x: 700, y: 120, rotation: 0, scale: 1, variant: "gold" }],
+  };
+  const beforeValidation = await (await p7.request.get(`${URL}api/v1/notes?limit=50`, { headers: contractAuth })).json();
+  const validated = await p7.request.post(`${URL}api/v1/notes/validate`, { headers: contractAuth, data: publishRequest });
+  const validation = await validated.json();
+  const afterValidation = await (await p7.request.get(`${URL}api/v1/notes?limit=50`, { headers: contractAuth })).json();
+  check(
+    "V0a",
+    "agent 可预检结构，明确未验证排版且不创建笔记",
+    validated.status() === 200 && validation.valid === true && validation.schemaVersion === 1 &&
+      validation.validation?.structure === "passed" && validation.validation?.layout === "not_checked" &&
+      !Object.hasOwn(validation, "note") && JSON.stringify(beforeValidation) === JSON.stringify(afterValidation),
+    `HTTP ${validated.status()}`,
+  );
+
+  for (const field of ["schemaVersion", "note"]) {
+    const incomplete = { ...publishRequest };
+    delete incomplete[field];
+    const response = await p7.request.post(`${URL}api/v1/notes`, { headers: contractAuth, data: incomplete });
+    const body = await response.json();
+    check(`V0-${field}`, `缺少 ${field} 时返回可修正的字段错误`, response.status() === 422 && body.error?.code === "VALIDATION_FAILED" && body.error.issues?.some((issue) => issue.path === field), `HTTP ${response.status()}`);
+  }
+  const rejectedSource = `E2E_SOURCE_MUST_NOT_BE_ACCEPTED_${Date.now()}`;
+  for (const [name, data] of [["text-only", { text: rejectedSource }], ["text-and-note", { ...publishRequest, text: rejectedSource }]]) {
+    const response = await p7.request.post(`${URL}api/v1/notes`, { headers: contractAuth, data });
+    const body = await response.json();
+    check(`V0-${name}`, `拒绝 ${name} 旧调用且不回显原文`, response.status() === 422 && body.error?.code === "VALIDATION_FAILED" && body.error.issues?.some((issue) => issue.path === "text") && !JSON.stringify(body).includes(rejectedSource), `HTTP ${response.status()}`);
+  }
+  const oversized = { ...publishRequest, note: { ...publishRequest.note, sections: [{ content: "字".repeat(901), highlights: [] }] } };
+  const rejectedOversize = await p7.request.post(`${URL}api/v1/notes/validate`, { headers: contractAuth, data: oversized });
+  const oversizeError = await rejectedOversize.json();
+  check("V0b", "超长正文被拒绝而不静默截断", rejectedOversize.status() === 422 && oversizeError.error?.issues?.some((issue) => issue.path === "note.sections[0].content"), `HTTP ${rejectedOversize.status()}`);
+
+  const idempotencyKey = `e2e-${Date.now()}`;
+  const created = await p7.request.post(`${URL}api/v1/notes`, {
+    headers: { ...auth, "Idempotency-Key": idempotencyKey },
+    data: publishRequest,
   });
   const note = await created.json();
-  check("V1", "API 密钥发布笔记并返回链接", created.status() === 201 && /\/n\/[A-Za-z0-9_-]{22}$/.test(note.url), `${created.status()} ${note.url}`);
-  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: { note: { title: "x", sections: [{ content: "y" }] } } });
+  check("V1", "agent 无需原文即可发布完整结构并返回链接", created.status() === 201 && note.schemaVersion === 1 && /\/n\/[A-Za-z0-9_-]{22}$/.test(note.url), `${created.status()} ${note.url}`);
+  if (created.status() !== 201) throw new Error(`Agent publication failed: ${JSON.stringify(note)}`);
+  check("V1b", "发布保留已整理内容并声明结构验证范围", JSON.stringify(note.note) === JSON.stringify(publishRequest.note) && note.meta?.processing === "agent" && note.meta?.validation?.layout === "not_checked" && !Object.hasOwn(note, "text") && !Object.hasOwn(note.meta, "model"));
+  const replayed = await p7.request.post(`${URL}api/v1/notes`, { headers: { ...auth, "Idempotency-Key": idempotencyKey }, data: publishRequest });
+  const replay = await replayed.json();
+  check("V1c", "结构发布重试返回同一笔记与明确元数据", replayed.status() === 200 && replay.id === note.id && replay.meta?.replayed === true && replay.meta?.processing === "agent");
+  const publicData = await (await p7.request.get(`${URL}api/notes/${note.id}`)).json();
+  check("V1d", "公开 JSON 保留结构并不暴露原文字段", publicData.schemaVersion === 1 && JSON.stringify(publicData.note) === JSON.stringify(publishRequest.note) && !Object.hasOwn(publicData, "text"));
+  const unauth = await p7.request.post(`${URL}api/v1/notes`, { data: publishRequest });
   check("V2", "没有密钥时拒绝发布", unauth.status() === 401);
 
   const shareResponse = await p7.request.get(note.url);
@@ -503,7 +750,7 @@ if (process.env.E2E_API_KEY) {
   check("V3b", "分享链接的 HTML 直接包含笔记正文与 Article 结构化数据", html.includes(`<h1>${title}</h1>`) && html.includes("<li>列表项</li>") && html.includes('"@type":"Article"') && html.includes(`<link rel="canonical" href="${note.url}"`));
 
   await p7.goto(note.url, { waitUntil: "networkidle" });
-  await p7.waitForSelector(".note-page");
+  await waitForNoteReady(p7);
   const view = await p7.evaluate(() => ({
     title: document.querySelector(".note-title")?.textContent ?? "",
     cls: document.querySelector(".note-page")?.className ?? "",
@@ -511,6 +758,7 @@ if (process.env.E2E_API_KEY) {
     handles: document.querySelectorAll(".sticker-selection").length,
   }));
   check("V4", "查看页按发布时的外观只读渲染", view.title.includes("E2E") && view.cls.includes("paper-kraft") && view.cls.includes("layout-free-journal") && view.stickers === 1 && view.handles === 0, JSON.stringify(view));
+  await verifyFontRetry({ newPage, check, url: note.url, outputDir: SP, mode: "view" });
 
   // 回归：浏览器带缓存校验头（If-None-Match）再次打开链接时仍应返回完整页面（曾因转发该头而得到 Not Found）
   const shellEtag = (await p7.request.get(URL)).headers()["etag"] ?? "";
@@ -532,18 +780,103 @@ if (process.env.E2E_API_KEY) {
   }));
   check("V6", "从查看页把笔记（含外观与贴纸）载入编辑器", editor.badge.includes("已发布") && editor.stickers === 1 && editor.cls.includes("paper-kraft"), JSON.stringify(editor));
 
-  const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, { headers: auth, data: { note: { title: `E2E 隐藏 ${Date.now()}`, sections: [{ content: "仅链接可见" }] } } })).json();
+  const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, {
+    headers: auth,
+    data: { schemaVersion: 1, note: { title: `E2E 隐藏 ${Date.now()}`, cues: [], sections: [{ content: "仅链接可见", highlights: [] }], summary: "" } },
+  })).json();
   const gallery = await (await p7.request.get(`${URL}api/gallery?limit=50`)).json();
   const unlistedHtml = await (await p7.request.get(unlisted.url)).text();
   check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
 
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
-  await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
+  const unlistedRemoved = await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
+  const unlistedGone = await p7.request.get(`${URL}api/notes/${unlisted.id}`);
+  check("V8", "仅链接可见的笔记也能删除且不能继续读取", unlistedRemoved.status() === 204 && unlistedGone.status() === 404, `DELETE ${unlistedRemoved.status()}，GET ${unlistedGone.status()}`);
   await p7.goto(note.url, { waitUntil: "networkidle" });
   const goneText = await p7.locator(".empty-state").innerText({ timeout: 10000 }).catch(async () => `[未找到提示] ${(await p7.locator("main").innerText()).slice(0, 80)}`);
   check("V9", "删除后链接显示“不存在”", removed.status() === 204 && goneText.includes("不存在"), `DELETE ${removed.status()}；${goneText}`);
   check("V10", "发布与查看流程无脚本错误", p7.errors.length === 0, p7.errors.join("; "));
   await c7.close();
+}
+
+// ---------- W. agent 的完整长内容在全部版式中可读、可导出 ----------
+if (process.env.E2E_API_KEY) {
+  const { page: p12, context: c12 } = await newPage();
+  const auth = { Authorization: `Bearer ${process.env.E2E_DENSE_API_KEY ?? process.env.E2E_API_KEY}` };
+  const fillText = (length, start, end) => start + "完整排版内容。".repeat(length).slice(0, length - start.length - end.length) + end;
+  const denseNote = {
+    title: "长内容完整性验收",
+    date: "2026年10月22日",
+    cues: Array.from({ length: 8 }, (_, i) => ({ keyword: `线索 ${i + 1}`, note: fillText(120, `线索${i + 1}：`, `线索${i + 1}结束`) })),
+    sections: Array.from({ length: 6 }, (_, i) => ({
+      heading: `段落 ${i + 1}`,
+      content: fillText(900, `正文${i + 1}：`, `正文${i + 1}结束`),
+      highlights: ["完整排版"],
+    })),
+    summary: fillText(400, "最后的总结：", "全文保留结束"),
+  };
+  const expectedText = [...denseNote.cues.map((cue) => cue.note), ...denseNote.sections.map((section) => section.content), denseNote.summary];
+  const ids = [];
+
+  for (const layout of ["hybrid-cornell", "classic-cornell", "free-journal", "minimal"]) {
+    const response = await p12.request.post(`${URL}api/v1/notes`, {
+      headers: auth,
+      data: {
+        schemaVersion: 1,
+        note: denseNote,
+        appearance: { layout, pageSize: "a4", overflow: "expand", naturalness: 0, doodleMode: "none", fontSize: 19, lineHeight: 1.75 },
+      },
+    });
+    const publication = await response.json();
+    if (response.status() !== 201) throw new Error(`Dense ${layout} publication failed: ${JSON.stringify(publication)}`);
+    ids.push(publication.id);
+    await p12.goto(publication.url, { waitUntil: "networkidle" });
+    await waitForNoteReady(p12);
+    const geometry = await p12.locator(".note-page").evaluate(inspectNoteLayout, expectedText);
+    check(
+      `W-${layout}`,
+      `${layout} 最大合法正文、线索与总结全部可见`,
+      geometry.expanded === "true" && geometry.pageSize === "long" && geometry.height > 1188 && geometry.missing === 0 && geometry.clipped === 0 && geometry.overflowing === 0,
+      JSON.stringify(geometry),
+    );
+    const [download] = await Promise.all([
+      p12.waitForEvent("download", { timeout: 60_000 }),
+      p12.getByRole("button", { name: "下载图片", exact: true }).click(),
+    ]);
+    const file = `${SP}/published-${layout}.png`;
+    await download.saveAs(file);
+    const dimensions = pngSize(file);
+    check(
+      `W-export-${layout}`,
+      `${layout} PNG 覆盖适配后的完整页面`,
+      dimensions.sig === "PNG" && dimensions.h > 1188 && dimensions.w * dimensions.h <= 16_000_000 &&
+        // Canvas rounds both scaled dimensions to whole pixels; width rounding is amplified by a long page's aspect ratio.
+        Math.abs(dimensions.h - geometry.height * dimensions.w / geometry.width) <= 1 + geometry.height / geometry.width,
+      `${dimensions.w}×${dimensions.h}; page ${geometry.width}×${geometry.height}`,
+    );
+  }
+
+  const strictResponse = await p12.request.post(`${URL}api/v1/notes`, {
+    headers: auth,
+    data: { schemaVersion: 1, note: denseNote, appearance: { layout: "classic-cornell", pageSize: "a4", overflow: "error", naturalness: 0, doodleMode: "none" } },
+  });
+  const strict = await strictResponse.json();
+  if (strictResponse.status() !== 201) throw new Error(`Strict layout publication failed: ${JSON.stringify(strict)}`);
+  ids.push(strict.id);
+  await p12.goto(strict.url, { waitUntil: "networkidle" });
+  await p12.locator('.note-page[data-render-status="overflow"]').waitFor({ timeout: 30_000 });
+  check(
+    "W-strict",
+    "固定页面溢出明确提示并禁用导出",
+    await p12.locator('.note-fit-status[data-fit-status="overflow"]').isVisible() &&
+      await p12.getByRole("button", { name: "下载图片", exact: true }).isDisabled() &&
+      await p12.locator(".note-page").getAttribute("data-page-size") === "a4",
+  );
+  check("W-errors", "长内容与严格页面流程无脚本错误", p12.errors.length === 0, p12.errors.join("; "));
+  const cleanupStatuses = [];
+  for (const id of ids) cleanupStatuses.push((await p12.request.delete(`${URL}api/v1/notes/${id}`, { headers: auth })).status());
+  check("W-cleanup", "全部长内容测试笔记成功删除", cleanupStatuses.every((status) => status === 204), cleanupStatuses.join(", "));
+  await c12.close();
 }
 
 // ---------- S. SEO 与 GEO ----------
@@ -580,9 +913,269 @@ if (process.env.E2E_API_KEY) {
   check("S5", "图标、OG 图与 Web App Manifest 可访问", Object.values(assets).every((v) => v === "ok") && manifest.icons?.length === 3, JSON.stringify(assets));
 
   const llms = await (await p8.request.get(`${URL}llms.txt`)).text();
-  check("S6", "llms.txt 介绍产品、页面与 API", llms.includes("## 页面") && llms.includes("/api/v1/notes"));
+  check("S6", "llms.txt 介绍产品、页面与结构发布/预检", llms.includes("## 页面") && llms.includes("/api/v1/notes/validate") && llms.includes("schemaVersion"));
   check("S7", "SEO 页面无脚本错误", p8.errors.length === 0, p8.errors.join("; "));
   await c8.close();
+}
+
+// ---------- U. 使用说明、机器可读示例与站点菜单 ----------
+{
+  const { page: guide, context: guideContext } = await newPage({ colorScheme: "light" });
+  const directResponses = [];
+  for (const [path, language, htmlLang] of [["guide", "zh-CN", "zh-CN"], ["guide/", "en-US", "en"]]) {
+    const response = await guide.request.get(`${URL}${path}`, { headers: { "Accept-Language": language } });
+    const html = await response.text();
+    directResponses.push({
+      path,
+      status: response.status(),
+      valid: response.status() === 200 && html.includes(`<html lang="${htmlLang}"`) &&
+        html.includes(`<link rel="canonical" href="${URL}guide"`) &&
+        ["users", "agents", "faq"].every((id) => html.includes(`id="${id}"`) && html.includes(`href="#${id}"`)) &&
+        html.includes('data-guide-code="json"') && html.includes("/api/v1/notes/validate") &&
+        (response.headers().vary ?? "").toLowerCase().includes("accept-language"),
+    });
+  }
+  check("U1", "说明页和尾斜杠直达均返回完整双语 HTML 与统一 canonical", directResponses.every((response) => response.valid), JSON.stringify(directResponses));
+
+  const { page: noJs, context: noJsContext } = await newPage({ javaScriptEnabled: false, locale: "en-US", viewport: { width: 390, height: 844 } });
+  await noJs.goto(`${URL}guide/`, { waitUntil: "networkidle" });
+  const staticExample = JSON.parse(await noJs.locator('[data-guide-code="json"]').textContent());
+  check(
+    "U2",
+    "禁用 JavaScript 仍能阅读用户/agent/FAQ 和完整 JSON、机器规范链接",
+    await noJs.locator("#users").isVisible() && await noJs.locator("#agents").isVisible() && await noJs.locator("#faq").isVisible() &&
+      staticExample.schemaVersion === 1 && staticExample.note.sections.length > 0 && !("text" in staticExample) &&
+      await noJs.locator('a[href$="/api/v1/openapi.json"]').count() > 0 && await noJs.locator('a[href$="/llms.txt"]').count() > 0,
+  );
+  await noJsContext.close();
+
+  await guide.goto(URL, { waitUntil: "networkidle" });
+  const source = "菜单导航之后，这段尚在编辑的原文必须保留。";
+  const title = "菜单往返保留的标题";
+  await guide.locator(".source-text").fill(source);
+  await guide.getByRole("tab", { name: "内容", exact: true }).click();
+  await guide.locator(".content-editor input").first().fill(title);
+  await openAppMenu(guide);
+  await guide.locator('.app-nav a[href="/guide"]').click();
+  await guide.locator("main.guide-page").waitFor();
+  const zhHeading = await guide.locator("main.guide-page h1").innerText();
+  check(
+    "U3",
+    "通过站点菜单进入说明页，当前项正确且菜单自动收起",
+    new globalThis.URL(guide.url()).pathname === "/guide" &&
+      await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" &&
+      await guide.locator('.app-nav a[href="/guide"]').getAttribute("aria-current") === "page",
+  );
+  await guide.screenshot({ path: `${SP}/guide-desktop.png` });
+
+  await guide.locator('main.guide-page a[href="#agents"]').click();
+  const anchor = await guide.evaluate(() => ({ hash: location.hash, top: document.getElementById("agents").getBoundingClientRect().top }));
+  check("U4", "说明页目录会跳到真实的 agent 章节", anchor.hash === "#agents" && anchor.top >= 0 && anchor.top < 160, JSON.stringify(anchor));
+  await guideContext.grantPermissions(["clipboard-read", "clipboard-write"], { origin: ORIGIN });
+  const copied = [];
+  for (const kind of ["json", "curl"]) {
+    const displayed = await guide.locator(`[data-guide-code="${kind}"]`).innerText();
+    await guide.locator(`[data-guide-copy="${kind}"]`).click();
+    const clipboard = await guide.evaluate(() => navigator.clipboard.readText());
+    copied.push(clipboard === displayed && (await guide.locator(`[data-guide-copy-status="${kind}"]`).textContent()).includes("已复制"));
+  }
+  check("U5", "JSON 与 curl 复制按钮写入完整示例并反馈成功", copied.every(Boolean));
+
+  // Keep the anchor in the URL while opening preferences at the top. A locale
+  // update must not restore the old anchor and move the still-open menu away.
+  await guide.evaluate(() => window.scrollTo(0, 0));
+  await openAppMenu(guide);
+  await guide.locator('input[name="app-menu-locale"][value="en"]').check();
+  await guide.waitForFunction(() => document.documentElement.lang === "en");
+  const menuAfterLocale = await guide.evaluate(() => {
+    const panel = document.querySelector(".app-menu-panel");
+    const bounds = panel.getBoundingClientRect();
+    return {
+      scrollY,
+      hash: location.hash,
+      expanded: document.querySelector(".app-menu-toggle").getAttribute("aria-expanded"),
+      visible: !panel.hidden && bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.height > 0,
+    };
+  });
+  const enHeading = await guide.locator("main.guide-page h1").innerText();
+  const englishExample = JSON.parse(await guide.locator('[data-guide-code="json"]').innerText());
+  const englishCurl = await guide.locator('[data-guide-code="curl"]').innerText();
+  check(
+    "U6",
+    "切换英文同步更新说明与示例，保留顶部展开菜单而不重跳旧锚点",
+    enHeading !== zhHeading && (await guide.locator("html").getAttribute("lang")) === "en" &&
+      (await guide.title()).includes("guide") && englishExample.note.title === staticExample.note.title &&
+      englishCurl.includes(ORIGIN) && await guide.locator('.app-nav a[href="/guide"]').innerText() === "Guide" &&
+      menuAfterLocale.hash === "#agents" && Math.abs(menuAfterLocale.scrollY) <= 1 && menuAfterLocale.expanded === "true" && menuAfterLocale.visible,
+    JSON.stringify(menuAfterLocale),
+  );
+  // Only interact again after measuring, so Playwright cannot auto-scroll and
+  // hide a regression in the language switch above.
+  await guide.locator(".app-menu-toggle").click();
+
+  await setAppPreference(guide, "theme", "dark");
+  const darkGuide = await guide.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    color: getComputedStyle(document.querySelector("main.guide-page")).color,
+  }));
+  await guide.screenshot({ path: `${SP}/guide-dark.png` });
+  await setAppPreference(guide, "theme", "light");
+  const lightGuide = await guide.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    color: getComputedStyle(document.querySelector("main.guide-page")).color,
+  }));
+  check("U7", "说明页支持深色与浅色主题", darkGuide.theme === "dark" && lightGuide.theme === "light" && darkGuide.color !== lightGuide.color, JSON.stringify({ darkGuide, lightGuide }));
+
+  await openAppMenu(guide);
+  await guide.keyboard.press("Escape");
+  check("U8", "Escape 收起菜单并将焦点归还菜单按钮", await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" && await guide.locator(".app-menu-toggle").evaluate((element) => element === document.activeElement));
+  await openAppMenu(guide);
+  await guide.locator("main.guide-page h1").click();
+  check("U9", "点击菜单外部可收起菜单", await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false");
+  await openAppMenu(guide);
+  await guide.locator('.app-nav a[href="/"]').click();
+  await guide.locator(".source-text").waitFor();
+  check(
+    "U10",
+    "菜单往返说明页后原文和已编辑的笔记保持不变",
+    await guide.locator(".source-text").inputValue() === source && await guide.locator(".note-title").first().innerText() === title &&
+      await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false",
+  );
+
+  await guide.goto(`${URL}guide#agents`, { waitUntil: "networkidle" });
+  await guide.locator("main.guide-page").waitFor();
+  const deepLink = await guide.evaluate(() => ({ top: document.getElementById("agents").getBoundingClientRect().top, hash: location.hash }));
+  check("U11", "直接访问章节链接在 React 挂载后仍定位正确", deepLink.hash === "#agents" && deepLink.top >= 0 && deepLink.top < 160, JSON.stringify(deepLink));
+
+  const mobile = [];
+  for (const locale of ["zh", "en"]) {
+    await setAppPreference(guide, "locale", locale);
+    for (const width of [320, 390]) {
+      await guide.setViewportSize({ width, height: 844 });
+      const closed = await guide.evaluate(() => ({
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        codesContained: [...document.querySelectorAll("[data-guide-code]")].every((element) => element.getBoundingClientRect().right <= innerWidth && element.clientWidth <= innerWidth),
+      }));
+      await openAppMenu(guide);
+      const opened = await guide.evaluate(() => {
+        const bounds = document.querySelector(".app-menu-panel").getBoundingClientRect();
+        return { overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, contained: bounds.left >= 0 && bounds.right <= innerWidth };
+      });
+      mobile.push({ locale, width, valid: closed.overflow <= 0 && closed.codesContained && opened.overflow <= 0 && opened.contained });
+      if (locale === "zh" && width === 390) await guide.screenshot({ path: `${SP}/guide-mobile-menu.png` });
+      await guide.locator(".app-menu-toggle").click();
+    }
+  }
+  check("U12", "320/390px 中英文说明页和展开菜单均无整体横向溢出", mobile.every((item) => item.valid), JSON.stringify(mobile));
+  check("U13", "说明页与菜单流程无脚本错误", guide.errors.length === 0, guide.errors.join("; "));
+  await guideContext.close();
+}
+
+// ---------- LG. 隐私政策与使用条款 ----------
+{
+  const { page: legal, context: legalContext } = await newPage({ viewport: { width: 320, height: 844 } });
+  const responses = [];
+  for (const kind of ["privacy", "terms"]) {
+    for (const [suffix, language, htmlLang] of [["", "zh-CN", "zh-CN"], ["/", "en-US", "en"]]) {
+      const response = await legal.request.get(`${URL}${kind}${suffix}`, { headers: { "Accept-Language": language } });
+      const html = await response.text();
+      responses.push({
+        path: `${kind}${suffix}`,
+        status: response.status(),
+        valid: response.status() === 200 && html.includes('<main class="legal-page"') &&
+          html.includes(`<html lang="${htmlLang}"`) && html.includes(`<link rel="canonical" href="${URL}${kind}"`) &&
+          (response.headers().vary ?? "").toLowerCase().includes("accept-language"),
+      });
+    }
+  }
+  check("LG1", "隐私/条款及尾斜杠路径均提供双语 SSR 和统一 canonical", responses.every((response) => response.valid), JSON.stringify(responses));
+
+  const inspectLegal = () => ({
+    heading: document.querySelector("main.legal-page h1")?.textContent ?? "",
+    title: document.title,
+    lang: document.documentElement.lang,
+    sections: [...document.querySelectorAll("main.legal-page section.legal-section[id]")].map((section) => {
+      const heading = section.querySelector("h2")?.cloneNode(true);
+      heading?.querySelectorAll('[aria-hidden="true"]').forEach((element) => element.remove());
+      return {
+        id: section.id,
+        title: heading?.textContent.trim() ?? "",
+        readable: [...section.querySelectorAll("p, li")].some((element) => element.textContent.trim().length > 0),
+      };
+    }),
+    anchorsValid: [...document.querySelectorAll('main.legal-page a[href^="#"]')].every((link) => document.getElementById(link.getAttribute("href").slice(1))),
+    links: [...document.querySelectorAll("main.legal-page a[href]")].map((link) => link.getAttribute("href")),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  });
+  const { page: staticLegal, context: staticLegalContext } = await newPage({ javaScriptEnabled: false, locale: "en-US", viewport: { width: 320, height: 844 } });
+  const staticPages = {};
+  for (const kind of ["privacy", "terms"]) {
+    await staticLegal.goto(`${URL}${kind}/`, { waitUntil: "networkidle" });
+    staticPages[kind] = await staticLegal.evaluate(inspectLegal);
+  }
+  check(
+    "LG2",
+    "禁用 JavaScript 可完整阅读两份政策，目录和相互链接有效",
+    Object.entries(staticPages).every(([kind, state]) => state.lang === "en" && state.heading && state.sections.length > 1 &&
+      state.sections.every((section) => section.title && section.readable) && state.anchorsValid &&
+      state.links.includes(`/${kind === "privacy" ? "terms" : "privacy"}`) && state.links.includes("/guide") && state.overflow <= 0),
+  );
+  await staticLegalContext.close();
+
+  await legal.goto(URL, { waitUntil: "networkidle" });
+  await openAppMenu(legal);
+  await legal.locator('.menu-legal-link[href="/privacy"]').click();
+  await legal.locator("main.legal-page").waitFor();
+  const privacyZh = await legal.evaluate(inspectLegal);
+  check(
+    "LG3",
+    "手机菜单可进入隐私政策，当前项正确且菜单自动关闭",
+    new globalThis.URL(legal.url()).pathname === "/privacy" && privacyZh.lang === "zh-CN" &&
+      await legal.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" &&
+      await legal.locator('.menu-legal-link[href="/privacy"]').getAttribute("aria-current") === "page",
+  );
+  await setAppPreference(legal, "locale", "en");
+  const privacyEn = await legal.evaluate(inspectLegal);
+  await legal.screenshot({ path: `${SP}/privacy-mobile.png` });
+  await legal.evaluate(() => { window.legalSpaVisit = "preserved"; });
+  await legal.locator('main.legal-page a[href="/terms"]').last().click();
+  await legal.waitForURL(`${URL}terms`);
+  const termsEn = await legal.evaluate(inspectLegal);
+  check(
+    "LG4",
+    "政策相关链接通过客户端路由切换，英文各章节与 SSR 一致",
+    await legal.evaluate(() => window.legalSpaVisit === "preserved") &&
+      JSON.stringify(privacyEn.sections) === JSON.stringify(staticPages.privacy.sections) &&
+      JSON.stringify(termsEn.sections) === JSON.stringify(staticPages.terms.sections) &&
+      await legal.locator('.menu-legal-link[href="/terms"]').getAttribute("aria-current") === "page",
+  );
+  await setAppPreference(legal, "locale", "zh");
+  const termsZh = await legal.evaluate(inspectLegal);
+  await legal.screenshot({ path: `${SP}/terms-mobile.png` });
+  check(
+    "LG5",
+    "两份政策随语言切换更新标题与正文，320px 中英文均无横向溢出",
+    privacyZh.heading !== privacyEn.heading && privacyZh.title !== privacyEn.title &&
+      termsZh.heading !== termsEn.heading && termsZh.title !== termsEn.title && termsZh.lang === "zh-CN" &&
+      [privacyZh, privacyEn, termsZh, termsEn].every((state) => state.overflow <= 0 && state.anchorsValid && state.sections.every((section) => section.readable)),
+  );
+
+  const termsAnchor = staticPages.terms.sections[1].id;
+  await legal.locator(`main.legal-page a[href="#${termsAnchor}"]`).click();
+  const clickedAnchor = await legal.evaluate((id) => ({ hash: location.hash, top: document.getElementById(id).getBoundingClientRect().top }), termsAnchor);
+  const privacyAnchor = staticPages.privacy.sections[1].id;
+  await legal.goto(`${URL}privacy/#${privacyAnchor}`, { waitUntil: "networkidle" });
+  await legal.locator(".app-menu-toggle").waitFor();
+  const directAnchor = await legal.evaluate((id) => ({ hash: location.hash, top: document.getElementById(id).getBoundingClientRect().top }), privacyAnchor);
+  check(
+    "LG6",
+    "政策目录和尾斜杠章节深链接在客户端挂载后均定位正确",
+    clickedAnchor.hash === `#${termsAnchor}` && clickedAnchor.top >= 0 && clickedAnchor.top < 160 &&
+      directAnchor.hash === `#${privacyAnchor}` && directAnchor.top >= 0 && directAnchor.top < 160,
+    JSON.stringify({ clickedAnchor, directAnchor }),
+  );
+  check("LG7", "法律页面与菜单导航无脚本错误", legal.errors.length === 0, legal.errors.join("; "));
+  await legalContext.close();
 }
 
 // ---------- T. 界面语言与外观主题 ----------
@@ -607,13 +1200,11 @@ if (process.env.E2E_API_KEY) {
   );
   check("T2", "系统为浅色时默认使用浅色主题", en.theme === "light" && en.bg !== "rgb(24, 24, 27)", `${en.theme} ${en.bg}`);
 
-  await p9.click(".pref-lang");
+  await setAppPreference(p9, "locale", "zh");
   const zh = await state();
   check("T3", "切换为中文界面，未修改的示例笔记随之切换", zh.lang === "zh-CN" && zh.brand === "墨语笔记" && zh.title.includes("深度工作"), JSON.stringify(zh));
 
-  // 跟随系统 → 浅色 → 深色
-  await p9.click(".pref-btn:not(.pref-lang)");
-  await p9.click(".pref-btn:not(.pref-lang)");
+  await setAppPreference(p9, "theme", "dark");
   const dark = await state();
   check("T4", "可手动切换为深色主题", dark.theme === "dark" && dark.bg === "rgb(24, 24, 27)", `${dark.theme} ${dark.bg}`);
 
@@ -628,7 +1219,7 @@ if (process.env.E2E_API_KEY) {
   await p9.selectOption(".sample-picker select", "en-lecture");
   await p9.click(".input-panel .btn-primary");
   await p9.waitForSelector(".loading-overlay");
-  await p9.click(".pref-lang");
+  await setAppPreference(p9, "locale", "en");
   await p9.waitForSelector(".loading-overlay", { state: "detached", timeout: 20_000 });
   const midSwitch = await p9.evaluate(() => ({
     title: document.querySelector(".note-title")?.textContent ?? "",
@@ -670,7 +1261,7 @@ if (process.env.E2E_API_KEY) {
   await p11.waitForSelector(".alert-error");
   await p11.locator('input[type="file"]').setInputFiles({ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") });
   await p11.waitForSelector(".upload-row + div .hint.is-error");
-  await p11.click(".pref-lang");
+  await setAppPreference(p11, "locale", "en");
   const afterSwitch = await p11.evaluate(() => ({
     alert: document.querySelector(".alert-error strong")?.textContent ?? "",
     retry: document.querySelector(".alert-error .btn")?.textContent ?? "",
@@ -745,7 +1336,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.goto(URL, { waitUntil: "networkidle" });
   await page.locator(".source-text").fill("已有输入的示例笔记");
   await page.locator('[data-draft-status="saved"]').waitFor();
-  await page.locator(".pref-lang").click();
+  await setAppPreference(page, "locale", "en");
   await page.locator('[data-draft-status="saved"]').waitFor();
   const title = await page.locator(".note-title").first().innerText();
   await page.reload({ waitUntil: "networkidle" });
@@ -775,6 +1366,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const relinked = await page.locator('[data-library-status="linked"]').waitFor({ timeout: 5000 }).then(() => true, () => false);
   check("LB1", "刷新后仍关联笔记库条目且无未保存修改", relinked);
 
+  await openAppMenu(page);
   await page.getByRole("link", { name: "笔记库", exact: true }).click();
   const cards = page.locator(".library-card");
   await cards.nth(1).waitFor();
@@ -784,6 +1376,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.locator(".note-title").first().waitFor();
   check("LB3", "从笔记库打开笔记到编辑器", await page.locator(".note-title").first().innerText() === "笔记库第一条" && await page.locator('[data-library-status="linked"]').count() === 1);
 
+  await openAppMenu(page);
   await page.getByRole("link", { name: "笔记库", exact: true }).click();
   await cards.nth(1).waitFor();
   await page.locator(".library-search").fill("第二");

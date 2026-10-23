@@ -4,18 +4,14 @@ import { errorMessage, useT } from "../i18n/index.ts";
 import { generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
+import { NoteFitStatus } from "./note/NoteFitStatus.tsx";
+import type { NoteFitState } from "./note/useNoteFit.ts";
 
-function measureOverflow(page: HTMLElement | null): boolean {
-  if (!page || page.classList.contains("is-long")) return false;
-  // 多栏布局溢出时会向右生成新栏，因此同时检查横向溢出
-  return Array.from(page.querySelectorAll<HTMLElement>("[data-fit]")).some(
-    (el) => el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2,
-  );
-}
-
-const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | null> }) {
+export function Workspace({ pageRef, fit, onFitChange }: {
+  pageRef: RefObject<HTMLDivElement | null>;
+  fit: NoteFitState | null;
+  onFitChange: (fit: NoteFitState) => void;
+}) {
   const note = useNoteStore((s) => s.note);
   const settings = useNoteStore((s) => s.settings);
   const stickers = useNoteStore((s) => s.stickers);
@@ -37,9 +33,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
   const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200 });
   const [zoom, setZoom] = useState<number | null>(null);
   const [pageHeight, setPageHeight] = useState(1188);
-  const [overflow, setOverflow] = useState(false);
-  const [fitting, setFitting] = useState(false);
-  const fixedHeight = pageHeightFor(settings);
+  const fixedHeight = pageHeightFor(fit?.settings ?? settings);
   // 固定尺寸的页面完整显示在视口内；长图只按宽度适配
   const fitScale = Math.max(
     0.3,
@@ -59,12 +53,11 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
     const page = pageRef.current;
     if (!page) return;
     setPageHeight(page.offsetHeight);
-    setOverflow(measureOverflow(page));
   }, [pageRef]);
 
   useLayoutEffect(() => {
     check();
-  }, [check, note, settings, stickers, aiDoodle]);
+  }, [check, note, settings, aiDoodle]);
 
   useEffect(() => {
     const page = pageRef.current;
@@ -77,24 +70,6 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
       document.fonts?.removeEventListener("loadingdone", check);
     };
   }, [check, pageRef, note]);
-
-  async function autoFit() {
-    setFitting(true);
-    try {
-      let { fontSize, lineHeight } = useNoteStore.getState().settings;
-      for (let i = 0; i < 40 && measureOverflow(pageRef.current); i++) {
-        if (lineHeight > 1.5) lineHeight = Math.round((lineHeight - 0.05) * 100) / 100;
-        else if (fontSize > 12) fontSize = Math.round((fontSize - 0.5) * 10) / 10;
-        else break;
-        setSettings({ fontSize, lineHeight });
-        await nextFrame();
-        await nextFrame();
-      }
-    } finally {
-      setFitting(false);
-      check();
-    }
-  }
 
   // 原文仍在输入框中时，可以用“精简”档位重新整理来压缩内容
   const canCondense = hasInput && (source === "ai" || source === "local") && status !== "loading";
@@ -157,13 +132,10 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
         </div>
       ) : null}
 
-      {overflow && fixedHeight ? (
+      <NoteFitStatus fit={fit} />
+      {fit?.status === "overflow" && fixedHeight ? (
         <div className="alert alert-warn" role="status">
-          <span>{t.workspace.overflow}</span>
           <div className="alert-actions">
-            <button type="button" className="btn btn-small" disabled={fitting} onClick={() => void autoFit()}>
-              {fitting ? t.workspace.fitting : t.workspace.autoFit}
-            </button>
             <button type="button" className="btn btn-small btn-secondary" onClick={() => setSettings({ pageSize: "long" })}>
               {t.workspace.toLong}
             </button>
@@ -191,6 +163,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
               onSelectSticker={selectSticker}
               onChangeSticker={updateSticker}
               onRemoveSticker={removeSticker}
+              onFitChange={onFitChange}
             />
           </div>
           {status === "loading" ? (

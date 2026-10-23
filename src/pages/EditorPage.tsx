@@ -7,6 +7,7 @@ import { InputPanel } from "../components/InputPanel.tsx";
 import { StickerPanel } from "../components/StickerPanel.tsx";
 import { StylePanel } from "../components/StylePanel.tsx";
 import { Workspace } from "../components/Workspace.tsx";
+import type { NoteFitState } from "../components/note/useNoteFit.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
 import { SAMPLE_NOTE, SAMPLE_NOTE_EN } from "../samples.ts";
 import { usePreferences } from "../state/preferences.ts";
@@ -18,6 +19,7 @@ type TabId = (typeof TABS)[number];
 export function EditorPage({ config, onToast }: { config: PublicConfig; onToast: (message: string) => void }) {
   const pageRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TabId>("style");
+  const [fit, setFit] = useState<NoteFitState | null>(null);
   const hasNote = useNoteStore((s) => s.note !== null);
   const locale = usePreferences((s) => s.locale);
   const t = useT();
@@ -57,7 +59,7 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
   return (
     <main className="app-main">
       <InputPanel maxChars={config.maxInputChars} />
-      {hasNote ? <Workspace pageRef={pageRef} /> : <section className="workspace" />}
+      {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} /> : <section className="workspace" />}
       <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
         <div className="tabs" role="tablist">
           {TABS.map((id) => (
@@ -79,7 +81,7 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
           {tab === "style" ? <StylePanel doodleEnabled={config.doodleEnabled} onRequestAiDoodle={() => void requestMainDoodle()} /> : null}
           {tab === "stickers" ? <StickerPanel doodleEnabled={config.doodleEnabled} /> : null}
           {tab === "content" ? <ContentEditor /> : null}
-          {tab === "export" ? <ExportPanel pageRef={pageRef} /> : null}
+          {tab === "export" ? <ExportPanel pageRef={pageRef} fit={fit} /> : null}
         </div>
       </aside>
     </main>

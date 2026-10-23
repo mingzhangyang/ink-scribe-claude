@@ -1,11 +1,14 @@
 import { useSyncExternalStore, type MouseEvent } from "react";
 
-/** 极简前端路由：编辑器、笔记查看页、图库与本机笔记库，无需额外依赖。 */
+/** 极简前端路由：编辑器、笔记查看页、图库、本机笔记库与说明页面，无需额外依赖。 */
 
 export type Route =
   | { name: "editor" }
   | { name: "gallery" }
   | { name: "library" }
+  | { name: "guide" }
+  | { name: "privacy" }
+  | { name: "terms" }
   | { name: "note"; id: string }
   | { name: "not-found" };
 
@@ -13,6 +16,9 @@ export function parseRoute(pathname: string): Route {
   if (pathname === "/" || pathname === "") return { name: "editor" };
   if (/^\/gallery\/?$/.test(pathname)) return { name: "gallery" };
   if (/^\/library\/?$/.test(pathname)) return { name: "library" };
+  if (/^\/guide\/?$/.test(pathname)) return { name: "guide" };
+  if (/^\/privacy\/?$/.test(pathname)) return { name: "privacy" };
+  if (/^\/terms\/?$/.test(pathname)) return { name: "terms" };
   const note = pathname.match(/^\/n\/([A-Za-z0-9_-]{22})\/?$/);
   if (note) return { name: "note", id: note[1] };
   return { name: "not-found" };

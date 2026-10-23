@@ -6,29 +6,43 @@ import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } fro
  * 避免一次导出下载并编码数 MB 的字体。
  */
 
+type FontSource = { url: string; format: string };
+
 type FontFaceSource = {
+  rule: CSSFontFaceRule;
+  base: string;
   family: string;
   style: string;
   weight: string;
+  stretch: string;
   unicodeRange: string;
-  url: string;
-  format: string;
+  sources: FontSource[];
 };
 
 const dataUrlCache = new Map<string, Promise<string>>();
+const retrySources = new WeakMap<CSSFontFaceRule, { src: string; attempt: number }>();
 
-function pickUrl(src: string, base: string): { url: string; format: string } | undefined {
-  const candidates = [...src.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)\s*(?:format\(\s*['"]?([\w-]+)['"]?\s*\))?/g)].map((m) => ({
-    url: m[2],
-    format: m[3] ?? "",
-  }));
-  const chosen = candidates.find((c) => c.format === "woff2" || c.url.endsWith(".woff2")) ?? candidates[0];
-  if (!chosen) return undefined;
-  try {
-    return { url: new URL(chosen.url, base).href, format: chosen.format || "woff2" };
-  } catch {
-    return undefined;
+function sourceFormat(url: string, declared: string): string {
+  if (declared) return declared;
+  const pathname = new URL(url).pathname.toLowerCase();
+  if (pathname.endsWith(".woff2")) return "woff2";
+  if (pathname.endsWith(".woff")) return "woff";
+  if (pathname.endsWith(".ttf")) return "truetype";
+  if (pathname.endsWith(".otf")) return "opentype";
+  return "";
+}
+
+function parseSources(src: string, base: string): FontSource[] {
+  const sources: FontSource[] = [];
+  for (const match of src.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)\s*(?:format\(\s*['"]?([\w-]+)['"]?\s*\))?/g)) {
+    try {
+      const url = new URL(match[2], base).href;
+      sources.push({ url, format: sourceFormat(url, match[3] ?? "") });
+    } catch {
+      // Ignore invalid URLs; a later declared source may still work.
+    }
   }
+  return sources;
 }
 
 function collectRules(rules: CSSRuleList, base: string, families: Set<string>, out: FontFaceSource[]): void {
@@ -36,14 +50,17 @@ function collectRules(rules: CSSRuleList, base: string, families: Set<string>, o
     if (rule instanceof CSSFontFaceRule) {
       const family = rule.style.getPropertyValue("font-family");
       if (!families.has(normalizeFamily(family))) continue;
-      const source = pickUrl(rule.style.getPropertyValue("src"), base);
-      if (!source) continue;
+      const sources = parseSources(rule.style.getPropertyValue("src"), base);
+      if (!sources.length) continue;
       out.push({
+        rule,
+        base,
         family: family.trim().replace(/^["']|["']$/g, ""),
         style: rule.style.getPropertyValue("font-style") || "normal",
-        weight: rule.style.getPropertyValue("font-weight") || "400",
+        weight: rule.style.getPropertyValue("font-weight") || "normal",
+        stretch: rule.style.getPropertyValue("font-stretch") || "normal",
         unicodeRange: rule.style.getPropertyValue("unicode-range"),
-        ...source,
+        sources,
       });
     } else if (rule instanceof CSSImportRule && rule.styleSheet) {
       try {
@@ -73,6 +90,33 @@ export function findFontFaces(families: string[], text: string): FontFaceSource[
   return all.filter((face) => rangesIntersect(parseUnicodeRange(face.unicodeRange), codePoints));
 }
 
+function sameFace(source: FontFaceSource, face: FontFace): boolean {
+  const range = (value: string) => (value || "U+0-10FFFF").replace(/\s/g, "").toUpperCase();
+  return normalizeFamily(source.family) === normalizeFamily(face.family)
+    && source.style === face.style && source.weight === face.weight && source.stretch === face.stretch
+    && range(source.unicodeRange) === range(face.unicodeRange);
+}
+
+/** A CSS-connected FontFace in error cannot reload. Changing src creates a new face. */
+function resetFailedFontFaces(families: string[], text: string): void {
+  const failed = Array.from(document.fonts).filter((face) => face.status === "error");
+  if (!failed.length) return;
+  for (const source of findFontFaces(families, text)) {
+    if (!failed.some((face) => sameFace(source, face))) continue;
+    const retry = retrySources.get(source.rule) ?? { src: source.rule.style.getPropertyValue("src"), attempt: 0 };
+    retry.attempt++;
+    retrySources.set(source.rule, retry);
+    // Keep the original fallbacks and descriptors; a fresh URL also bypasses failed font-resource caches.
+    const src = retry.src.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (match, _quote: string, path: string) => {
+      const url = new URL(path, source.base);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return match;
+      url.searchParams.set("ink-font-retry", String(retry.attempt));
+      return `url("${url.href}")`;
+    });
+    source.rule.style.setProperty("src", src);
+  }
+}
+
 async function toDataUrl(url: string): Promise<string> {
   let pending = dataUrlCache.get(url);
   if (!pending) {
@@ -94,31 +138,39 @@ async function toDataUrl(url: string): Promise<string> {
 }
 
 /** 等待页面用到的字形全部加载完成（包括按需加载的 unicode-range 分片）。 */
-export async function ensureFontsLoaded(families: string[], text: string): Promise<void> {
+export async function ensureFontsLoaded(families: string[], text: string, options: { retryFailed?: boolean } = {}): Promise<void> {
   if (!("fonts" in document)) return;
-  const sample = text.length > 20_000 ? text.slice(0, 20_000) : text;
-  await Promise.all(families.map((family) => document.fonts.load(`20px "${family}"`, sample).catch(() => [])));
+  if (options.retryFailed) resetFailedFontFaces(families, text);
+  await Promise.all(families.map((family) => document.fonts.load(`20px "${family}"`, text)));
   await document.fonts.ready;
+}
+
+async function embedFirstAvailable(sources: FontSource[]): Promise<{ data: string; format: string }> {
+  let lastError: unknown;
+  for (const source of sources) {
+    try {
+      return { data: await toDataUrl(source.url), format: source.format };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("No usable font source");
 }
 
 export async function buildFontEmbedCss(families: string[], text: string): Promise<string> {
   const faces = findFontFaces(families, text);
   const css = await Promise.all(
     faces.map(async (face) => {
-      try {
-        const data = await toDataUrl(face.url);
-        return [
-          "@font-face{",
-          `font-family:"${face.family}";`,
-          `font-style:${face.style};`,
-          `font-weight:${face.weight};`,
-          `src:url(${data}) format("${face.format}");`,
-          face.unicodeRange ? `unicode-range:${face.unicodeRange};` : "",
-          "}",
-        ].join("");
-      } catch {
-        return "";
-      }
+      const { data, format } = await embedFirstAvailable(face.sources);
+      return [
+        "@font-face{",
+        `font-family:"${face.family}";`,
+        `font-style:${face.style};`,
+        `font-weight:${face.weight};`,
+        `src:url(${data})${format ? ` format("${format}")` : ""};`,
+        face.unicodeRange ? `unicode-range:${face.unicodeRange};` : "",
+        "}",
+      ].join("");
     }),
   );
   return css.join("\n");

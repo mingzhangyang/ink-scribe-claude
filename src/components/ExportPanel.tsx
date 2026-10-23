@@ -12,12 +12,13 @@ import {
 } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
+import type { NoteFitState } from "./note/useNoteFit.ts";
 
 // 只保存状态与参数，文案在渲染时按当前界面语言生成
 type Task = "download" | "copy";
 type Status = { kind: "idle" } | { kind: "working"; task: Task } | { kind: "done"; task: Task; reducedScale?: number } | { kind: "error"; task: Task };
 
-export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | null> }) {
+export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElement | null>; fit: NoteFitState | null }) {
   const note = useNoteStore((s) => s.note);
   const settings = useNoteStore((s) => s.settings);
   const selectSticker = useNoteStore((s) => s.selectSticker);
@@ -32,7 +33,7 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   const actualScale = effectiveScale(width, height, scale);
 
   if (!note) return null;
-  const busy = status.kind === "working";
+  const busy = status.kind === "working" || fit?.status !== "ready";
 
   async function render(fmt: ExportFormat) {
     const node = pageRef.current;
