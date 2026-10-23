@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import type { NoteDocument } from "../shared/document.ts";
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { readDraft, writeDraft } from "../src/drafts/storage.ts";
-import { backupOf, deleteEntry, getEntry, importBackup, LibraryConflict, listEntries, saveEntry, titleOf } from "../src/library/storage.ts";
+import { backupOf, deleteEntry, getEntry, importBackup, LibraryConflict, listEntries, saveEntry, searchTextOf, titleOf } from "../src/library/storage.ts";
 
 const document: NoteDocument = {
   input: { text: "第一行原文\n第二行", template: "reading-notes", language: "auto", detail: "standard" },
@@ -69,6 +69,13 @@ describe("library storage", () => {
   it("derives titles from the note, falling back to the first line of text", () => {
     expect(titleOf(document)).toBe("读书笔记");
     expect(titleOf({ ...document, note: { ...document.note!, title: " " }, input: { ...document.input, text: "\n  开头  \n" } })).toBe("开头");
+  });
+
+  it("searches the full note, not only the truncated preview", () => {
+    const long = { ...document, note: { ...document.note!, summary: `${"长".repeat(200)}尾部词`, sections: [{ content: "章节里的词", highlights: [] }] } };
+    expect(searchTextOf(long)).toContain("尾部词");
+    expect(searchTextOf(long)).toContain("章节里的词");
+    expect(searchTextOf(document)).toContain("提示");
   });
 
   it("restores backups without overwriting different local content", async () => {
@@ -164,6 +171,24 @@ describe("library in the editor", () => {
     expect(c.hasUnsavedWork()).toBe(true);
     c.store.getState().setResult(document.note!, null, "sample");
     c.store.getState().setSettings({ paper: "kraft" });
+    expect(c.hasUnsavedWork()).toBe(true);
+  });
+
+  it("keeps edited sample settings unsaved when the sample switches language", async () => {
+    const c = await boot();
+    c.store.getState().setResult(document.note!, null, "sample");
+    c.store.getState().setSettings({ paper: "kraft" });
+    c.store.getState().setResult(edited("English sample").note!, null, "sample");
+    expect(c.hasUnsavedWork()).toBe(true);
+  });
+
+  it("treats the editor copy of an entry deleted elsewhere as unsaved work", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    expect(c.hasUnsavedWork()).toBe(false);
+    await deleteEntry(c.store.getState().libraryLink!.id);
+    await c.checkLibraryLink(true);
     expect(c.hasUnsavedWork()).toBe(true);
   });
 

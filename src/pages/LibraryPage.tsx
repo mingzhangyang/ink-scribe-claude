@@ -3,7 +3,7 @@ import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { downloadBlob } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { hasUnsavedWork, openEntry, removeEntry } from "../library/controller.ts";
-import { backupOf, importBackup, listEntries, onLibraryChange, type LibraryEntry } from "../library/storage.ts";
+import { backupOf, importBackup, listEntries, onLibraryChange, searchTextOf, type LibraryEntry } from "../library/storage.ts";
 import { linkProps, navigate } from "../router.ts";
 import { useNoteStore } from "../state/store.ts";
 
@@ -83,7 +83,7 @@ export function LibraryPage() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return entries;
-    return entries.filter((e) => `${e.title}\n${summaryOf(e)}\n${e.document.input.text}`.toLowerCase().includes(q));
+    return entries.filter((e) => `${e.title.toLowerCase()}\n${searchTextOf(e.document)}`.includes(q));
   }, [entries, query]);
 
   function open(entry: LibraryEntry) {

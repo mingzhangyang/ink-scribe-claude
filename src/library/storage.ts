@@ -50,6 +50,13 @@ export function titleOf(document: NoteDocument): string {
   return title.slice(0, TITLE_LENGTH);
 }
 
+/** Everything a search should find, including note text that card previews truncate or leave out. */
+export function searchTextOf(document: NoteDocument): string {
+  const note = document.note;
+  const parts = note ? [note.title, ...note.cues.flatMap((c) => [c.keyword, c.note]), ...note.sections.map((s) => s.content), note.summary] : [];
+  return [...parts, document.input.text].join("\n").toLowerCase();
+}
+
 export function parseEntry(value: unknown): LibraryEntry {
   const r = value as Partial<LibraryEntry> | null;
   if (!r || r.version !== 1 || typeof r.id !== "string" || !r.id || typeof r.revision !== "string" || typeof r.title !== "string"

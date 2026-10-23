@@ -18,13 +18,18 @@ useNoteStore.subscribe((next, previous) => {
   // still in flight: that save ignores its outcome, so leaving "saving" here would block every later save.
   if (next.libraryLink !== previous.libraryLink || next.documentSerial !== previous.documentSerial) set({ status: "idle" });
   if (next.noteSerial !== previous.noteSerial) {
-    // Only a freshly generated sample counts; a restored draft may hold edits made on top of one.
+    // Only a freshly generated sample counts; a restored draft may hold edits made on top of one. A sample replaced
+    // by another (UI language switch) keeps edited settings, so it stays pristine only if the previous one was.
     const { input, note, settings, stickers, aiDoodle } = next;
     const fresh = next.source === "sample" && next.documentSerial === previous.documentSerial
-      && !input.text.trim() && stickers.length === 0 && !aiDoodle;
+      && !input.text.trim() && stickers.length === 0 && !aiDoodle && (!previous.note || isUntouchedSample(previous));
     sample = fresh ? { input, note, settings, stickers, aiDoodle } : null;
   }
 });
+
+function isUntouchedSample(state: SampleParts & Pick<NoteDocument, "source">): boolean {
+  return state.source === "sample" && !!sample && (Object.keys(sample) as Array<keyof SampleParts>).every((key) => sample![key] === state[key]);
+}
 
 /** Normalized so that a document and its stored copy compare equal. */
 export function serialize(document: NoteDocument): string {
@@ -40,9 +45,7 @@ export function isModified(document: NoteDocument, link: LibraryLink, baseline: 
 export function hasUnsavedWork(): boolean {
   const state = useNoteStore.getState();
   if (state.libraryLink) return isModified(currentDocument(), state.libraryLink, useLibraryStatus.getState().baseline);
-  const untouchedSample = state.source === "sample" && !!sample
-    && (Object.keys(sample) as Array<keyof SampleParts>).every((key) => sample![key] === state[key]);
-  return !!state.note && !untouchedSample;
+  return !!state.note && !isUntouchedSample(state);
 }
 
 /**
@@ -58,7 +61,8 @@ export async function checkLibraryLink(recheck = false) {
   try {
     const entry = await getEntry(link.id);
     if (stale()) return;
-    if (!entry) set({ status: "deleted" });
+    // The editor's copy is all that is left of a deleted entry: dropping the baseline makes it unsaved work.
+    if (!entry) set({ status: "deleted", baseline: null });
     else if (entry.revision !== link.revision) set({ status: "conflict" });
     else {
       // The expected revision is there again (e.g. restored from a backup), so earlier failures no longer apply.
@@ -94,7 +98,8 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     set({ status: "saved", baseline: { revision: entry.revision, text: serialize(document) } });
   } catch (error) {
     if (replaced()) return;
-    set({ status: error instanceof LibraryConflict ? (error.deleted ? "deleted" : "conflict") : "error" });
+    if (error instanceof LibraryConflict && error.deleted) set({ status: "deleted", baseline: null });
+    else set({ status: error instanceof LibraryConflict ? "conflict" : "error" });
   }
 }
 
