@@ -1039,6 +1039,20 @@ if (process.env.E2E_API_KEY) {
   // hide a regression in the language switch above.
   await guide.locator(".app-menu-toggle").click();
 
+  // Two live tabs must agree without reload. A subsequent reload keeps the last choice.
+  const peer = await guideContext.newPage();
+  await peer.goto(`${URL}guide`, { waitUntil: "networkidle" });
+  await setAppPreference(guide, "locale", "zh");
+  await peer.waitForFunction(() => document.documentElement.lang === "zh-CN");
+  await setAppPreference(peer, "locale", "en");
+  await guide.waitForFunction(() => document.documentElement.lang === "en");
+  await peer.reload({ waitUntil: "networkidle" });
+  check("U14", "语言修改实时同步到同站其他标签页并在刷新后保留最后选择",
+    (await guide.locator("html").getAttribute("lang")) === "en" &&
+    (await peer.locator("html").getAttribute("lang")) === "en" &&
+    (await peer.locator("main.guide-page h1").innerText()).includes("InkScribe"));
+  await peer.close();
+
   await setAppPreference(guide, "theme", "dark");
   const darkGuide = await guide.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
@@ -1824,6 +1838,45 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   check("LB9", "确认操作不依赖浏览器原生对话框", nativeDialogs.length === 0, JSON.stringify(nativeDialogs));
   check("LB7", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();
+}
+
+// ---------- LS. Gallery / library loading, note footer, and not-found states ----------
+{
+  const { page: placeholders, context: placeholderContext } = await newPage();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  await placeholders.route("**/api/gallery?**", async (route) => {
+    await pending;
+    await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":{"code":"INTERNAL_ERROR","message":"unavailable"}}' });
+  });
+  await placeholders.goto(`${URL}gallery`, { waitUntil: "domcontentloaded" });
+  await placeholders.locator(".gallery-thumb-skeleton").first().waitFor();
+  check("LS1", "图库数据加载时展示与缩略图等比例的骨架占位",
+    await placeholders.locator(".gallery-thumb-skeleton").count() === 3);
+  release();
+  await placeholders.locator(".gallery-thumb-failed").waitFor();
+  check("LS2", "图库加载失败后展示失败占位与重试入口",
+    await placeholders.locator(".gallery-thumb-failed").count() === 1 &&
+    await placeholders.getByRole("button", { name: "重试" }).isVisible());
+
+  await placeholders.goto(`${URL}missing/route`, { waitUntil: "domcontentloaded" });
+  await placeholders.locator(".empty-state h2").waitFor();
+  check("LS3", "未知路径显示一致的 404 标题、说明以及编辑器/图库入口",
+    (await placeholders.title()).includes("页面不存在") &&
+    (await placeholders.locator(".empty-state h2").innerText()) === "页面不存在" &&
+    await placeholders.locator('.empty-state a[href="/"]').isVisible() &&
+    await placeholders.locator('.empty-state a[href="/gallery"]').isVisible());
+  await placeholders.goto(URL, { waitUntil: "networkidle" });
+  await waitForNoteReady(placeholders);
+  const overlap = await placeholders.locator(".note-page").evaluate((el) => {
+    const summary = el.querySelector(".summary-sticky, .classic-summary");
+    const artwork = el.querySelector(".doodle-slot");
+    if (!summary || !artwork) return null;
+    const a = summary.getBoundingClientRect(), b = artwork.getBoundingClientRect();
+    return { summaryRight: a.right, artworkLeft: b.left, gap: b.left - a.right };
+  });
+  check("LS4", "笔记摘要与插画保留实际视觉间距", overlap !== null && overlap.gap > 2, JSON.stringify(overlap));
+  await placeholderContext.close();
 }
 
 await browser.close();

@@ -42,8 +42,11 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   }, [id]);
 
   useEffect(() => {
-    if (state.kind !== "ready") return;
-    document.title = t.view.documentTitle(state.data.note.title);
+    if (state.kind === "ready") {
+      document.title = t.view.documentTitle(state.data.note.title);
+    } else if (state.kind === "error") {
+      document.title = `${state.code === "NOT_FOUND" ? t.view.notFound : t.view.loadFailed} · ${t.app.name}`;
+    }
   }, [state, t]);
 
   useLayoutEffect(() => {
@@ -76,9 +79,10 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
                 ? errorMessage(t, { code: state.code as RequestError["code"], message: state.message })
                 : t.view.loadFailed}
           </h2>
-          <a className="btn btn-secondary" {...linkProps("/gallery")}>
-            {t.view.toGallery}
-          </a>
+          <div className="button-row">
+            <a className="btn btn-secondary" {...linkProps("/")}>{t.app.backToEditor}</a>
+            <a className="btn btn-secondary" {...linkProps("/gallery")}>{t.view.toGallery}</a>
+          </div>
         </div>
       </main>
     );

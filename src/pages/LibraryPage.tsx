@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { confirmAction } from "../components/ConfirmDialog.tsx";
+import { GalleryPlaceholder } from "../components/GalleryPlaceholder.tsx";
 import { downloadBlob } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { hasUnsavedWork, openEntry, removeEntry } from "../library/controller.ts";
@@ -164,11 +165,15 @@ export function LibraryPage() {
         </div>
       ) : null}
 
-      {visible.length > 0 ? (
-        <div className="gallery-grid">
+      {visible.length > 0 || status !== "idle" ? (
+        <div className="gallery-grid" aria-busy={status === "loading"}>
           {visible.map((entry) => (
             <LibraryCard key={entry.id} entry={entry} current={entry.id === currentId} onOpen={() => void open(entry)} onDelete={() => void remove(entry)} />
           ))}
+          {status === "loading" && visible.length === 0 ? Array.from({ length: 3 }, (_, i) => (
+            <GalleryPlaceholder key={i} state="loading" message={t.library.loading} />
+          )) : null}
+          {status === "error" && visible.length === 0 ? <GalleryPlaceholder state="error" message={t.library.loadFailed} /> : null}
         </div>
       ) : status === "idle" ? (
         <div className="empty-state">

@@ -46,26 +46,26 @@ export type GuideContent = {
 
 export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
   zh: {
-    title: "使用说明",
-    documentTitle: "使用说明 · 墨语笔记 InkScribe",
+    title: "墨语笔记 · 使用说明",
+    documentTitle: "使用说明 · 墨语笔记 InkScribe"
     description: "从第一张手写笔记到自动发布：在网页里整理和导出，或让 AI agent 直接发布准备好的笔记。",
-    eyebrow: "INKSCRIBE / GUIDE",
+    eyebrow: "InkScribe / 使用说明",
     tocLabel: "使用说明目录",
     toc: [{ id: "users", label: "网页使用" }, { id: "agents", label: "AI agent 接入" }, { id: "faq", label: "常见问题" }],
     users: {
       title: "在网页里，做一张自己的笔记",
       description: "无需注册。准备好一段文字，整理内容，再选出适合它的纸张与版式。",
       steps: [
-        { title: "放入你的内容", body: "点击右上角的“撰写”（手机上在屏幕底部），粘贴文章、读书摘抄、会议记录或零散想法；也可以上传或拖入 TXT、Markdown、HTML、DOCX、PDF 文件，文字在浏览器中提取。" },
-        { title: "整理成清晰的结构", body: "选择模板、输出语言与详略，点击“转化为手写笔记”。AI 会整理标题、关键词、分节要点与总结；“不使用 AI，按段落快速排版”则使用现有段落，不调用 AI。" },
+        { title: "放入你的内容", body: "点击右上角的“撰写”（手机上在屏幕底部），粘贴文章、读书摘抄、会议记录或零散想法；也可以点击“上传文件”或拖入 TXT、Markdown、HTML、Word（.docx）、PDF 文件，文字在浏览器中提取。" },
+        { title: "整理成清晰的结构", body: "选择模板、输出语言与详略，点击“转化为手写笔记”。AI 会整理标题、线索、段落与总结；“不使用 AI，按段落快速排版”则使用现有段落，不调用 AI。" },
         { title: "修改内容，调整外观", body: "在“内容”中校对正文和重点词，在“样式”中选择版式、纸张、手写字体与墨水。还可以在“贴纸”中添加贴纸，拖动、旋转或缩放它们。" },
-        { title: "导出，发给你想分享的人", body: "在“导出”中选择 PNG 或 JPG 和 1x、2x、3x 倍率，下载图片；浏览器支持时也可复制到剪贴板。等待字体与排版就绪，长内容默认会展开为长图。" },
+        { title: "导出，发给你想分享的人", body: "在“导出”中选择 PNG 或 JPG 格式和 1x、2x、3x 分辨率，点击“下载图片”；浏览器支持时也可复制到剪贴板。等待字体与排版就绪，长内容默认会展开为长图。" },
       ],
       notes: [
         { title: "草稿和笔记库保存在这台设备上", body: "编辑器默认在当前浏览器自动保存原文、笔记和外观，刷新后可恢复；草稿栏可以删除草稿并关闭自动保存。想保留多条笔记时，点击“保存到笔记库”，之后在菜单的“笔记库”中搜索、打开或导出备份。草稿和笔记库都不会跨设备同步，也不等于已经发布。" },
         { title: "知道内容去了哪里", body: "文件解析和图片导出在本地完成。选择 AI 整理时，提取后的文字会发送到服务端用于本次模型调用。网页编辑器目前不提供在线发布；在线分享链接由 AI agent 或程序通过发布接口创建。" },
       ],
-      action: { href: "/", label: "开始制作笔记" },
+      action: { href: "/", label: "打开编辑器" },
     },
     agents: {
       title: "让 AI agent 直接发布笔记",
@@ -119,7 +119,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
     faq: {
       title: "常见问题",
       items: [
-        { title: "在哪里切换界面语言和主题？", body: "打开右上角“菜单”，在“界面偏好”中选择中文或 English，以及跟随系统、浅色或深色主题。选择会保存在当前浏览器，界面语言不会改写你正在编辑的笔记。" },
+        { title: "在哪里切换界面语言和主题？", body: "打开右上角“菜单”，在“界面偏好”中选择中文或 English，以及跟随系统、浅色或深色主题。选择会保存在当前浏览器，并同步到已打开的同站标签页；界面语言不会改写你正在编辑的笔记。" },
         { title: "不想使用 AI，也能做笔记吗？", body: "可以。选择“不使用 AI，按段落快速排版”，再在“内容”中修改文字，选择样式并导出。通过 API 发布已经整理好的 note 也不调用 AI。" },
         { title: "为什么下载按钮暂时不可用？", body: "字体可能还在加载，或者内容正在适配页面。字体失败时可以重试；固定页面仍放不下时，缩短内容或选择长图。应用会提示问题，并阻止导出不完整的图片。" },
         { title: "草稿和笔记库里的笔记，别人能看到吗？", body: "看不到。草稿和笔记库只保存在当前浏览器，没有公开链接。导出的图片和备份文件由你自行分享；只有经 API 发布的作品才有在线查看链接。" },
@@ -130,26 +130,26 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
     copy: { label: "复制", success: "已复制", failure: "复制失败，请选中代码后手动复制。" },
   },
   en: {
-    title: "How to use InkScribe",
-    documentTitle: "User & agent guide · InkScribe",
+    title: "InkScribe · Guide",
+    documentTitle: "InkScribe · User & agent guide"
     description: "From your first handwritten note to automated publishing: create and export in the editor, or let an AI agent publish a prepared note.",
-    eyebrow: "INKSCRIBE / GUIDE",
+    eyebrow: "InkScribe / Guide",
     tocLabel: "Guide contents",
     toc: [{ id: "users", label: "Use the editor" }, { id: "agents", label: "Connect an AI agent" }, { id: "faq", label: "Common questions" }],
     users: {
       title: "Make a note in your browser",
       description: "No account required. Start with your text, organize its ideas, then choose the paper and layout that suit it.",
       steps: [
-        { title: "Bring your content", body: "Select “Compose” at the top right (at the bottom of the screen on a phone), then paste an article, reading excerpt, meeting notes, or rough ideas. You can also upload or drop in TXT, Markdown, HTML, DOCX, or PDF files; their text is extracted in your browser." },
+        { title: "Bring your content", body: "Select “Compose” at the top right (at the bottom of the screen on a phone), then paste an article, reading excerpt, meeting notes, or rough ideas. You can also select “Upload file” or drop in TXT, Markdown, HTML, Word (.docx), or PDF files; their text is extracted in your browser." },
         { title: "Give it a clear structure", body: "Choose a template, output language, and detail level, then select “Turn into a handwritten note”. AI organizes the title, cues, sections, and summary. “Quick layout by paragraphs, without AI” uses your existing paragraphs." },
         { title: "Edit the words and appearance", body: "Use “Content” to check the text and highlights, and “Style” to choose a layout, paper, handwriting font, and ink. Add stickers from “Stickers”, then drag, rotate, or resize them." },
-        { title: "Export and share", body: "In “Export”, choose PNG or JPG and a 1x, 2x, or 3x scale, then download the image. Supported browsers can also copy it to the clipboard. Wait for fonts and layout to finish; long content expands into a long page by default." },
+        { title: "Export and share", body: "In “Export”, choose PNG or JPG and a 1x, 2x, or 3x scale, then select “Download image”. Supported browsers can also copy it to the clipboard. Wait for fonts and layout to finish; long content expands into a long page by default." },
       ],
       notes: [
         { title: "Drafts and the library stay on this device", body: "The editor saves your source text, note, and appearance in the current browser by default, so they come back after a refresh. The draft bar lets you delete the draft and turn off autosave. To keep several notes, select “Save to library”, then search, open, or back them up from “Library” in the menu. Neither drafts nor the library sync across devices, and neither is a published note." },
         { title: "Know where your content goes", body: "File parsing and image export happen locally. Choosing AI organization sends the extracted text to the server for that model request. The web editor does not publish online; AI agents and programs create online share links through the publishing API." },
       ],
-      action: { href: "/", label: "Create a note" },
+      action: { href: "/", label: "Open editor" },
     },
     agents: {
       title: "Publish from an AI agent",
@@ -203,7 +203,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
     faq: {
       title: "Common questions",
       items: [
-        { title: "Where do I change the interface language and theme?", body: "Open “Menu” at the top right. Under “Display preferences”, choose 中文 or English and System, Light, or Dark. Your choices are saved in the current browser. Changing the interface language does not rewrite the note you are editing." },
+        { title: "Where do I change the interface language and theme?", body: "Open “Menu” at the top right. Under “Display preferences”, choose 中文 or English and System, Light, or Dark. Your choices are saved in this browser and synchronized across other open tabs on the same site. Changing the interface language does not rewrite the note you are editing." },
         { title: "Can I make a note without AI?", body: "Yes. Choose “Quick layout by paragraphs, without AI”, edit the words in “Content”, choose a style, and export. Publishing an already prepared note through the API also makes no AI call." },
         { title: "Why is the download button temporarily disabled?", body: "Fonts may still be loading or the page may still be fitting its content. Retry if a font fails. If a fixed page still cannot fit, shorten the content or choose a long page. The app reports the issue and blocks incomplete exports." },
         { title: "Can other people see my draft or library notes?", body: "No. Drafts and library notes stay in the current browser and have no public link. You decide whether to share exported images or backup files. Only notes published through the API get an online view link." },

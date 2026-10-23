@@ -3,7 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { getGuideExamples, type GuideLocale } from "../shared/guide.ts";
+import { GUIDE_CONTENT, getGuideExamples, type GuideLocale } from "../shared/guide.ts";
+import { en } from "../src/i18n/en.ts";
+import { zh } from "../src/i18n/zh.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 
 const ORIGIN = "https://ink.example";
@@ -43,6 +45,20 @@ ${example.curl}
     rmSync(directory, { recursive: true, force: true });
   }
 }
+
+describe("guide wording matches the live interface", () => {
+  it.each(["zh", "en"] as const)("keeps %s button names and InkScribe branding aligned", (locale) => {
+    const guide = GUIDE_CONTENT[locale];
+    const t = locale === "zh" ? zh : en;
+    const copy = [...guide.users.steps, ...guide.users.notes, ...guide.faq.items].map((part) => part.body).join("\n");
+    expect(guide.title).toContain(locale === "zh" ? "墨语笔记" : "InkScribe");
+    expect(guide.eyebrow).toContain("InkScribe");
+    for (const label of [t.input.upload, t.input.generate, t.input.local, t.editor.tabs.content, t.library.saveNew, t.export.download]) {
+      expect(copy).toContain(`“${label}”`);
+    }
+    expect(guide.users.action.label).toBe(locale === "zh" ? "打开编辑器" : "Open editor");
+  });
+});
 
 describe("copyable guide examples", () => {
   it.each(["zh", "en"] as const)("validates and publishes the same valid %s request without source text or a key", (locale) => {
