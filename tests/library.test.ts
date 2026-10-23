@@ -146,6 +146,27 @@ describe("library in the editor", () => {
     expect(c.store.getState()).toMatchObject({ input: document.input, libraryLink: original });
   });
 
+  it("saves a note generated from other source text as a new entry, but updates on regeneration", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    const first = c.store.getState().libraryLink!;
+    c.store.getState().setInput({ template: "general" });
+    c.store.getState().setResult(edited("重新生成").note!, null, "ai");
+    expect(c.store.getState().libraryLink).toEqual(first);
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).toBe(first.id);
+
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "ai");
+    expect(c.store.getState().libraryLink).toBeNull();
+    expect(c.hasUnsavedWork()).toBe(true);
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).not.toBe(first.id);
+    expect((await listEntries()).entries.map((e) => e.title)).toEqual(["第二篇", "重新生成"]);
+    await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(c.store.getState().libraryLink));
+  });
+
   it("reports edits from another tab and deletions instead of overwriting them", async () => {
     const c = await boot();
     c.store.getState().loadDocument(document, null);

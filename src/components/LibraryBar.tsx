@@ -4,6 +4,7 @@ import { checkLibraryLink, isModified, saveToLibrary, useLibraryStatus } from ".
 import { onLibraryChange } from "../library/storage.ts";
 import { linkProps } from "../router.ts";
 import { useNoteStore } from "../state/store.ts";
+import { confirmAction } from "./ConfirmDialog.tsx";
 
 /** Saves the editor into the local library and shows whether it has changes the library lacks. */
 export function LibraryBar() {
@@ -34,7 +35,7 @@ export function LibraryBar() {
       <span role="status" data-library-status={state}>{message}</span>
       <div className="button-row">
         {state === "conflict" ? (
-          <button type="button" className="btn btn-small" onClick={() => { if (window.confirm(t.overwriteConfirm)) void saveToLibrary({ force: true }); }}>
+          <button type="button" className="btn btn-small" onClick={async () => { if (await confirmAction(t.overwriteConfirm, t.overwrite, { danger: true })) void saveToLibrary({ force: true }); }}>
             {t.overwrite}
           </button>
         ) : (

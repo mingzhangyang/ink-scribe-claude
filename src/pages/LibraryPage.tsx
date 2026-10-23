@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
+import { confirmAction } from "../components/ConfirmDialog.tsx";
 import { downloadBlob } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { hasUnsavedWork, openEntry, removeEntry } from "../library/controller.ts";
@@ -86,21 +87,21 @@ export function LibraryPage() {
     return entries.filter((e) => `${e.title.toLowerCase()}\n${searchTextOf(e.document)}`.includes(q));
   }, [entries, query]);
 
-  function open(entry: LibraryEntry) {
+  async function open(entry: LibraryEntry) {
     // Imported copies can share a revision, so the id must match too.
     const link = useNoteStore.getState().libraryLink;
     const alreadyOpen = link?.id === entry.id && link.revision === entry.revision;
     // The editor cannot notice a deletion made elsewhere while it is unmounted; then its copy is all that is left.
     const linkedGone = !!link && status === "idle" && !entries.some((e) => e.id === link.id);
     if (!alreadyOpen) {
-      if ((linkedGone || hasUnsavedWork()) && !window.confirm(t.library.replaceConfirm)) return;
+      if ((linkedGone || hasUnsavedWork()) && !(await confirmAction(t.library.replaceConfirm, t.library.replaceAction))) return;
       openEntry(entry);
     }
     navigate("/");
   }
 
   async function remove(entry: LibraryEntry) {
-    if (!window.confirm(t.library.deleteConfirm(entry.title || t.library.untitled))) return;
+    if (!(await confirmAction(t.library.deleteConfirm(entry.title || t.library.untitled), t.library.delete, { danger: true }))) return;
     try {
       await removeEntry(entry);
       setNotice(null);
@@ -166,7 +167,7 @@ export function LibraryPage() {
       {visible.length > 0 ? (
         <div className="gallery-grid">
           {visible.map((entry) => (
-            <LibraryCard key={entry.id} entry={entry} current={entry.id === currentId} onOpen={() => open(entry)} onDelete={() => void remove(entry)} />
+            <LibraryCard key={entry.id} entry={entry} current={entry.id === currentId} onOpen={() => void open(entry)} onDelete={() => void remove(entry)} />
           ))}
         </div>
       ) : status === "idle" ? (

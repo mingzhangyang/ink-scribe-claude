@@ -4,8 +4,11 @@ import { currentDocument, useNoteStore } from "../state/store.ts";
 import { deleteEntry, getEntry, LibraryConflict, saveEntry, type LibraryEntry, type LibraryLink } from "./storage.ts";
 
 type Status = "idle" | "saving" | "saved" | "error" | "conflict" | "deleted";
-/** `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes. */
-type Baseline = { revision: string; text: string } | null;
+/**
+ * `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes;
+ * `source` is its source text, which tells a regenerated note apart from a note made from other text.
+ */
+type Baseline = { revision: string; text: string; source: string } | null;
 export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
 const set = (patch: Partial<{ status: Status; baseline: Baseline }>) => useLibraryStatus.setState(patch);
 let persistRequested = false;
@@ -24,8 +27,21 @@ useNoteStore.subscribe((next, previous) => {
     const fresh = next.source === "sample" && next.documentSerial === previous.documentSerial
       && !input.text.trim() && stickers.length === 0 && !aiDoodle && (!previous.note || isUntouchedSample(previous));
     sample = fresh ? { input, note, settings, stickers, aiDoodle } : null;
+    // A note generated from other source text is a new note: saving it must add an entry, not replace the linked
+    // one. Regenerating the same text (another template, condensing) still updates it.
+    const link = next.libraryLink;
+    const { baseline } = useLibraryStatus.getState();
+    if (link && next.documentSerial === previous.documentSerial && (next.source === "ai" || next.source === "local")
+      && (baseline?.revision !== link.revision || baseline.source !== input.text)) {
+      useNoteStore.getState().setLibraryLink(null);
+      set({ status: "idle", baseline: null });
+    }
   }
 });
+
+function baselineOf(revision: string, document: NoteDocument): Baseline {
+  return { revision, text: serialize(document), source: document.input.text };
+}
 
 function isUntouchedSample(state: SampleParts & Pick<NoteDocument, "source">): boolean {
   return state.source === "sample" && !!sample && (Object.keys(sample) as Array<keyof SampleParts>).every((key) => sample![key] === state[key]);
@@ -69,7 +85,7 @@ export async function checkLibraryLink(recheck = false) {
       // The expected revision is there again (e.g. restored from a backup), so earlier failures no longer apply.
       const current = useLibraryStatus.getState();
       if (current.status === "deleted" || current.status === "conflict" || current.status === "error") set({ status: "idle" });
-      if (current.baseline?.revision !== link.revision) set({ baseline: { revision: entry.revision, text: serialize(entry.document) } });
+      if (current.baseline?.revision !== link.revision) set({ baseline: baselineOf(entry.revision, entry.document) });
     }
   } catch { if (!stale()) set({ status: "error" }); }
 }
@@ -96,7 +112,7 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     const entry = await saveEntry(link, document, force);
     if (replaced()) return;
     useNoteStore.getState().setLibraryLink({ id: entry.id, revision: entry.revision });
-    set({ status: "saved", baseline: { revision: entry.revision, text: serialize(document) } });
+    set({ status: "saved", baseline: baselineOf(entry.revision, document) });
   } catch (error) {
     if (replaced()) return;
     if (error instanceof LibraryConflict && error.deleted) set({ status: "deleted", baseline: null });
@@ -106,7 +122,7 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
 
 export function openEntry(entry: LibraryEntry) {
   useNoteStore.getState().loadDocument(entry.document, { id: entry.id, revision: entry.revision });
-  set({ status: "idle", baseline: { revision: entry.revision, text: serialize(entry.document) } });
+  set({ status: "idle", baseline: baselineOf(entry.revision, entry.document) });
 }
 
 export async function removeEntry(entry: LibraryLink) {
