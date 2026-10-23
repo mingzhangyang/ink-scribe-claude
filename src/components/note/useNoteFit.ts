@@ -3,7 +3,7 @@ import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import type { Settings } from "../../../shared/settings.ts";
 import { byId, PAGE_SIZES, usedFamilies } from "../../config/appearance.ts";
-import { ensureFontsLoaded, resetFailedFontFaces } from "../../export/fontEmbed.ts";
+import { ensureFontsLoaded } from "../../export/fontEmbed.ts";
 import { loadFontCss } from "../../fonts.ts";
 import { fitNote, measureNoteOverflow, type FitResult } from "../../lib/note-fit.ts";
 
@@ -28,7 +28,7 @@ function applyMeasurementSettings(node: HTMLElement, settings: Settings): void {
   node.style.setProperty("--rule", `${Math.round(settings.fontSize * settings.lineHeight)}px`);
 }
 
-function waitForFonts(families: string[], text: string, signal: AbortSignal): Promise<void> {
+function waitForFonts(families: string[], text: string, signal: AbortSignal, retryFailed: boolean): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (error?: Error) => {
       clearTimeout(timer);
@@ -41,8 +41,8 @@ function waitForFonts(families: string[], text: string, signal: AbortSignal): Pr
     signal.addEventListener("abort", abort, { once: true });
     void Promise.all(families.map(loadFontCss))
       .then(() => {
-        resetFailedFontFaces(families);
-        return ensureFontsLoaded(families, text);
+        if (signal.aborted) throw new Error("Layout superseded");
+        return ensureFontsLoaded(families, text, { retryFailed });
       })
       .then(() => finish(), (error: unknown) => finish(error instanceof Error ? error : new Error("Font loading failed")));
   });
@@ -71,7 +71,12 @@ export function useNoteFit(
     applyMeasurementSettings(node, settings);
     const run = async () => {
       try {
-        await waitForFonts(usedFamilies(settings.zhFont, settings.enFont), `${node.textContent ?? ""}${GENERATED_CHARS}`, controller.signal);
+        await waitForFonts(
+          usedFamilies(settings.zhFont, settings.enFont),
+          `${node.textContent ?? ""}${GENERATED_CHARS}`,
+          controller.signal,
+          attempt > 0,
+        );
         if (controller.signal.aborted) return;
         const result: FitResult = fitNote(settings, (candidate) => {
           applyMeasurementSettings(node, candidate);

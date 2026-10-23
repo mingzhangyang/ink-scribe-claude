@@ -7,15 +7,19 @@ import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } fro
  */
 
 type FontFaceSource = {
+  rule: CSSFontFaceRule;
+  base: string;
   family: string;
   style: string;
   weight: string;
+  stretch: string;
   unicodeRange: string;
   url: string;
   format: string;
 };
 
 const dataUrlCache = new Map<string, Promise<string>>();
+const retrySources = new WeakMap<CSSFontFaceRule, { src: string; attempt: number }>();
 
 function pickUrl(src: string, base: string): { url: string; format: string } | undefined {
   const candidates = [...src.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)\s*(?:format\(\s*['"]?([\w-]+)['"]?\s*\))?/g)].map((m) => ({
@@ -39,9 +43,12 @@ function collectRules(rules: CSSRuleList, base: string, families: Set<string>, o
       const source = pickUrl(rule.style.getPropertyValue("src"), base);
       if (!source) continue;
       out.push({
+        rule,
+        base,
         family: family.trim().replace(/^["']|["']$/g, ""),
         style: rule.style.getPropertyValue("font-style") || "normal",
-        weight: rule.style.getPropertyValue("font-weight") || "400",
+        weight: rule.style.getPropertyValue("font-weight") || "normal",
+        stretch: rule.style.getPropertyValue("font-stretch") || "normal",
         unicodeRange: rule.style.getPropertyValue("unicode-range"),
         ...source,
       });
@@ -73,6 +80,33 @@ export function findFontFaces(families: string[], text: string): FontFaceSource[
   return all.filter((face) => rangesIntersect(parseUnicodeRange(face.unicodeRange), codePoints));
 }
 
+function sameFace(source: FontFaceSource, face: FontFace): boolean {
+  const range = (value: string) => (value || "U+0-10FFFF").replace(/\s/g, "").toUpperCase();
+  return normalizeFamily(source.family) === normalizeFamily(face.family)
+    && source.style === face.style && source.weight === face.weight && source.stretch === face.stretch
+    && range(source.unicodeRange) === range(face.unicodeRange);
+}
+
+/** A CSS-connected FontFace in error cannot reload. Changing src creates a new face. */
+function resetFailedFontFaces(families: string[], text: string): void {
+  const failed = Array.from(document.fonts).filter((face) => face.status === "error");
+  if (!failed.length) return;
+  for (const source of findFontFaces(families, text)) {
+    if (!failed.some((face) => sameFace(source, face))) continue;
+    const retry = retrySources.get(source.rule) ?? { src: source.rule.style.getPropertyValue("src"), attempt: 0 };
+    retry.attempt++;
+    retrySources.set(source.rule, retry);
+    // Keep the original fallbacks and descriptors; a fresh URL also bypasses failed font-resource caches.
+    const src = retry.src.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (match, _quote: string, path: string) => {
+      const url = new URL(path, source.base);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return match;
+      url.searchParams.set("ink-font-retry", String(retry.attempt));
+      return `url("${url.href}")`;
+    });
+    source.rule.style.setProperty("src", src);
+  }
+}
+
 async function toDataUrl(url: string): Promise<string> {
   let pending = dataUrlCache.get(url);
   if (!pending) {
@@ -93,60 +127,10 @@ async function toDataUrl(url: string): Promise<string> {
   return pending;
 }
 
-function fontFaceKey(family: string, unicodeRange: string): string {
-  // FontFace 对象把省略的 unicode-range 报告为完整范围，规则文本中则为空
-  const ranges = parseUnicodeRange(unicodeRange);
-  return `${normalizeFamily(family)}|${JSON.stringify(ranges.length ? ranges : [[0, 0x10ffff]])}`;
-}
-
-type RuleContainer = { cssRules: CSSRuleList; insertRule(rule: string, index?: number): number; deleteRule(index: number): void };
-
-function replaceFailedRules(container: RuleContainer, failed: Set<string>): void {
-  for (let index = container.cssRules.length - 1; index >= 0; index -= 1) {
-    const rule = container.cssRules[index];
-    if (rule instanceof CSSFontFaceRule) {
-      const key = fontFaceKey(rule.style.getPropertyValue("font-family"), rule.style.getPropertyValue("unicode-range"));
-      if (!failed.has(key)) continue;
-      const text = rule.cssText;
-      container.deleteRule(index);
-      container.insertRule(text, index);
-    } else if (rule instanceof CSSImportRule && rule.styleSheet) {
-      try {
-        replaceFailedRules(rule.styleSheet, failed);
-      } catch {
-        // 跨域样式表无法修改，跳过
-      }
-    } else if ("cssRules" in rule && (rule as CSSGroupingRule).cssRules) {
-      replaceFailedRules(rule as CSSGroupingRule, failed);
-    }
-  }
-}
-
-/**
- * 字体文件下载失败后，样式表生成的 FontFace 会永久停在 error 状态，再次 load() 仍然失败。
- * 重新插入对应的 @font-face 规则会生成新的 FontFace，网络恢复后即可重新下载；
- * 已成功加载的分片保持不变。
- */
-export function resetFailedFontFaces(families: string[]): void {
-  if (!("fonts" in document)) return;
-  const wanted = new Set(families.map(normalizeFamily));
-  const failed = new Set<string>();
-  document.fonts.forEach((face) => {
-    if (face.status === "error" && wanted.has(normalizeFamily(face.family))) failed.add(fontFaceKey(face.family, face.unicodeRange));
-  });
-  if (failed.size === 0) return;
-  for (const sheet of Array.from(document.styleSheets)) {
-    try {
-      replaceFailedRules(sheet, failed);
-    } catch {
-      // 跨域样式表无法读取，跳过
-    }
-  }
-}
-
 /** 等待页面用到的字形全部加载完成（包括按需加载的 unicode-range 分片）。 */
-export async function ensureFontsLoaded(families: string[], text: string): Promise<void> {
+export async function ensureFontsLoaded(families: string[], text: string, options: { retryFailed?: boolean } = {}): Promise<void> {
   if (!("fonts" in document)) return;
+  if (options.retryFailed) resetFailedFontFaces(families, text);
   await Promise.all(families.map((family) => document.fonts.load(`20px "${family}"`, text)));
   await document.fonts.ready;
 }

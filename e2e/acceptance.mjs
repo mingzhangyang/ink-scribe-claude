@@ -4,6 +4,7 @@
 import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
+import { verifyFontRetry } from "./font-retry.mjs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
 const URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173/";
@@ -145,6 +146,7 @@ const fontInfo = await page.evaluate((t) => ({
   zhLoaded: document.fonts.check('20px "Ma Shan Zheng"', t),
 }), zhTitle);
 check("E1", "切换中英文字体，中文字体分片在生产构建中按需加载", fontInfo.stack.startsWith('Caveat, "Ma Shan Zheng"') && fontInfo.zhLoaded, JSON.stringify(fontInfo));
+await verifyFontRetry({ newPage, check, url: URL, outputDir: SP, mode: "editor" });
 
 await page.selectOption(".sample-picker select", "en-lecture");
 await page.getByRole("button", { name: /转化为手写笔记/ }).click();
@@ -261,6 +263,80 @@ await page.locator(".range-field").filter({ hasText: "行距" }).locator("input"
 await waitForNoteReady(page);
 const autoFit = await page.locator(".note-page").evaluate(inspectNoteLayout);
 check("R1", "大字号内容在字体就绪后自动适配且没有裁切", autoFit.status === "ready" && autoFit.clipped === 0 && autoFit.overflowing === 0, JSON.stringify(autoFit));
+
+// Observe transitions as well as the final state: an unnecessary fit can finish between pointer events.
+// Use a known long document; the generated sample can fit A4 after typography adaptation.
+await page.getByRole("tab", { name: "内容" }).click();
+const originalFitContent = await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).inputValue();
+await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).fill("- Stable text.\n".repeat(60).trim());
+await waitForNoteReady(page);
+await page.getByRole("tab", { name: "贴纸" }).click();
+await page.evaluate(() => {
+  const node = document.querySelector(".note-page");
+  const snapshot = () => ({
+    status: node.dataset.renderStatus,
+    expanded: node.dataset.renderExpanded,
+    pageSize: node.dataset.pageSize,
+    height: node.offsetHeight,
+    fontSize: node.style.getPropertyValue("--fs"),
+    lineHeight: node.style.getPropertyValue("--lh"),
+  });
+  const originalLoad = document.fonts.load;
+  const probe = { before: snapshot(), fontLoads: 0, transitions: [] };
+  document.fonts.load = function (...args) {
+    probe.fontLoads++;
+    return originalLoad.apply(this, args);
+  };
+  const collect = (records) => {
+    for (const record of records) {
+      probe.transitions.push({ attribute: record.attributeName, old: record.oldValue, value: node.getAttribute(record.attributeName) });
+    }
+  };
+  const observer = new MutationObserver(collect);
+  observer.observe(node, { attributes: true, attributeOldValue: true, attributeFilter: ["data-render-status", "data-page-size", "data-render-expanded", "style"] });
+  window.finishStickerFitProbe = () => {
+    collect(observer.takeRecords());
+    observer.disconnect();
+    document.fonts.load = originalLoad;
+    delete window.finishStickerFitProbe;
+    return { ...probe, after: snapshot() };
+  };
+});
+await page.getByTitle("和纸胶带 · 薄荷").click();
+const movingSticker = page.locator(".sticker-tape");
+const geometryBefore = await movingSticker.evaluate((el) => ({ left: el.style.left, top: el.style.top, transform: el.style.transform }));
+const dragBox = await movingSticker.boundingBox();
+await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+await page.mouse.down();
+await page.mouse.move(dragBox.x + dragBox.width / 2 + 70, dragBox.y + dragBox.height / 2 + 40, { steps: 10 });
+await page.mouse.up();
+const geometryMoved = await movingSticker.evaluate((el) => ({ left: el.style.left, top: el.style.top }));
+for (const handle of [".handle-rotate", ".handle-scale"]) {
+  const bounds = await page.locator(handle).boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 60, bounds.y + 35, { steps: 10 });
+  await page.mouse.up();
+}
+const geometryAfter = await movingSticker.evaluate((el) => el.style.transform);
+await movingSticker.focus();
+await page.keyboard.press("Delete");
+const stickerFit = await page.evaluate(() => window.finishStickerFitProbe());
+const parsedBefore = geometryBefore.transform.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
+const parsedAfter = geometryAfter.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
+check(
+  "R2",
+  "扩展长图增删、拖动、旋转及缩放贴纸时保持排版就绪且不重新加载字体",
+  stickerFit.before.expanded === "true" && stickerFit.before.pageSize === "long" &&
+    geometryBefore.left !== geometryMoved.left && geometryBefore.top !== geometryMoved.top &&
+    parsedBefore && parsedAfter && parsedBefore[1] !== parsedAfter[1] && parsedBefore[2] !== parsedAfter[2] &&
+    stickerFit.fontLoads === 0 && stickerFit.transitions.length === 0 &&
+    JSON.stringify(stickerFit.before) === JSON.stringify(stickerFit.after),
+  JSON.stringify(stickerFit),
+);
+await page.getByRole("tab", { name: "内容" }).click();
+await page.getByRole("textbox", { name: "段落 1 正文", exact: true }).fill(originalFitContent);
+await page.getByRole("tab", { name: "样式" }).click();
 await page.locator(".range-field").filter({ hasText: "字号" }).locator("input").fill("17");
 await page.locator(".range-field").filter({ hasText: "行距" }).locator("input").fill("1.6");
 await waitForNoteReady(page);
@@ -682,6 +758,7 @@ if (process.env.E2E_API_KEY) {
     handles: document.querySelectorAll(".sticker-selection").length,
   }));
   check("V4", "查看页按发布时的外观只读渲染", view.title.includes("E2E") && view.cls.includes("paper-kraft") && view.cls.includes("layout-free-journal") && view.stickers === 1 && view.handles === 0, JSON.stringify(view));
+  await verifyFontRetry({ newPage, check, url: note.url, outputDir: SP, mode: "view" });
 
   // 回归：浏览器带缓存校验头（If-None-Match）再次打开链接时仍应返回完整页面（曾因转发该头而得到 Not Found）
   const shellEtag = (await p7.request.get(URL)).headers()["etag"] ?? "";

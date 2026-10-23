@@ -57,7 +57,7 @@ export function Workspace({ pageRef, fit, onFitChange }: {
 
   useLayoutEffect(() => {
     check();
-  }, [check, note, settings, stickers, aiDoodle]);
+  }, [check, note, settings, aiDoodle]);
 
   useEffect(() => {
     const page = pageRef.current;
