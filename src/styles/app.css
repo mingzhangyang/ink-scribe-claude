@@ -223,20 +223,44 @@ textarea {
   line-height: 1.7;
 }
 
-.textarea-wrap.is-dragging .source-text {
-  border-color: var(--gold);
-  border-style: dashed;
-}
-
-.drop-hint {
+/* 拖入文件时的接收层：原文弹窗内盖住整个弹窗，页面上盖住整个视口 */
+.drop-overlay {
   position: absolute;
   inset: 0;
+  z-index: 5;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  padding: 16px;
+  border: 2px dashed var(--gold);
   background: var(--overlay);
-  color: var(--gold);
+}
+
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 28px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+  /* 拖动经过卡片时不触发接收层的 dragleave */
   pointer-events: none;
+}
+
+.drop-card strong {
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.drop-card small {
+  color: var(--muted);
+}
+
+.drop-overlay.is-page {
+  position: fixed;
+  z-index: 45;
 }
 
 .upload-row {
@@ -1023,6 +1047,18 @@ input[type="range"] {
   color: var(--text);
   box-shadow: var(--shadow);
   overflow: hidden;
+  /* 下滑未达到关闭条件时弹回原位 */
+  transition: transform 0.2s ease;
+}
+
+.sheet[data-dragging] {
+  transition: none;
+}
+
+/* 软键盘弹出时（Sheet 根据 visualViewport 计算）：底边抬到键盘上方，高度不超过可见区域 */
+.sheet[data-keyboard] {
+  margin-bottom: var(--keyboard-inset);
+  max-height: calc(var(--visible-height) - 8px);
 }
 
 .sheet[open] {
@@ -1092,6 +1128,7 @@ html:has(.sheet[open]) {
 }
 
 .input-panel {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1148,6 +1185,20 @@ html:has(.sheet[open]) {
   gap: 8px 16px;
 }
 
+.shortcut-hint {
+  margin-right: auto;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 触屏通常没有实体键盘，不显示快捷键 */
+@media (pointer: coarse) {
+  .shortcut-hint {
+    display: none;
+  }
+}
+
 .input-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 240px;
@@ -1192,6 +1243,10 @@ html:has(.sheet[open]) {
 
   .sheet-head {
     padding-top: 18px;
+    /* 按住标题栏下滑关闭抽屉，不让浏览器把这个手势当作滚动、下拉刷新或选择文字 */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .sheet-handle {
@@ -1280,9 +1335,25 @@ html:has(.sheet[open]) {
   .sheet-actions .btn-link {
     justify-content: center;
   }
+
+  /* 软键盘弹出后可见区域很矮：只保留输入框和生成按钮 */
+  .sheet[data-keyboard] .upload-row,
+  .sheet[data-keyboard] .input-options,
+  .sheet[data-keyboard] .sheet-actions .btn-link {
+    display: none;
+  }
+
+  .sheet[data-keyboard] .textarea-wrap,
+  .sheet[data-keyboard] .source-text {
+    min-height: 96px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sheet {
+    transition: none;
+  }
+
   .input-trigger.is-attention,
   .sheet[open],
   .sheet[data-closing],

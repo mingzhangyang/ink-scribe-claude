@@ -1,12 +1,14 @@
 import { DETAILS, LANGUAGES, TEMPLATES, type Detail, type Language } from "../../shared/options.ts";
-import { useId, useRef, useState, type DragEvent } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { charLength } from "../../shared/text.ts";
 import { useT } from "../i18n/index.ts";
-import { ACCEPTED_EXTENSIONS, extractTextFromFile, FileImportError, type ExtractResult, type ImportErrorKey } from "../import/extractText.ts";
+import { ACCEPTED_EXTENSIONS } from "../import/extractText.ts";
 import { SAMPLE_TEXTS } from "../samples.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { usePreferences } from "../state/preferences.ts";
 import { useNoteStore } from "../state/store.ts";
+import { FileDropOverlay, isFileDrag } from "./FileDropOverlay.tsx";
+import type { ImportState } from "./useFileImport.ts";
 
 /** 打开原文弹窗的按钮：宽屏位于画布工具栏，窄屏（CSS）固定在屏幕底部。 */
 export function InputTrigger({ onOpen }: { onOpen: () => void }) {
@@ -24,7 +26,13 @@ export function InputTrigger({ onOpen }: { onOpen: () => void }) {
 }
 
 /** 原文弹窗的内容。生成后调用 onSubmitted，由页面关闭弹窗并展示画布。 */
-export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: number; onClose: () => void; onSubmitted: () => void }) {
+export function InputPanel({ maxChars, importState, onImportFile, onClose, onSubmitted }: {
+  maxChars: number;
+  importState: ImportState;
+  onImportFile: (file: File) => void;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
   const input = useNoteStore((s) => s.input);
   const status = useNoteStore((s) => s.status);
   const setInput = useNoteStore((s) => s.setInput);
@@ -34,34 +42,13 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
   const tooLong = length > maxChars;
   const empty = input.text.trim().length === 0;
   const loading = status === "loading";
+  const canGenerate = !empty && !tooLong && !loading;
   const fileInput = useRef<HTMLInputElement>(null);
-  const [importState, setImportState] = useState<
-    | { kind: "idle" }
-    | { kind: "busy"; name: string }
-    | { kind: "done"; name: string; result: Omit<ExtractResult, "text">; chars: number }
-    | { kind: "error"; name: string; key?: ImportErrorKey }
-  >({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
   // 窄屏下模板、语言与详略默认收起，只显示摘要
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsId = useId();
-  // 连续导入多个文件时，只采用最后一次导入的结果（较早的大文件可能更晚解析完）
-  const importGeneration = useRef(0);
-
-  async function importFile(file: File) {
-    const current = ++importGeneration.current;
-    setImportState({ kind: "busy", name: file.name });
-    try {
-      const result = await extractTextFromFile(file);
-      if (current !== importGeneration.current) return;
-      const { text, ...meta } = result;
-      setInput({ text });
-      setImportState({ kind: "done", name: file.name, result: meta, chars: charLength(text) });
-    } catch (error) {
-      if (current !== importGeneration.current) return;
-      setImportState({ kind: "error", name: file.name, ...(error instanceof FileImportError ? { key: error.key } : {}) });
-    }
-  }
+  const modKey = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl";
 
   // 提示在渲染时按当前界面语言生成，切换语言后随之切换
   function importMessage(): string | null {
@@ -81,16 +68,24 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
     onSubmitted();
   }
 
-  function onDrop(event: DragEvent) {
+  // ⌘/Ctrl + Enter 生成；输入法组字时的回车不算
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    setDragging(false);
-    const file = event.dataTransfer.files[0];
-    if (file) void importFile(file);
+    if (canGenerate) submit(() => void generateNote());
   }
 
   return (
-    <section className="input-panel" aria-labelledby="input-title">
-      <header className="sheet-head">
+    <section
+      className="input-panel"
+      aria-labelledby="input-title"
+      onDragEnter={(event) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+    >
+      <header className="sheet-head" data-sheet-drag>
         <span className="sheet-handle" aria-hidden="true" />
         <h2 id="input-title">{t.input.title}</h2>
         <label className="sample-picker">
@@ -119,20 +114,12 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
 
       <div className="sheet-body input-body">
         <div className="input-main">
-          <div
-            className={`textarea-wrap${dragging ? " is-dragging" : ""}`}
-            onDragOver={(e) => {
-              if (!e.dataTransfer.types.includes("Files")) return;
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-          >
+          <div className="textarea-wrap">
             <textarea
               className="source-text"
               value={input.text}
               onChange={(e) => setInput({ text: e.target.value })}
+              onKeyDown={onKeyDown}
               placeholder={t.input.placeholder}
               aria-label={t.input.textareaLabel}
               spellCheck={false}
@@ -141,7 +128,6 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
             <div className={`char-count${tooLong ? " is-over" : ""}`} aria-live="polite">
               {length.toLocaleString()} / {maxChars.toLocaleString()}
             </div>
-            {dragging ? <div className="drop-hint">{t.input.dropHint}</div> : null}
           </div>
 
           <div className="upload-row">
@@ -158,7 +144,7 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
-                if (file) void importFile(file);
+                if (file) onImportFile(file);
               }}
             />
           </div>
@@ -237,6 +223,7 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
           </p>
         ) : null}
         <div className="sheet-actions">
+          <kbd className="shortcut-hint" aria-hidden="true">{t.input.shortcut(modKey)}</kbd>
           <button type="button" className="btn btn-link" disabled={empty || loading} onClick={() => submit(generateLocally)}>
             {t.input.local}
           </button>
@@ -245,12 +232,19 @@ export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: numbe
               {t.input.cancel}
             </button>
           ) : (
-            <button type="button" className="btn btn-primary" disabled={empty || tooLong} onClick={() => submit(() => void generateNote())}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canGenerate}
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+              onClick={() => submit(() => void generateNote())}
+            >
               <span aria-hidden="true">✒️</span> {t.input.generate}
             </button>
           )}
         </div>
       </footer>
+      {dragging ? <FileDropOverlay onFile={onImportFile} onLeave={() => setDragging(false)} /> : null}
     </section>
   );
 }

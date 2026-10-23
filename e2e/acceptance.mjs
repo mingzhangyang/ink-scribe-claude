@@ -1393,6 +1393,124 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await context.close();
 }
 
+// 软键盘避让与下滑关闭（移动端），拖入文件与快捷键（桌面端）
+{
+  const viewport = { width: 390, height: 844 };
+  const { page, context } = await newPage({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const sheet = page.locator(".input-sheet");
+  await page.locator(".input-trigger").tap();
+  await sheet.waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+  // 自动化浏览器不会弹出软键盘：把 visualViewport 缩小 300px 来模拟
+  const keyboard = 300;
+  await page.evaluate((height) => {
+    const visual = window.visualViewport;
+    const visible = visual.height - height;
+    Object.defineProperty(visual, "height", { configurable: true, get: () => visible });
+    visual.dispatchEvent(new Event("resize"));
+  }, keyboard);
+  const withKeyboard = await page.evaluate(() => {
+    const rect = (selector) => document.querySelector(selector).getBoundingClientRect().toJSON();
+    return {
+      sheet: rect(".input-sheet"),
+      generate: rect(".input-sheet .btn-primary"),
+      textarea: rect(".source-text").height,
+      upload: getComputedStyle(document.querySelector(".upload-row")).display,
+    };
+  });
+  check(
+    "IS13",
+    "软键盘弹出时抽屉抬到键盘上方，输入框与生成按钮可见",
+    Math.abs(withKeyboard.sheet.bottom - (viewport.height - keyboard)) <= 1 && withKeyboard.sheet.top >= 0 &&
+      withKeyboard.generate.bottom <= viewport.height - keyboard && withKeyboard.textarea >= 90 && withKeyboard.upload === "none",
+    JSON.stringify(withKeyboard),
+  );
+  await page.evaluate(() => {
+    delete window.visualViewport.height;
+    window.visualViewport.dispatchEvent(new Event("resize"));
+  });
+  const box = await sheet.boundingBox();
+  check("IS14", "软键盘收起后抽屉恢复贴底", Math.abs(box.y + box.height - viewport.height) <= 1, JSON.stringify(box));
+
+  // 按住标题栏（拖动把手处）下拉：拖得少、拖得慢时弹回，拖过四分之一高度时关闭
+  const x = box.x + box.width / 2;
+  await page.mouse.move(x, box.y + 8);
+  await page.mouse.down();
+  for (let step = 1; step <= 4; step++) {
+    await page.mouse.move(x, box.y + 8 + step * 8);
+    await page.waitForTimeout(50);
+  }
+  const dragged = await sheet.evaluate((dialog) => dialog.style.transform);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const snapped = await sheet.evaluate((dialog) => ({ open: dialog.open, transform: dialog.style.transform, top: dialog.getBoundingClientRect().top }));
+  check("IS15", "轻拉抽屉后松手弹回原位", dragged === "translateY(32px)" && snapped.open && snapped.transform === "" && Math.abs(snapped.top - box.y) <= 1, JSON.stringify({ dragged, snapped }));
+  await page.mouse.move(x, box.y + 8);
+  await page.mouse.down();
+  for (let step = 1; step <= 6; step++) {
+    await page.mouse.move(x, box.y + 8 + step * 50);
+    await page.waitForTimeout(30);
+  }
+  await page.mouse.up();
+  const dismissed = await sheet.waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
+  check("IS16", "下拉超过四分之一高度关闭抽屉", dismissed && await sheet.evaluate((dialog) => dialog.style.transform) === "" && page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const sheet = page.locator(".input-sheet");
+  const fileTransfer = (name, text) =>
+    page.evaluateHandle(([name, text]) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([text], name, { type: "text/plain" }));
+      return transfer;
+    }, [name, text]);
+
+  let dataTransfer = await fileTransfer("dropped.txt", "拖到页面上的文件内容");
+  await page.dispatchEvent(".workspace", "dragenter", { dataTransfer });
+  await page.locator(".drop-overlay.is-page").waitFor();
+  await page.dispatchEvent(".drop-overlay", "dragleave", { dataTransfer });
+  const leaveHides = await page.locator(".drop-overlay").count() === 0;
+  await page.dispatchEvent(".side-panel", "dragenter", { dataTransfer });
+  await page.dispatchEvent(".drop-overlay", "dragover", { dataTransfer });
+  await page.dispatchEvent(".drop-overlay", "drop", { dataTransfer });
+  await sheet.waitFor({ state: "visible" });
+  await page.locator(".input-panel .hint.is-ok").waitFor();
+  check(
+    "IS17",
+    "把文件拖到页面任意位置：打开原文弹窗并导入，移开时提示消失",
+    leaveHides && await page.locator(".source-text").inputValue() === "拖到页面上的文件内容" &&
+      (await page.locator(".input-panel .hint.is-ok").innerText()).includes("dropped.txt") && await page.locator(".drop-overlay").count() === 0,
+  );
+
+  dataTransfer = await fileTransfer("second.txt", "弹窗里拖入的第二个文件");
+  await page.dispatchEvent(".sheet-head", "dragenter", { dataTransfer });
+  await page.locator(".input-panel .drop-overlay").waitFor();
+  const pageOverlay = await page.locator(".drop-overlay.is-page").count();
+  await page.dispatchEvent(".input-panel .drop-overlay", "drop", { dataTransfer });
+  await page.waitForFunction(() => document.querySelector(".source-text").value === "弹窗里拖入的第二个文件");
+  check("IS18", "弹窗打开时，拖到弹窗任意位置的文件由弹窗接收", pageOverlay === 0 && await page.locator(".drop-overlay").count() === 0);
+
+  const source = page.locator(".source-text");
+  await source.fill("");
+  await source.press("Control+Enter");
+  const emptyStays = await sheet.evaluate((dialog) => dialog.open);
+  await source.fill("快捷键生成：间隔重复与主动回忆。");
+  await source.press("Control+Enter");
+  await page.waitForSelector(".badge-ai");
+  const closed = await sheet.waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
+  check(
+    "IS19",
+    "Ctrl + Enter 生成并收起弹窗，原文为空时不生成",
+    emptyStays && closed && (await page.locator(".shortcut-hint").textContent()) === "Ctrl + Enter 生成",
+  );
+  check("IS20", "拖入文件与快捷键流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
 // ---------- D. 本地草稿 ----------
 {
   const { page, context } = await newPage();
