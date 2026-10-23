@@ -1769,12 +1769,16 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const emptyHint = await page.getByRole("status").filter({ hasText: "没有匹配的贴纸" }).count();
   await search.press("Escape");
   const cleared = (await search.inputValue()) === "" && (await page.getByRole("radiogroup", { name: "贴纸分类" }).count()) === 1;
+  // 从搜索结果添加时用的款式会被记住，之后从分类添加同类贴纸沿用它
+  await addDecorSticker(page, "胶带夹子", "长尾夹");
+  const rememberedVariant = (await page.locator(".sticker-variants [aria-checked=true]").innerText()).trim();
   check(
     "G11",
-    "搜索贴纸：中文名、英文名与款式名都能找到，按款式名搜到的直接用那个款式，无结果时提示，Esc 清除",
+    "搜索贴纸：中文名、英文名与款式名都能找到，按款式名搜到的直接用那个款式并记住，无结果时提示，Esc 清除",
     JSON.stringify(byName) === '["火箭"]' && JSON.stringify(byEnglish) === '["火箭"]' && JSON.stringify(byLetters) === '["DNA 双螺旋"]' &&
-      byVariant.includes("和纸胶带") && byVariant.includes("长尾夹") && searchedVariant === "薄荷" && none.length === 0 && emptyHint === 1 && cleared,
-    JSON.stringify({ byName, byEnglish, byLetters, byVariant, searchedVariant, none, emptyHint, cleared }),
+      byVariant.includes("和纸胶带") && byVariant.includes("长尾夹") && searchedVariant === "薄荷" && none.length === 0 && emptyHint === 1 && cleared &&
+      rememberedVariant === "薄荷",
+    JSON.stringify({ byName, byEnglish, byLetters, byVariant, searchedVariant, none, emptyHint, cleared, rememberedVariant }),
   );
 
   // 最近使用：最新添加的在前，最多 6 个，点一下就再添加一张
@@ -1806,6 +1810,29 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     "水平翻转只镜像贴纸图形，选框与手柄不翻转，可以恢复",
     flipped.cls && flipped.art === "matrix(-1, 0, 0, 1, 0, 0)" && flipped.frame === flipped.box && pressed === "true" && restored,
     JSON.stringify({ ...flipped, pressed, restored }),
+  );
+
+  // 单选按钮组：方向键切换选项并移动焦点，不会同时移动画布上选中的贴纸
+  const selectedSticker = page.locator(".sticker.is-selected");
+  const position = () => selectedSticker.evaluate((el) => `${el.style.left},${el.style.top}`);
+  const before = await position();
+  const checkedVariant = page.locator(".sticker-variants [aria-checked=true]");
+  const variantBefore = (await checkedVariant.innerText()).trim();
+  await checkedVariant.focus();
+  await page.keyboard.press("ArrowRight");
+  const variantAfter = (await checkedVariant.innerText()).trim();
+  const variantFocused = await page.evaluate(() => document.activeElement?.getAttribute("aria-checked"));
+  const categoryGroup = page.getByRole("radiogroup", { name: "贴纸分类" });
+  const categoryBefore = (await categoryGroup.locator("[aria-checked=true]").innerText()).trim();
+  await categoryGroup.locator("[aria-checked=true]").focus();
+  await page.keyboard.press("ArrowRight");
+  const categoryAfter = (await categoryGroup.locator("[aria-checked=true]").innerText()).trim();
+  const after = await position();
+  check(
+    "G14",
+    "颜色与款式、贴纸分类可用方向键切换，按键不会移动画布上选中的贴纸",
+    variantAfter !== variantBefore && variantFocused === "true" && categoryBefore === "胶带夹子" && categoryAfter === "纸品标签" && before === after,
+    JSON.stringify({ variantBefore, variantAfter, variantFocused, categoryBefore, categoryAfter, before, after }),
   );
   await context.close();
 }

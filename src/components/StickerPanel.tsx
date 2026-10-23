@@ -1,4 +1,4 @@
-import { useId, useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { DoodleSpec } from "../../shared/doodle.ts";
 import { DOODLE_THEMES } from "../../shared/themes.ts";
 import { ApiRequestError, generateDoodle } from "../api.ts";
@@ -71,6 +71,22 @@ function searchStickers(needle: string): Array<{ type: DecorStickerType; variant
   });
 }
 
+const RADIO_STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+
+/**
+ * 单选按钮组的键盘操作：方向键在选项间循环移动并选中，Home / End 跳到首尾。
+ * 处理过的按键不再冒泡，避免选中贴纸时方向键同时移动画布上的贴纸。
+ */
+function onRadioKeys(event: KeyboardEvent<HTMLElement>, count: number, current: number, select: (index: number) => void) {
+  const step = RADIO_STEPS[event.key];
+  const next = step ? (current + step + count) % count : event.key === "Home" ? 0 : event.key === "End" ? count - 1 : -1;
+  if (next < 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  select(next);
+  event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
+}
+
 /** 面板预览用固定 ID，墨渍、印章等按 ID 生成形状的贴纸在面板里保持不变。 */
 const preview = (type: DecorStickerType, variant: string): StickerItem => ({ id: `preview-${type}`, type, x: 0, y: 0, rotation: 0, scale: 1, variant });
 
@@ -101,7 +117,10 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
   // 预览与画布一致：跟随当前笔记的墨水色和纸张底色
   const artVars = { "--ink": byId(INKS, settings.ink).color, "--paper": byId(PAPERS, settings.paper).base } as CSSProperties;
 
-  /** 贴纸预览按钮：默认沿用这类贴纸上次选的颜色或款式；“最近使用”一行用不带名称的紧凑样式。 */
+  /**
+   * 贴纸预览按钮：默认沿用这类贴纸上次选的颜色或款式，搜索结果可能指定别的款式；
+   * 添加后记住实际用的款式。“最近使用”一行用不带名称的紧凑样式。
+   */
   function tile(type: DecorStickerType, options: { compact?: boolean; variant?: string } = {}) {
     const { compact = false } = options;
     const name = t.options.stickers[type];
@@ -113,6 +132,7 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
         className={`sticker-option${compact ? " is-compact" : ""}`}
         onClick={() => {
           addSticker(type, { variant });
+          rememberVariant(type, variant);
           rememberRecent(type);
         }}
         title={t.stickers.addTitle(name)}
@@ -124,6 +144,13 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
         {compact ? null : <span className="sticker-option-name">{name}</span>}
       </button>
     );
+  }
+
+  /** 给选中的贴纸换颜色或款式，并记住它，下一张同类贴纸沿用。 */
+  function chooseVariant(variant: string) {
+    if (!selected || !selectedDecor) return;
+    updateSticker(selected.id, { variant });
+    rememberVariant(selectedDecor, variant);
   }
 
   const [concept, setConcept] = useState("");
@@ -170,13 +197,19 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
                 <div className="sticker-recent-grid">{recent.map((type) => tile(type, { compact: true }))}</div>
               </div>
             ) : null}
-            <div className="chip-group" role="radiogroup" aria-label={t.stickers.categories}>
+            <div
+              className="chip-group"
+              role="radiogroup"
+              aria-label={t.stickers.categories}
+              onKeyDown={(e) => onRadioKeys(e, STICKER_CATEGORIES.length, STICKER_CATEGORIES.indexOf(category), (i) => setCategory(STICKER_CATEGORIES[i]))}
+            >
               {STICKER_CATEGORIES.map((id) => (
                 <button
                   key={id}
                   type="button"
                   role="radio"
                   aria-checked={category === id}
+                  tabIndex={category === id ? 0 : -1}
                   className={`chip${category === id ? " is-active" : ""}`}
                   onClick={() => setCategory(id)}
                 >
@@ -193,7 +226,16 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
               <span id={variantsLabelId} className="hint">
                 {t.stickers.variants(t.options.stickers[selectedDecor])}
               </span>
-              <div className="chip-group" role="radiogroup" aria-labelledby={variantsLabelId}>
+              <div
+                className="chip-group"
+                role="radiogroup"
+                aria-labelledby={variantsLabelId}
+                onKeyDown={(e) => {
+                  const variants: readonly StickerVariant[] = STICKER_VARIANTS[selectedDecor];
+                  const current = variants.findIndex((v) => v.id === stickerVariant(selectedDecor, selected.variant).id);
+                  onRadioKeys(e, variants.length, current, (i) => chooseVariant(variants[i].id));
+                }}
+              >
                 {STICKER_VARIANTS[selectedDecor].map((variant: StickerVariant) => {
                   const active = stickerVariant(selectedDecor, selected.variant).id === variant.id;
                   return (
@@ -202,11 +244,9 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
                       type="button"
                       role="radio"
                       aria-checked={active}
+                      tabIndex={active ? 0 : -1}
                       className={`chip sticker-variant${active ? " is-active" : ""}`}
-                      onClick={() => {
-                        updateSticker(selected.id, { variant: variant.id });
-                        rememberVariant(selectedDecor, variant.id);
-                      }}
+                      onClick={() => chooseVariant(variant.id)}
                     >
                       <span className="sticker-variant-swatch" style={swatchStyle(variant)} />
                       {(t.options.stickerVariants[selectedDecor] as Record<string, string>)[variant.id]}
