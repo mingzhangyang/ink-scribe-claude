@@ -2,9 +2,8 @@ import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import type { Settings } from "../../../shared/settings.ts";
-import type { StickerItem } from "../../../shared/stickers.ts";
 import { byId, PAGE_SIZES, usedFamilies } from "../../config/appearance.ts";
-import { ensureFontsLoaded } from "../../export/fontEmbed.ts";
+import { ensureFontsLoaded, resetFailedFontFaces } from "../../export/fontEmbed.ts";
 import { loadFontCss } from "../../fonts.ts";
 import { fitNote, measureNoteOverflow, type FitResult } from "../../lib/note-fit.ts";
 
@@ -41,7 +40,10 @@ function waitForFonts(families: string[], text: string, signal: AbortSignal): Pr
     const timer = setTimeout(() => finish(new Error("Font loading timed out")), FONT_TIMEOUT_MS);
     signal.addEventListener("abort", abort, { once: true });
     void Promise.all(families.map(loadFontCss))
-      .then(() => ensureFontsLoaded(families, text))
+      .then(() => {
+        resetFailedFontFaces(families);
+        return ensureFontsLoaded(families, text);
+      })
       .then(() => finish(), (error: unknown) => finish(error instanceof Error ? error : new Error("Font loading failed")));
   });
 }
@@ -50,10 +52,11 @@ export function useNoteFit(
   node: HTMLElement | null,
   note: NoteStructure,
   settings: Settings,
-  stickers: StickerItem[],
   aiDoodle: DoodleSpec | null,
 ): NoteFitState {
-  const input = useMemo(() => ({ note, settings, stickers, aiDoodle }), [note, settings, stickers, aiDoodle]);
+  // Stickers are absolutely positioned decorations outside the text fit, so dragging one
+  // must not reset the completed layout.
+  const input = useMemo(() => ({ note, settings, aiDoodle }), [note, settings, aiDoodle]);
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   const [completed, setCompleted] = useState<{

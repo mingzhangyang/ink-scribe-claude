@@ -186,6 +186,13 @@ check("G7", "手绘插图库五列完整显示在面板内且按钮为正方形"
 await page.getByTitle("和纸胶带 · 薄荷").click();
 const stickers = page.locator(".sticker");
 const first = stickers.nth(0);
+// 贴纸位于正文适配之外：拖动、缩放、旋转都不应让已完成的适配回到 pending
+await waitForNoteReady(page);
+await page.locator(".note-page").evaluate((el) => {
+  window.__fitStatuses = [];
+  window.__fitObserver = new MutationObserver(() => window.__fitStatuses.push(el.dataset.renderStatus));
+  window.__fitObserver.observe(el, { attributes: true, attributeFilter: ["data-render-status"] });
+});
 const before = await first.evaluate((el) => ({ left: el.style.left, top: el.style.top }));
 const box = await first.boundingBox();
 await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -207,6 +214,11 @@ await page.mouse.up();
 const transform = await first.evaluate((el) => el.style.transform);
 const m = transform.match(/rotate\(([-\d.]+)deg\) scale\(([\d.]+)\)/);
 check("G3", "旋转与缩放贴纸", !!m && Number(m[2]) > 1 && Math.abs(Number(m[1])) > 20, transform);
+const fitDuringDrag = await page.evaluate(() => {
+  window.__fitObserver.disconnect();
+  return window.__fitStatuses;
+});
+check("G8", "拖动、缩放和旋转贴纸不会重新适配页面", fitDuringDrag.length === 0, fitDuringDrag.join(","));
 await page.getByTitle("便利贴 · 黄").click();
 await page.getByRole("button", { name: "添加插图：书本·阅读" }).click();
 check("G1", "添加贴纸与插图", (await stickers.count()) === 3);
@@ -489,6 +501,42 @@ await context.close();
   await p4.waitForSelector(".alert-error");
   check("N-NETWORK", "网络错误有可理解的提示", (await p4.locator(".alert-error").innerText()).includes("网络"));
   await c4.close();
+}
+
+// ---------- N-FONT. 字体文件下载失败后，网络恢复即可重试 ----------
+{
+  const { page: pf, context: cf } = await newPage();
+  await pf.goto(URL, { waitUntil: "networkidle" });
+  await pf.selectOption(".sample-picker select", "zh-reading");
+  await pf.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await pf.waitForSelector(".badge-ai");
+  await waitForNoteReady(pf);
+  // 只拦截字体文件；按需加载的样式表照常返回，模拟字体分片下载时断网
+  const fontFiles = /ma-shan-zheng.*\.woff2?(\?.*)?$/;
+  let blocked = 0;
+  await pf.route(fontFiles, (route) => {
+    blocked += 1;
+    return route.abort("internetdisconnected");
+  });
+  await pf.getByRole("tab", { name: "样式" }).click();
+  await pf.locator(".field").filter({ hasText: "中文字体" }).locator("select").selectOption("ma-shan-zheng");
+  await pf.locator('.note-page[data-render-status="font-error"]').waitFor({ timeout: 30_000 });
+  await pf.getByRole("tab", { name: "导出" }).click();
+  const exportBlocked = await pf.getByRole("button", { name: "下载图片", exact: true }).isDisabled();
+  await pf.unroute(fontFiles);
+  await pf.locator('.note-fit-status[data-fit-status="font-error"]').getByRole("button", { name: "重试" }).click();
+  await waitForNoteReady(pf);
+  const recovered = await pf.evaluate(() => {
+    const title = document.querySelector(".note-title").textContent.replace(/\s+/g, "");
+    return document.fonts.check('20px "Ma Shan Zheng"', title);
+  });
+  check(
+    "N-FONT",
+    "字体下载失败时阻止导出，恢复网络后重试即可加载字体并解除阻止",
+    blocked > 0 && exportBlocked && recovered && await pf.getByRole("button", { name: "下载图片", exact: true }).isEnabled(),
+    `blocked ${blocked}, export blocked ${exportBlocked}, recovered ${recovered}`,
+  );
+  await cf.close();
 }
 
 // ---------- U. 上传文件生成笔记（文件在浏览器本地解析） ----------

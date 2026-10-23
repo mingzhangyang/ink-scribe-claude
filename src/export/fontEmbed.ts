@@ -93,6 +93,57 @@ async function toDataUrl(url: string): Promise<string> {
   return pending;
 }
 
+function fontFaceKey(family: string, unicodeRange: string): string {
+  // FontFace 对象把省略的 unicode-range 报告为完整范围，规则文本中则为空
+  const ranges = parseUnicodeRange(unicodeRange);
+  return `${normalizeFamily(family)}|${JSON.stringify(ranges.length ? ranges : [[0, 0x10ffff]])}`;
+}
+
+type RuleContainer = { cssRules: CSSRuleList; insertRule(rule: string, index?: number): number; deleteRule(index: number): void };
+
+function replaceFailedRules(container: RuleContainer, failed: Set<string>): void {
+  for (let index = container.cssRules.length - 1; index >= 0; index -= 1) {
+    const rule = container.cssRules[index];
+    if (rule instanceof CSSFontFaceRule) {
+      const key = fontFaceKey(rule.style.getPropertyValue("font-family"), rule.style.getPropertyValue("unicode-range"));
+      if (!failed.has(key)) continue;
+      const text = rule.cssText;
+      container.deleteRule(index);
+      container.insertRule(text, index);
+    } else if (rule instanceof CSSImportRule && rule.styleSheet) {
+      try {
+        replaceFailedRules(rule.styleSheet, failed);
+      } catch {
+        // 跨域样式表无法修改，跳过
+      }
+    } else if ("cssRules" in rule && (rule as CSSGroupingRule).cssRules) {
+      replaceFailedRules(rule as CSSGroupingRule, failed);
+    }
+  }
+}
+
+/**
+ * 字体文件下载失败后，样式表生成的 FontFace 会永久停在 error 状态，再次 load() 仍然失败。
+ * 重新插入对应的 @font-face 规则会生成新的 FontFace，网络恢复后即可重新下载；
+ * 已成功加载的分片保持不变。
+ */
+export function resetFailedFontFaces(families: string[]): void {
+  if (!("fonts" in document)) return;
+  const wanted = new Set(families.map(normalizeFamily));
+  const failed = new Set<string>();
+  document.fonts.forEach((face) => {
+    if (face.status === "error" && wanted.has(normalizeFamily(face.family))) failed.add(fontFaceKey(face.family, face.unicodeRange));
+  });
+  if (failed.size === 0) return;
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      replaceFailedRules(sheet, failed);
+    } catch {
+      // 跨域样式表无法读取，跳过
+    }
+  }
+}
+
 /** 等待页面用到的字形全部加载完成（包括按需加载的 unicode-range 分片）。 */
 export async function ensureFontsLoaded(families: string[], text: string): Promise<void> {
   if (!("fonts" in document)) return;

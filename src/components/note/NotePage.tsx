@@ -51,7 +51,7 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   ref,
 ) {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
-  const fit = useNoteFit(node, note, authoredSettings, stickers, aiDoodle);
+  const fit = useNoteFit(node, note, authoredSettings, aiDoodle);
   const settings = fit.settings;
   useLayoutEffect(() => { onFitChange?.(fit); }, [fit, onFitChange]);
   const height = pageHeightFor(settings);
