@@ -12,6 +12,9 @@ export function paint(color: string): string {
 /** 与黑色混合，得到同色系的深色描边。 */
 export const shade = (color: string, percent: number) => `color-mix(in srgb, ${color} ${percent}%, #000)`;
 
+/** 与白色混合，得到同色系的浅色（果肉、切面）。 */
+export const tint = (color: string, percent: number) => `color-mix(in srgb, ${color} ${percent}%, #fff)`;
+
 export const pt = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
 
 /** 笔画：圆头圆角、不填充。 */

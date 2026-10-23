@@ -1017,9 +1017,11 @@ input[type="range"] {
   height: calc(100% - 12px);
 }
 
+/* 英文长词（Watermelon、Exclamation）放不下时按音节加连字符断行，而不是在任意字母处断开 */
 .sticker-option-name {
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 /* 预留一行高度：选中或取消选中贴纸时，下面的插图库不会上下跳动 */

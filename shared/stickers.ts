@@ -9,6 +9,7 @@ export const STICKER_TYPES = [
   "arrow", "circle-mark", "wavy-underline", "bracket", "check", "cross", "exclaim", "question",
   "seal", "postmark", "ink-blot", "paw-print",
   "sparkles", "heart", "face", "pressed-flower",
+  "orange", "apple", "banana", "strawberry", "mango", "watermelon",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -66,10 +67,16 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   heart: "爱心",
   face: "表情",
   "pressed-flower": "压花",
+  orange: "橙子",
+  apple: "苹果",
+  banana: "香蕉",
+  strawberry: "草莓",
+  mango: "芒果",
+  watermelon: "西瓜",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -78,6 +85,7 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   marks: "标注符号",
   stamps: "印章痕迹",
   mood: "心情点缀",
+  fruit: "水果",
 };
 
 export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStickerType[]> = {
@@ -86,6 +94,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   marks: ["arrow", "circle-mark", "wavy-underline", "bracket", "check", "cross", "exclaim", "question"],
   stamps: ["seal", "postmark", "ink-blot", "coffee-stain", "paw-print"],
   mood: ["star", "sparkles", "heart", "face", "pressed-flower"],
+  fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon"],
 };
 
 export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
@@ -123,6 +132,12 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   heart: { w: 60, h: 56 },
   face: { w: 64, h: 64 },
   "pressed-flower": { w: 96, h: 96 },
+  orange: { w: 72, h: 72 },
+  apple: { w: 68, h: 74 },
+  banana: { w: 96, h: 64 },
+  strawberry: { w: 60, h: 70 },
+  mango: { w: 84, h: 64 },
+  watermelon: { w: 96, h: 72 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -130,7 +145,7 @@ export type StickerPattern = "dots" | "checks" | "stripes" | "grid" | "lines";
 
 /**
  * color 为 "ink" 时跟随笔记墨水色，为 "paper" 时跟随纸张底色。
- * 表情、压花等贴纸的变体同时决定形状，color 是该款式的主色。
+ * 表情、压花、水果等贴纸的变体同时决定形状，color 是该款式的主色。
  */
 export type StickerVariant = { id: string; label: string; color: string; pattern?: StickerPattern };
 
@@ -289,6 +304,30 @@ export const STICKER_VARIANTS = {
     { id: "ginkgo", label: "银杏", color: "#EAB308" },
     { id: "maple", label: "枫叶", color: "#DC2626" },
     { id: "lavender", label: "薰衣草", color: "#A78BFA" },
+  ],
+  orange: [
+    { id: "whole", label: "整个", color: "#F97316" },
+    { id: "slice", label: "切片", color: "#FB923C" },
+  ],
+  apple: [
+    { id: "red", label: "红苹果", color: "#DC2626" },
+    { id: "green", label: "青苹果", color: "#84CC16" },
+  ],
+  banana: [
+    { id: "single", label: "单根", color: "#FACC15" },
+    { id: "bunch", label: "一串", color: "#FDE047" },
+  ],
+  strawberry: [
+    { id: "whole", label: "整颗", color: "#EF4444" },
+    { id: "half", label: "切半", color: "#F43F5E" },
+  ],
+  mango: [
+    { id: "ripe", label: "金黄", color: "#F59E0B" },
+    { id: "green", label: "青芒", color: "#A3E635" },
+  ],
+  watermelon: [
+    { id: "slice", label: "瓜片", color: "#EF4444" },
+    { id: "whole", label: "整个", color: "#16A34A" },
   ],
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
