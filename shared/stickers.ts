@@ -22,6 +22,7 @@ export const STICKER_TYPES = [
   "sun", "earth", "moon", "saturn", "jupiter",
   "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
   "bird", "hedgehog", "dog", "chili", "detective",
+  "hang", "geili", "tongyi", "zhixingheyi",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -157,10 +158,14 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   dog: "小狗",
   chili: "辣椒",
   detective: "侦探",
+  hang: "夯",
+  geili: "给力",
+  tongyi: "同意",
+  zhixingheyi: "知行合一",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "animals", "people", "formulas", "greek", "science", "vehicles", "space"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "animals", "people", "phrases", "formulas", "greek", "science", "vehicles", "space"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -172,6 +177,7 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   fruit: "果蔬",
   animals: "动物",
   people: "人物",
+  phrases: "流行语",
   formulas: "公式",
   greek: "希腊字母",
   science: "科学图示",
@@ -188,6 +194,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape", "chili"],
   animals: ["bird", "hedgehog", "dog"],
   people: ["detective"],
+  phrases: ["hang", "geili", "tongyi", "zhixingheyi"],
   formulas: [
     "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
     "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
@@ -322,6 +329,10 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   dog: { w: 92, h: 102 },
   chili: { w: 84, h: 96 },
   detective: { w: 84, h: 96 },
+  hang: { w: 72, h: 72 },
+  geili: { w: 110, h: 66 },
+  tongyi: { w: 100, h: 56 },
+  zhixingheyi: { w: 80, h: 80 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -349,6 +360,14 @@ const scienceVariants = <C extends string>(color: C) =>
     { id: "color", label: "彩色", color },
     { id: "ink", label: "墨线", color: "ink" },
   ] as const;
+
+/** “夯”“给力”这类贴纸字的颜色。 */
+const SLANG_VARIANTS = [
+  { id: "red", label: "红", color: "#EF4444" },
+  { id: "orange", label: "橙", color: "#F97316" },
+  { id: "purple", label: "紫", color: "#8B5CF6" },
+  { id: "ink", label: "墨色", color: "ink" },
+] as const satisfies readonly StickerVariant[];
 
 const BADGE_VARIANTS = [
   { id: "red", label: "红", color: "#EF4444" },
@@ -630,6 +649,16 @@ export const STICKER_VARIANTS = {
   dog: scienceVariants("#F9C22E"),
   chili: scienceVariants("#F0468F"),
   detective: scienceVariants("#1FB2BC"),
+  hang: SLANG_VARIANTS,
+  geili: SLANG_VARIANTS,
+  tongyi: [
+    { id: "red", label: "朱红", color: "#C0392B" },
+    { id: "blue", label: "蓝", color: "#1D4ED8" },
+  ],
+  zhixingheyi: [
+    { id: "zhuwen", label: "朱文", color: "#C0392B" },
+    { id: "baiwen", label: "白文", color: "#A93226" },
+  ],
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];
