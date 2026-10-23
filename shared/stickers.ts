@@ -10,6 +10,10 @@ export const STICKER_TYPES = [
   "seal", "postmark", "ink-blot", "paw-print",
   "sparkles", "heart", "face", "pressed-flower",
   "orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape",
+  "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
+  "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
+  "benzene", "water-molecule", "glucose-ring", "dna", "alpha-helix", "antibody", "trna",
+  "atom", "magnet", "lens", "circuit", "beaker", "flask", "microscope",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -74,10 +78,40 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   mango: "芒果",
   watermelon: "西瓜",
   grape: "葡萄",
+  pi: "圆周率",
+  pythagorean: "勾股定理",
+  euler: "欧拉恒等式",
+  integral: "积分",
+  sigma: "求和",
+  sqrt: "根号",
+  infinity: "无穷",
+  "sine-wave": "正弦曲线",
+  "bell-curve": "正态分布",
+  emc2: "质能方程",
+  fma: "牛顿第二定律",
+  ohm: "欧姆定律",
+  h2o: "水",
+  co2: "二氧化碳",
+  nacl: "氯化钠",
+  "glucose-formula": "葡萄糖分子式",
+  benzene: "苯环",
+  "water-molecule": "水分子",
+  "glucose-ring": "葡萄糖结构式",
+  dna: "DNA 双螺旋",
+  "alpha-helix": "α 螺旋",
+  antibody: "抗体",
+  trna: "tRNA",
+  atom: "原子模型",
+  magnet: "磁铁",
+  lens: "凸透镜",
+  circuit: "电路",
+  beaker: "烧杯",
+  flask: "锥形瓶",
+  microscope: "显微镜",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "science"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -87,6 +121,8 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   stamps: "印章痕迹",
   mood: "心情点缀",
   fruit: "水果",
+  formulas: "公式",
+  science: "科学图示",
 };
 
 export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStickerType[]> = {
@@ -96,6 +132,14 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   stamps: ["seal", "postmark", "ink-blot", "coffee-stain", "paw-print"],
   mood: ["star", "sparkles", "heart", "face", "pressed-flower"],
   fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape"],
+  formulas: [
+    "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
+    "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
+  ],
+  science: [
+    "benzene", "water-molecule", "glucose-ring", "dna", "alpha-helix", "antibody", "trna",
+    "atom", "magnet", "lens", "circuit", "beaker", "flask", "microscope",
+  ],
 };
 
 export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
@@ -140,6 +184,36 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   mango: { w: 84, h: 64 },
   watermelon: { w: 96, h: 72 },
   grape: { w: 64, h: 72 },
+  pi: { w: 64, h: 64 },
+  pythagorean: { w: 150, h: 48 },
+  euler: { w: 140, h: 48 },
+  integral: { w: 124, h: 56 },
+  sigma: { w: 92, h: 80 },
+  sqrt: { w: 72, h: 56 },
+  infinity: { w: 84, h: 48 },
+  "sine-wave": { w: 140, h: 90 },
+  "bell-curve": { w: 140, h: 80 },
+  emc2: { w: 120, h: 48 },
+  fma: { w: 110, h: 44 },
+  ohm: { w: 110, h: 44 },
+  h2o: { w: 90, h: 48 },
+  co2: { w: 90, h: 48 },
+  nacl: { w: 100, h: 44 },
+  "glucose-formula": { w: 150, h: 48 },
+  benzene: { w: 80, h: 80 },
+  "water-molecule": { w: 96, h: 76 },
+  "glucose-ring": { w: 112, h: 92 },
+  dna: { w: 72, h: 132 },
+  "alpha-helix": { w: 124, h: 72 },
+  antibody: { w: 80, h: 100 },
+  trna: { w: 88, h: 112 },
+  atom: { w: 92, h: 92 },
+  magnet: { w: 112, h: 84 },
+  lens: { w: 124, h: 84 },
+  circuit: { w: 112, h: 84 },
+  beaker: { w: 76, h: 88 },
+  flask: { w: 76, h: 92 },
+  microscope: { w: 84, h: 104 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -157,6 +231,16 @@ const INK_VARIANTS = {
   blue: { id: "blue", label: "蓝笔", color: "#2563EB" },
   green: { id: "green", label: "绿笔", color: "#16A34A" },
 } as const satisfies Record<string, StickerVariant>;
+
+/** 公式：和标注符号一样用笔的颜色。 */
+const PEN_VARIANTS = [INK_VARIANTS.ink, INK_VARIANTS.red, INK_VARIANTS.blue] as const;
+
+/** 科学图示：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
+const scienceVariants = <C extends string>(color: C) =>
+  [
+    { id: "color", label: "彩色", color },
+    { id: "ink", label: "墨线", color: "ink" },
+  ] as const;
 
 const BADGE_VARIANTS = [
   { id: "red", label: "红", color: "#EF4444" },
@@ -335,6 +419,36 @@ export const STICKER_VARIANTS = {
     { id: "purple", label: "紫葡萄", color: "#7C3AED" },
     { id: "green", label: "青提", color: "#A3E635" },
   ],
+  pi: PEN_VARIANTS,
+  pythagorean: PEN_VARIANTS,
+  euler: PEN_VARIANTS,
+  integral: PEN_VARIANTS,
+  sigma: PEN_VARIANTS,
+  sqrt: PEN_VARIANTS,
+  infinity: PEN_VARIANTS,
+  "sine-wave": PEN_VARIANTS,
+  "bell-curve": PEN_VARIANTS,
+  emc2: PEN_VARIANTS,
+  fma: PEN_VARIANTS,
+  ohm: PEN_VARIANTS,
+  h2o: PEN_VARIANTS,
+  co2: PEN_VARIANTS,
+  nacl: PEN_VARIANTS,
+  "glucose-formula": PEN_VARIANTS,
+  benzene: scienceVariants("#0D9488"),
+  "water-molecule": scienceVariants("#EF4444"),
+  "glucose-ring": scienceVariants("#D97706"),
+  dna: scienceVariants("#2563EB"),
+  "alpha-helix": scienceVariants("#8B5CF6"),
+  antibody: scienceVariants("#3B82F6"),
+  trna: scienceVariants("#0EA5E9"),
+  atom: scienceVariants("#3B82F6"),
+  magnet: scienceVariants("#EF4444"),
+  lens: scienceVariants("#0284C7"),
+  circuit: scienceVariants("#FACC15"),
+  beaker: scienceVariants("#60A5FA"),
+  flask: scienceVariants("#34D399"),
+  microscope: scienceVariants("#475569"),
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];

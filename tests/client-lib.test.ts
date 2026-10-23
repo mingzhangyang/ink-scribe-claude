@@ -13,6 +13,7 @@ import {
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
 import { fetchPublishedNote } from "../src/api.ts";
+import { FORMULA_TEXT, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
@@ -227,6 +228,25 @@ describe("sticker catalog", () => {
     const sticker = { id: "s1", type: "wavy-underline", x: 40, y: 50, rotation: 0, scale: 1 };
     expect(validatePublishedStickers([{ ...sticker, variant: "blue" }]).ok).toBe(true);
     expect(validatePublishedStickers([{ ...sticker, variant: "lavender" }]).ok).toBe(false);
+  });
+});
+
+describe("handwritten formula glyphs", () => {
+  it("has a stroke glyph for every character in the formulas and diagram labels", () => {
+    // 求和、根号、坐标轴与各图示的标注（见 src/stickers/art/formulas.tsx、science.tsx）
+    const labels = ["n", "i=1", "a_i", "2", "x", "y", "O", "H", "CH_2OH", "OH", "HO", "N", "S", "F", "+", "Σ"];
+    for (const text of [...Object.values(FORMULA_TEXT), ...labels]) expect(missingGlyphs(text), text).toEqual([]);
+  });
+
+  it("raises superscripts, lowers subscripts and keeps the following glyph on the baseline", () => {
+    const squared = layoutText("c^2");
+    expect(squared.glyphs[1].y).toBeLessThan(0);
+    expect(squared.glyphs[1].scale).toBeLessThan(1);
+    const water = layoutText("H_2O");
+    expect(water.glyphs[1].y).toBeGreaterThan(0);
+    expect(water.glyphs[2]).toMatchObject({ y: 0, scale: 1 });
+    expect(water.width).toBeGreaterThan(water.glyphs[2].x);
+    expect(layoutText("C_6H_{12}O_6").glyphs.map((g) => g.scale)).toEqual([1, 0.6, 1, 0.6, 0.6, 1, 0.6]);
   });
 });
 

@@ -4,10 +4,44 @@ import { builtinDoodle } from "../doodles/library.ts";
 import { hashString } from "../lib/random.ts";
 import { paint, type ArtProps } from "./art/common.tsx";
 import { BinderClip, MaskingTape, Paperclip, PhotoCorner, PushPin, Staple, Tape } from "./art/fasten.tsx";
+import {
+  BellCurve,
+  CarbonDioxide,
+  Euler,
+  GlucoseFormula,
+  InfinitySign,
+  Integral,
+  MassEnergy,
+  NewtonSecond,
+  Ohm,
+  Pi,
+  Pythagorean,
+  Sigma,
+  SineWave,
+  SodiumChloride,
+  SquareRoot,
+  WaterFormula,
+} from "./art/formulas.tsx";
 import { Apple, Banana, Grape, Mango, Orange, Strawberry, Watermelon } from "./art/fruit.tsx";
 import { Arrow, Bracket, Check, CircleMark, Cross, Exclaim, Question, WavyUnderline } from "./art/marks.tsx";
 import { Face, Heart, PressedFlower, Sparkles, Star } from "./art/mood.tsx";
 import { DogEar, KraftTag, PageFlag, PostageStamp, RibbonBookmark, StickyNote, TicketStub, TornPaper } from "./art/paper.tsx";
+import {
+  AlphaHelix,
+  Antibody,
+  Atom,
+  Beaker,
+  Benzene,
+  Circuit,
+  Dna,
+  Flask,
+  GlucoseRing,
+  Lens,
+  Magnet,
+  Microscope,
+  TRna,
+  WaterMolecule,
+} from "./art/science.tsx";
 import { CoffeeStain, InkBlot, PawPrint, Postmark, Seal } from "./art/stamps.tsx";
 import { isDoodleTheme, STICKER_SIZES, stickerVariant, type DecorStickerType, type StickerItem } from "./types.ts";
 
@@ -52,6 +86,36 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   mango: Mango,
   watermelon: Watermelon,
   grape: Grape,
+  pi: Pi,
+  pythagorean: Pythagorean,
+  euler: Euler,
+  integral: Integral,
+  sigma: Sigma,
+  sqrt: SquareRoot,
+  infinity: InfinitySign,
+  "sine-wave": SineWave,
+  "bell-curve": BellCurve,
+  emc2: MassEnergy,
+  fma: NewtonSecond,
+  ohm: Ohm,
+  h2o: WaterFormula,
+  co2: CarbonDioxide,
+  nacl: SodiumChloride,
+  "glucose-formula": GlucoseFormula,
+  benzene: Benzene,
+  "water-molecule": WaterMolecule,
+  "glucose-ring": GlucoseRing,
+  dna: Dna,
+  "alpha-helix": AlphaHelix,
+  antibody: Antibody,
+  trna: TRna,
+  atom: Atom,
+  magnet: Magnet,
+  lens: Lens,
+  circuit: Circuit,
+  beaker: Beaker,
+  flask: Flask,
+  microscope: Microscope,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };
