@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeNoteStructure } from "../shared/note.ts";
+import { validatePublishRequest } from "../shared/publishing.ts";
 
 const valid = {
   title: "  深度工作  ",
@@ -72,6 +73,22 @@ describe("normalizeNoteStructure", () => {
       summary: "",
     });
     expect(result.ok && result.value.sections[0].highlights).toEqual(["Spaced Repetition"]);
+  });
+
+  it("keeps only highlights the renderer can show, so the structure passes publication", () => {
+    const result = normalizeNoteStructure({
+      title: "机器学习",
+      sections: [
+        { content: "机器学习很重要。\n- 第一点\n1. 第二点", highlights: ["机器学习", "学习", "- 第一点", "第二点"] },
+        { content: "机器学习要靠持续学习。", highlights: ["机器学习", "学习"] },
+      ],
+      summary: "",
+    });
+    if (!result.ok) throw new Error(result.errors.join("; "));
+    // “学习” only occurs inside the earlier highlight, and list markers are not rendered text.
+    expect(result.value.sections.map((section) => section.highlights)).toEqual([["机器学习", "第二点"], ["机器学习", "学习"]]);
+    expect(result.warnings).toContain("丢弃了 2 个无法在正文中标出的重点词");
+    expect(validatePublishRequest({ schemaVersion: 1, note: result.value })).toEqual({ ok: true, value: { schemaVersion: 1, note: result.value } });
   });
 
   it("rejects missing title or sections", () => {
