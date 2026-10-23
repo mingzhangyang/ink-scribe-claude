@@ -29,6 +29,10 @@ class Statement {
   }
 
   async run(): Promise<{ meta: { changes: number } }> {
+    return this.runSync();
+  }
+
+  runSync(): { meta: { changes: number } } {
     const result = this.db.prepare(this.sql).run(...(this.params as never[]));
     return { meta: { changes: Number(result.changes) } };
   }
@@ -46,7 +50,7 @@ export function createTestD1(): D1Database {
       db.exec("BEGIN");
       try {
         const results = [];
-        for (const statement of statements) results.push(await statement.run());
+        for (const statement of statements) results.push(statement.runSync());
         db.exec("COMMIT");
         return results;
       } catch (error) {

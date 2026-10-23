@@ -10,12 +10,13 @@ import type { RouteContext } from "../router.ts";
 import {
   decodeCursor,
   deleteNote,
-  findIdempotent,
+  claimPublish,
+  releasePublish,
+  type PublishClaim,
   getNoteRow,
   insertNote,
   listNotes,
   newNoteId,
-  saveIdempotent,
   sha256Hex,
   toPublished,
   toSummary,
@@ -108,17 +109,38 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
     throw invalid("Idempotency-Key 只能包含字母、数字和 _ . : -，长度不超过 100。");
   }
   const requestHash = await sha256Hex(JSON.stringify(body));
+  let claim: PublishClaim | undefined;
   if (idempotencyKey) {
-    const existing = await findIdempotent(database, apiKey.id, idempotencyKey);
-    if (existing) {
-      if (existing.requestHash !== requestHash) {
+    const reservation = await claimPublish(database, apiKey.id, idempotencyKey, requestHash, Date.now());
+    if ("existing" in reservation) {
+      const existing = reservation.existing;
+      if (existing.request_hash !== requestHash) {
         throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该 Idempotency-Key 已用于内容不同的请求。");
       }
-      const note = await published(ctx, existing.noteId, apiKey.id).catch(() => null);
-      if (note) return jsonResponse({ ...note, meta: { requestId: ctx.requestId, replayed: true } }, 200, { "Idempotent-Replayed": "true" });
+      if (existing.state === "pending") {
+        throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该请求正在处理中，请使用相同的键稍后重试。", { retryAfterSeconds: 2 });
+      }
+      if (!await getNoteRow(database, existing.note_id)) {
+        throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
+      }
+      const note = await published(ctx, existing.note_id, apiKey.id);
+      return jsonResponse({ ...note, meta: { requestId: ctx.requestId, replayed: true } }, 200, { "Idempotent-Replayed": "true" });
     }
+    claim = reservation.claim;
   }
+  try {
+    return await createNote(ctx, body, claim);
+  } catch (error) {
+    // An ambiguous commit may already be completed; the conditional release leaves it intact.
+    // If storage is unavailable, lease expiry still permits recovery.
+    if (claim) await releasePublish(database, claim).catch(() => undefined);
+    throw error;
+  }
+}
 
+async function createNote(ctx: RouteContext, body: Record<string, unknown>, claim?: PublishClaim): Promise<Response> {
+  const database = db(ctx);
+  const apiKey = ctx.apiKey!;
   const hasText = body.text !== undefined;
   const hasNote = body.note !== undefined;
   if (hasText === hasNote) throw invalid("请提供 text（原文，由服务整理）或 note（已整理好的 NoteStructure）其中之一。");
@@ -155,9 +177,9 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
 
   const language = noteLanguage(note);
   note = withDate(note, language, ctx.config.defaultTimezone);
-  const id = newNoteId();
+  const id = claim?.noteId ?? newNoteId();
   const now = Date.now();
-  await insertNote(database, {
+  const committed = await insertNote(database, {
     id,
     apiKeyId: apiKey.id,
     visibility: visibility as NoteVisibility,
@@ -168,8 +190,8 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
     stickers,
     doodle,
     now,
-  });
-  if (idempotencyKey) await saveIdempotent(database, apiKey.id, idempotencyKey, requestHash, id, now);
+  }, claim);
+  if (!committed) throw new AppError(409, "IDEMPOTENCY_CONFLICT", "请求已由另一次重试接管，请使用相同的键重试。", { retryAfterSeconds: 2 });
   ctx.log.template = template;
   const result = await published(ctx, id);
   return jsonResponse({ ...result, meta: { requestId: ctx.requestId, ...meta } }, 201, { Location: result.url });

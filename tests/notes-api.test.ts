@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../worker/env.ts";
 import { resetMemoryRateLimit } from "../worker/rate-limit.ts";
 import { handleApi } from "../worker/router.ts";
+import { claimPublish, insertNote, releasePublish } from "../worker/store.ts";
+import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { createTestD1 } from "./helpers/d1.ts";
 
 const KEY = "isk_test_key_owner";
@@ -15,7 +17,7 @@ const aiNote = {
   sections: [{ heading: "小节", content: "整理后的正文内容。", highlights: ["正文"] }],
   summary: "总结",
   doodlePrompt: "一本书",
-  doodleTheme: "book",
+  doodleTheme: "book" as const,
 };
 
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -154,6 +156,45 @@ describe("POST /api/v1/notes", () => {
     expect(other.response.status).toBe(201);
     expect(other.body!.id).not.toBe(first.body!.id);
   });
+
+  it("reserves concurrent requests before calling AI, then replays the committed result", async () => {
+    let finish!: (value: { response: typeof aiNote }) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    env.AI.run = vi.fn(() => { started(); return new Promise((resolve) => { finish = resolve; }); }) as typeof env.AI.run;
+    const options = { body: { text: "足够长的会议原文，用于测试并发发布。" }, headers: { "Idempotency-Key": "parallel" } };
+    const first = call(request("POST", "/api/v1/notes", options));
+    await entered;
+    const duplicate = await call(request("POST", "/api/v1/notes", options));
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.response.headers.get("Retry-After")).toBe("2");
+    expect(env.AI.run).toHaveBeenCalledTimes(1);
+    finish({ response: aiNote });
+    const created = await first;
+    const replay = await call(request("POST", "/api/v1/notes", options));
+    expect(created.response.status).toBe(201);
+    expect(replay.body!.id).toBe(created.body!.id);
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(1);
+  });
+
+  it("does not resurrect deleted notes on delayed retries", async () => {
+    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "deleted" } };
+    const created = await call(request("POST", "/api/v1/notes", options));
+    await call(request("DELETE", `/api/v1/notes/${created.body!.id}`));
+    const replay = await call(request("POST", "/api/v1/notes", options));
+    expect(replay.response.status).toBe(410);
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("rolls back failed commits and allows a same-key retry", async () => {
+    await env.DB!.exec("CREATE TRIGGER fail_commit BEFORE UPDATE OF state ON idempotency_keys WHEN NEW.state = 'completed' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;");
+    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "retry" } };
+    expect((await call(request("POST", "/api/v1/notes", options))).response.status).toBe(500);
+    expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+    await env.DB!.exec("DROP TRIGGER fail_commit;");
+    expect((await call(request("POST", "/api/v1/notes", options))).response.status).toBe(201);
+  });
+
 });
 
 describe("reading, gallery and management", () => {
@@ -221,5 +262,27 @@ describe("reading, gallery and management", () => {
     const { body } = await call(request("GET", "/api/v1/openapi.json", { key: null }));
     expect(body!.servers).toEqual([{ url: "https://ink.example.com" }]);
     expect(Object.keys(body!.paths)).toContain("/api/v1/notes");
+  });
+});
+
+
+describe("publish lease fencing", () => {
+  it("recovers expired leases without allowing the old Worker to commit or release its successor", async () => {
+    const first = await claimPublish(env.DB!, "key_owner", "lease", "hash", 0);
+    const next = await claimPublish(env.DB!, "key_owner", "lease", "hash", 120_001);
+    if (!("claim" in first) || !("claim" in next)) throw new Error("Expected both reservations");
+    await releasePublish(env.DB!, first.claim);
+    const input = { id: first.claim.noteId, apiKeyId: "key_owner", visibility: "unlisted" as const,
+      language: "zh" as const, template: "general", note: aiNote, settings: DEFAULT_SETTINGS, stickers: [], now: 120_002 };
+    expect(await insertNote(env.DB!, input, first.claim)).toBe(false);
+    expect(await insertNote(env.DB!, { ...input, id: next.claim.noteId }, next.claim)).toBe(true);
+    const rows = await env.DB!.prepare("SELECT id FROM notes").all<{ id: string }>();
+    expect(rows.results.map((r) => r.id)).toEqual([next.claim.noteId]);
+  });
+
+  it("keeps different payloads conflicting even after lease expiry", async () => {
+    await claimPublish(env.DB!, "key_owner", "lease", "original", 0);
+    const next = await claimPublish(env.DB!, "key_owner", "lease", "changed", 120_001);
+    expect("existing" in next && next.existing.request_hash).toBe("original");
   });
 });
