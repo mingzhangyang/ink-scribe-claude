@@ -23,6 +23,7 @@ export const STICKER_TYPES = [
   "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
   "bird", "hedgehog", "dog", "chili", "detective",
   "hang", "geili", "tongyi", "zhixingheyi",
+  "zhengnengliang", "yyds", "juan", "tangping", "wanmei", "tainiule",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -162,6 +163,12 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   geili: "给力",
   tongyi: "同意",
   zhixingheyi: "知行合一",
+  zhengnengliang: "正能量",
+  yyds: "YYDS",
+  juan: "卷",
+  tangping: "躺平",
+  wanmei: "完美",
+  tainiule: "太牛了",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
@@ -194,7 +201,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape", "chili"],
   animals: ["bird", "hedgehog", "dog"],
   people: ["detective"],
-  phrases: ["hang", "geili", "tongyi", "zhixingheyi"],
+  phrases: ["hang", "juan", "geili", "tangping", "zhengnengliang", "tainiule", "yyds", "wanmei", "tongyi", "zhixingheyi"],
   formulas: [
     "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
     "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
@@ -333,6 +340,12 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   geili: { w: 110, h: 66 },
   tongyi: { w: 100, h: 56 },
   zhixingheyi: { w: 80, h: 80 },
+  zhengnengliang: { w: 140, h: 62 },
+  yyds: { w: 120, h: 70 },
+  juan: { w: 72, h: 72 },
+  tangping: { w: 110, h: 66 },
+  wanmei: { w: 100, h: 64 },
+  tainiule: { w: 140, h: 62 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -367,6 +380,12 @@ const SLANG_VARIANTS = [
   { id: "orange", label: "橙", color: "#F97316" },
   { id: "purple", label: "紫", color: "#8B5CF6" },
   { id: "ink", label: "墨色", color: "ink" },
+] as const satisfies readonly StickerVariant[];
+
+/** “同意”“完美”这类印章的印泥颜色。 */
+const STAMP_VARIANTS = [
+  { id: "red", label: "朱红", color: "#C0392B" },
+  { id: "blue", label: "蓝", color: "#1D4ED8" },
 ] as const satisfies readonly StickerVariant[];
 
 const BADGE_VARIANTS = [
@@ -651,14 +670,17 @@ export const STICKER_VARIANTS = {
   detective: scienceVariants("#1FB2BC"),
   hang: SLANG_VARIANTS,
   geili: SLANG_VARIANTS,
-  tongyi: [
-    { id: "red", label: "朱红", color: "#C0392B" },
-    { id: "blue", label: "蓝", color: "#1D4ED8" },
-  ],
+  tongyi: STAMP_VARIANTS,
   zhixingheyi: [
     { id: "zhuwen", label: "朱文", color: "#C0392B" },
     { id: "baiwen", label: "白文", color: "#A93226" },
   ],
+  zhengnengliang: SLANG_VARIANTS,
+  yyds: SLANG_VARIANTS,
+  juan: SLANG_VARIANTS,
+  tangping: SLANG_VARIANTS,
+  wanmei: STAMP_VARIANTS,
+  tainiule: SLANG_VARIANTS,
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];
