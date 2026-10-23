@@ -12,12 +12,9 @@ import type { ImportState } from "./useFileImport.ts";
 
 /** 打开原文弹窗的按钮：宽屏位于顶栏，窄屏（CSS）固定在屏幕底部。 */
 export function InputTrigger({ onOpen }: { onOpen: () => void }) {
-  const text = useNoteStore((s) => s.input.text);
-  // 还在看示例笔记、尚未输入原文时提示从这里开始
-  const attention = useNoteStore((s) => s.source === "sample") && text.trim().length === 0;
   const t = useT();
   return (
-    <button type="button" className={`btn btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
+    <button type="button" className="btn btn-primary input-trigger" aria-haspopup="dialog" onClick={onOpen}>
       {t.input.open}
     </button>
   );
