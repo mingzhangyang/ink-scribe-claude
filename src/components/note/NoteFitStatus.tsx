@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { useT } from "../../i18n/index.ts";
+import { usePreferences } from "../../state/preferences.ts";
 import type { NoteFitState } from "./useNoteFit.ts";
 
 /** Problems that block export stay in the page flow, next to the actions that resolve them. */
@@ -20,12 +20,9 @@ export function NoteFitNotice({ fit, fixed = false }: { fit: NoteFitState | null
   const t = useT();
   const status = fit?.status ?? "pending";
   const expanded = status === "ready" && Boolean(fit?.expanded);
-  const [dismissed, setDismissed] = useState(false);
-  // 关闭后在页面重新变回固定尺寸之前不再提示；调字号等引起的重新适配不会让它反复出现
-  const fitsFixedPage = status === "ready" && !fit?.expanded;
-  useEffect(() => {
-    if (fitsFixedPage) setDismissed(false);
-  }, [fitsFixedPage]);
+  // 关闭后记在界面偏好里，之后的笔记和刷新页面都不再提示
+  const dismissed = usePreferences((s) => s.longPageNoticeDismissed);
+  const dismiss = usePreferences((s) => s.dismissLongPageNotice);
 
   const message = status === "pending" ? t.workspace.fitPending
     : expanded && !dismissed ? t.workspace.fitExpanded : null;
@@ -34,7 +31,7 @@ export function NoteFitNotice({ fit, fixed = false }: { fit: NoteFitState | null
     <div className={`fit-notice${fixed ? " is-fixed" : ""}`} data-fit-status={status} role="status">
       <span>{message}</span>
       {expanded ? (
-        <button type="button" className="icon-btn" onClick={() => setDismissed(true)} aria-label={t.workspace.dismiss}>
+        <button type="button" className="icon-btn" onClick={dismiss} aria-label={t.workspace.dismiss}>
           ×
         </button>
       ) : null}
