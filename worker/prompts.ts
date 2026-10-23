@@ -1,7 +1,6 @@
 import { DOODLE_ELEMENT_TYPES, DOODLE_FILLS, DOODLE_LIMITS, DOODLE_STROKES } from "../shared/doodle.ts";
 import { NOTE_LIMITS } from "../shared/note.ts";
 import type { Detail, Language, NoteStyle, Template } from "../shared/options.ts";
-import { detectLanguage } from "../shared/text.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
 
 const TEMPLATE_GUIDE: Record<Template, string> = {
@@ -30,14 +29,15 @@ const DETAIL_GUIDE: Record<Detail, { sections: string; chars: number }> = {
 };
 
 /**
- * “跟随原文”在服务端按原文判定为具体语言。只交给模型判断时，中文写成的提示词常让英文原文也得到中文笔记。
- * 混合文本以占比较多的语言为主，判定规则与画布标签、发布时的语言识别一致。
+ * “跟随原文”由模型按原文的语言输出（日文、法文等原文也保持原语言）。提示词是中文写的，
+ * 只说“保持一致”时英文原文常得到中文笔记，所以用英文再强调一次，并在原文之后重复。
  */
-export function outputLanguage(language: Language, text: string): "zh" | "en" {
-  return language === "auto" ? detectLanguage(text) : language;
-}
-
-const LANGUAGE_RULE: Record<"zh" | "en", { rule: string; reminder: string }> = {
+const LANGUAGE_RULE: Record<Language, { rule: string; reminder: string }> = {
+  auto: {
+    rule: "输出语言跟随原文：使用原文的主要语言（中文原文用简体中文，混合文本以占比较多的语言为主，专有名词保留原文），不要翻译。"
+      + "Write every text field in the same language as the source text, even though these instructions are in Chinese: an English source gets an English note, and a source that is not Chinese must not be translated into Chinese.",
+    reminder: "Output language: the same as the source text above; do not translate.",
+  },
   zh: {
     rule: "所有文字字段都使用简体中文；原文是其他语言时译为中文，专有名词可保留原文。",
     reminder: "输出语言：简体中文。",
@@ -56,7 +56,7 @@ export function buildStructureMessages(options: {
   detail: Detail;
 }): { system: string; user: string } {
   const detail = DETAIL_GUIDE[options.detail];
-  const language = LANGUAGE_RULE[outputLanguage(options.language, options.text)];
+  const language = LANGUAGE_RULE[options.language];
   const system = [
     "你是一名擅长康奈尔笔记法与手账排版的笔记整理助手。你的任务是把用户提供的原文整理成一页结构化的手写笔记。",
     "",

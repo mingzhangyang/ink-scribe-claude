@@ -112,7 +112,7 @@ describe("POST /api/structure", () => {
     expect(secondInputs.messages[3].content).toContain("无法通过校验");
   });
 
-  it("resolves the source language for auto and repairs a note written in another language", async () => {
+  it("repairs a Chinese note made from an English source when following the source language", async () => {
     const englishNote = { ...goodNote, title: "Spaced repetition", sections: [{ content: "Review notes at growing intervals.", highlights: ["growing intervals"] }], summary: "Spacing beats cramming." };
     let n = 0;
     const env = makeEnv(async () => ({ response: n++ === 0 ? goodNote : englishNote }));
@@ -122,9 +122,24 @@ describe("POST /api/structure", () => {
     expect(body.note.title).toBe("Spaced repetition");
     expect(body.meta.attempts).toBe(2);
     const calls = (env.AI.run as unknown as ReturnType<typeof vi.fn>).mock.calls;
-    expect(calls[0][1].messages[0].content).toContain("Write every text field in English");
-    expect(calls[0][1].messages[1].content).toMatch(/Output language: English\.$/);
-    expect(calls[1][1].messages[3].content).toContain("every text field must be written in English");
+    expect(calls[0][1].messages[0].content).toContain("must not be translated into Chinese");
+    expect(calls[0][1].messages[1].content).toMatch(/Output language: the same as the source text above; do not translate\.$/);
+    expect(calls[1][1].messages[3].content).toContain("in the same language as the source text");
+  });
+
+  it("leaves the language of non-Chinese, non-English sources to the model", async () => {
+    const cases = [
+      { text: "間隔反復は詰め込み学習より効果的です。復習の間隔を少しずつ広げましょう。", title: "間隔反復", content: "復習の間隔を少しずつ広げる。", highlight: "少しずつ" },
+      { text: "La répétition espacée est plus efficace que le bachotage. Révisez à intervalles croissants.", title: "Répétition espacée", content: "Réviser à intervalles croissants.", highlight: "intervalles" },
+    ];
+    for (const { text, title, content, highlight } of cases) {
+      const note = { ...goodNote, title, sections: [{ content, highlights: [highlight] }], summary: content };
+      const env = makeEnv(async () => ({ response: note }));
+      const { response, body } = await call(post("/api/structure", { text }), env);
+      expect(response.status).toBe(200);
+      expect(body.note.title).toBe(title);
+      expect(body.meta).toMatchObject({ attempts: 1, warnings: [] });
+    }
   });
 
   it("keeps a note in the wrong language with a warning when the repair also misses", async () => {

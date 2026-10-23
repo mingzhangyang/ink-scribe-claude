@@ -1,11 +1,11 @@
 import type { StructureRequest, StructureResponse } from "../../shared/api.ts";
 import { structureLocally } from "../../shared/heuristic.ts";
 import { NOTE_JSON_SCHEMA, normalizeNoteStructure, noteLanguage, type NoteStructure } from "../../shared/note.ts";
-import { DETAILS, isOneOf, LANGUAGES, STYLES, TEMPLATES } from "../../shared/options.ts";
-import { charLength, cleanText } from "../../shared/text.ts";
+import { DETAILS, isOneOf, LANGUAGES, STYLES, TEMPLATES, type Language } from "../../shared/options.ts";
+import { charLength, cleanText, detectLanguage } from "../../shared/text.ts";
 import { runJsonTask, type AiBinding } from "../ai.ts";
 import { AppError, jsonResponse, readJsonBody } from "../http.ts";
-import { buildStructureMessages, outputLanguage } from "../prompts.ts";
+import { buildStructureMessages } from "../prompts.ts";
 import type { RouteContext } from "../router.ts";
 
 function enumField<T extends string>(body: Record<string, unknown>, field: string, values: readonly T[], fallback: T): T {
@@ -42,7 +42,8 @@ export function validateStructureRequest(body: unknown, maxInputChars: number): 
   };
 }
 
-const LANGUAGE_MISMATCH: Record<"zh" | "en", string> = {
+const LANGUAGE_MISMATCH: Record<Language, string> = {
+  auto: "Wrong output language: write every text field in the same language as the source text, without translating it.",
   zh: "输出语言不对：所有文字字段都必须使用简体中文。",
   en: "Wrong output language: every text field must be written in English.",
 };
@@ -63,14 +64,16 @@ export async function generateNoteFromText(ctx: RouteContext, input: StructureRe
   const model = config.structure.model;
   log.model = model;
   const { system, user } = buildStructureMessages({ ...input, detail: input.detail ?? "standard" });
-  const language = outputLanguage(input.language, input.text);
+  // detectLanguage 只区分中日韩文字与其他文字。“跟随原文”时据此核对笔记与原文同属一类：能发现英文等原文被写成中文笔记，
+  // 但不替模型选定语言，日文、韩文原文不会被当成中文，法文、德文等原文也不会被改成英文
+  const expected = input.language === "auto" ? detectLanguage(input.text) : input.language;
   const result = await runJsonTask(env.AI as unknown as AiBinding, config.structure, {
     system,
     user,
     schemaName: "note_structure",
     schema: NOTE_JSON_SCHEMA as unknown as Record<string, unknown>,
     normalize: normalizeNoteStructure,
-    check: (note) => (noteLanguage(note) === language ? [] : [LANGUAGE_MISMATCH[language]]),
+    check: (note) => (noteLanguage(note) === expected ? [] : [LANGUAGE_MISMATCH[input.language]]),
     invalidMessage: "无法生成有效的笔记结构，请重试。",
     onUsage: (attempts, usage) => {
       log.attempts = attempts;
