@@ -18,7 +18,7 @@ export function InputTrigger({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   const length = charLength(text);
   return (
-    <button type="button" className={`btn btn-small btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
+    <button type="button" className={`btn btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
       <span aria-hidden="true">✍️</span> {t.input.open}
       {length > 0 ? <span className="input-trigger-count">{t.input.chars(length.toLocaleString())}</span> : null}
     </button>

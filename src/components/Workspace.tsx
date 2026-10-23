@@ -3,7 +3,6 @@ import { PAGE_WIDTH } from "../config/appearance.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
-import { InputTrigger } from "./InputPanel.tsx";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
 import { NoteFitStatus } from "./note/NoteFitStatus.tsx";
 import type { NoteFitState } from "./note/useNoteFit.ts";
@@ -32,7 +31,7 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
   const t = useT();
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200 });
+  const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200, scrollbar: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
   const [pageHeight, setPageHeight] = useState(1188);
   const fixedHeight = pageHeightFor(fit?.settings ?? settings);
@@ -46,7 +45,12 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
   useLayoutEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setViewport({ width: element.clientWidth, height: element.clientHeight }));
+    const observer = new ResizeObserver(() => setViewport({
+      width: element.clientWidth,
+      height: element.clientHeight,
+      // 浮在画布右上角的缩放控件要避开竖向滚动条
+      scrollbar: element.offsetWidth - element.clientWidth - element.clientLeft * 2,
+    }));
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -86,31 +90,6 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
 
   return (
     <section className="workspace" aria-label={t.workspace.label}>
-      <div className="workspace-toolbar">
-        <InputTrigger onOpen={onEditInput} />
-        <div className="workspace-status">
-          {source === "sample" ? <span className="badge">{t.workspace.sample}</span> : null}
-          {source === "local" ? <span className="badge badge-muted">{t.workspace.local}</span> : null}
-          {source === "shared" ? <span className="badge badge-muted">{t.workspace.shared}</span> : null}
-          {source === "ai" && meta ? (
-            <span className="badge badge-ai" title={t.workspace.model(meta.model)}>
-              {meta.mock ? t.workspace.mock : t.workspace.ai((meta.latencyMs / 1000).toFixed(1))}
-            </span>
-          ) : null}
-        </div>
-        <div className="zoom-controls" role="group" aria-label={t.workspace.zoom}>
-          <button type="button" className="icon-btn" onClick={() => setZoom(Math.max(0.3, Math.round((scale - 0.1) * 10) / 10))} aria-label={t.workspace.zoomOut}>
-            −
-          </button>
-          <button type="button" className="zoom-value" onClick={() => setZoom(null)} title={t.workspace.fitWidth}>
-            {Math.round(scale * 100)}%
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setZoom(Math.min(1.6, Math.round((scale + 0.1) * 10) / 10))} aria-label={t.workspace.zoomIn}>
-            +
-          </button>
-        </div>
-      </div>
-
       {error ? (
         <div className="alert alert-error" role="alert">
           <div>
@@ -154,37 +133,60 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
         </div>
       ) : null}
 
-      <div className="viewport" ref={viewportRef}>
-        <div className="page-frame" style={{ width: PAGE_WIDTH * scale, height: pageHeight * scale }}>
-          <div className="page-scaler" style={{ transform: `scale(${scale})` }}>
-            <NotePage
-              ref={pageRef}
-              note={note}
-              settings={settings}
-              stickers={stickers}
-              aiDoodle={aiDoodle}
-              selectedStickerId={selectedStickerId}
-              interactive
-              displayScale={scale}
-              onSelectSticker={selectSticker}
-              onChangeSticker={updateSticker}
-              onRemoveSticker={removeSticker}
-              onFitChange={onFitChange}
-            />
-          </div>
-          {status === "loading" ? (
-            <div className="loading-overlay" role="status" aria-live="polite">
-              <div className="loading-card">
-                <span className="loading-pen" aria-hidden="true">
-                  ✍️
-                </span>
-                <span>{t.workspace.loading}</span>
-                <button type="button" className="btn btn-small btn-secondary" onClick={cancelGeneration}>
-                  {t.input.cancel}
-                </button>
-              </div>
-            </div>
+      <div className="canvas">
+        <div className="workspace-status">
+          {source === "sample" ? <span className="badge">{t.workspace.sample}</span> : null}
+          {source === "local" ? <span className="badge badge-muted">{t.workspace.local}</span> : null}
+          {source === "shared" ? <span className="badge badge-muted">{t.workspace.shared}</span> : null}
+          {source === "ai" && meta ? (
+            <span className="badge badge-ai" title={t.workspace.model(meta.model)}>
+              {meta.mock ? t.workspace.mock : t.workspace.ai((meta.latencyMs / 1000).toFixed(1))}
+            </span>
           ) : null}
+        </div>
+        <div className="zoom-controls" style={{ right: 8 + viewport.scrollbar }} role="group" aria-label={t.workspace.zoom}>
+          <button type="button" className="icon-btn" onClick={() => setZoom(Math.max(0.3, Math.round((scale - 0.1) * 10) / 10))} aria-label={t.workspace.zoomOut}>
+            −
+          </button>
+          <button type="button" className="zoom-value" onClick={() => setZoom(null)} title={t.workspace.fitWidth}>
+            {Math.round(scale * 100)}%
+          </button>
+          <button type="button" className="icon-btn" onClick={() => setZoom(Math.min(1.6, Math.round((scale + 0.1) * 10) / 10))} aria-label={t.workspace.zoomIn}>
+            +
+          </button>
+        </div>
+        <div className="viewport" ref={viewportRef}>
+          <div className="page-frame" style={{ width: PAGE_WIDTH * scale, height: pageHeight * scale }}>
+            <div className="page-scaler" style={{ transform: `scale(${scale})` }}>
+              <NotePage
+                ref={pageRef}
+                note={note}
+                settings={settings}
+                stickers={stickers}
+                aiDoodle={aiDoodle}
+                selectedStickerId={selectedStickerId}
+                interactive
+                displayScale={scale}
+                onSelectSticker={selectSticker}
+                onChangeSticker={updateSticker}
+                onRemoveSticker={removeSticker}
+                onFitChange={onFitChange}
+              />
+            </div>
+            {status === "loading" ? (
+              <div className="loading-overlay" role="status" aria-live="polite">
+                <div className="loading-card">
+                  <span className="loading-pen" aria-hidden="true">
+                    ✍️
+                  </span>
+                  <span>{t.workspace.loading}</span>
+                  <button type="button" className="btn btn-small btn-secondary" onClick={cancelGeneration}>
+                    {t.input.cancel}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </section>

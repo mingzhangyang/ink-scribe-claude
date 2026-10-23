@@ -165,11 +165,20 @@ textarea {
   flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
+  /* 行高固定为可用高度：画布与侧栏各自滚动，上下边缘对齐 */
+  grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "workspace side";
   gap: 16px;
   padding: 16px;
   min-height: 0;
-  height: calc(100vh - 63px);
+}
+
+/* 宽屏编辑器占满一屏，主区域高度随顶栏实际高度变化 */
+@media (min-width: 901px) {
+  .app:has(> .app-main) {
+    height: 100vh;
+    height: 100dvh;
+  }
 }
 
 .workspace {
@@ -531,23 +540,49 @@ input[type="range"] {
   gap: 10px;
 }
 
-.workspace-toolbar {
+/* 来源标记与缩放控件浮在画布左上角和右上角，不再占用单独一行 */
+.canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+}
+
+.workspace-status,
+.zoom-controls {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 30px;
+}
+
+.workspace-status {
+  left: 8px;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.workspace-status .badge {
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
+  right: 8px;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .zoom-value {
-  min-width: 56px;
+  min-width: 48px;
   border: none;
   background: none;
   color: var(--muted);
@@ -1010,6 +1045,7 @@ input[type="range"] {
 .input-trigger {
   --trigger-shadow: 0 0 0 0 transparent;
   flex: none;
+  min-height: 42px;
 }
 
 .input-trigger-count {
@@ -1431,6 +1467,11 @@ html:has(.sheet[open]) {
     min-height: 70vh;
   }
 
+  /* 窄屏上页面贴满画布宽度：画布顶部留出浮动控件的位置，避免盖住标题 */
+  .viewport {
+    padding-top: 48px;
+  }
+
   .panel {
     overflow: visible;
   }
@@ -1444,6 +1485,17 @@ html:has(.sheet[open]) {
 a.brand {
   color: inherit;
   text-decoration: none;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.app-header-slot {
+  display: contents;
 }
 
 .app-menu {

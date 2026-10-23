@@ -38,6 +38,8 @@ export function App() {
   const t = useT();
   const [config, setConfig] = useState<PublicConfig>(DEFAULT_CONFIG);
   const [toast, setToast] = useState<string | null>(null);
+  // 页面可把自己的操作按钮渲染到顶栏菜单左侧
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   useAppliedTheme();
 
   useEffect(() => {
@@ -69,10 +71,13 @@ export function App() {
             <p>{t.app.tagline}</p>
           </div>
         </a>
-        <AppMenu route={route} mock={config.mock} />
+        <div className="app-header-actions">
+          <div className="app-header-slot" ref={setHeaderActions} />
+          <AppMenu route={route} mock={config.mock} />
+        </div>
       </header>
 
-      {route.name === "editor" ? <EditorPage config={config} onToast={setToast} /> : null}
+      {route.name === "editor" ? <EditorPage config={config} headerActions={headerActions} onToast={setToast} /> : null}
       {route.name === "gallery" ? <GalleryPage /> : null}
       {route.name === "library" ? <LibraryPage /> : null}
       {route.name === "guide" ? <GuidePage /> : null}
