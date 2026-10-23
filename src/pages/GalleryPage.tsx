@@ -1,18 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { PublishedNoteSummary } from "../../shared/api.ts";
-import { isOneOf, TEMPLATE_LABELS, TEMPLATES } from "../../shared/options.ts";
+import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchGallery } from "../api.ts";
+import { errorMessage, useT } from "../i18n/index.ts";
+import type { RequestError } from "../state/store.ts";
 import { linkProps } from "../router.ts";
 
-const LANGUAGE_FILTERS = [
-  { id: "", label: "全部语言" },
-  { id: "zh", label: "中文" },
-  { id: "en", label: "English" },
-] as const;
-
 function GalleryCard({ item }: { item: PublishedNoteSummary }) {
-  const template = isOneOf(TEMPLATES, item.template) ? TEMPLATE_LABELS[item.template] : "";
-  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString("zh-CN") : "";
+  const t = useT();
+  const template = isOneOf(TEMPLATES, item.template) ? t.options.templates[item.template] : "";
+  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString(t.dateLocale) : "";
   return (
     <a className="gallery-card" {...linkProps(`/n/${item.id}`)}>
       <div className="gallery-thumb gallery-thumb-text">
@@ -33,12 +30,14 @@ function GalleryCard({ item }: { item: PublishedNoteSummary }) {
 }
 
 export function GalleryPage() {
+  const t = useT();
   const [template, setTemplate] = useState("");
   const [language, setLanguage] = useState("");
   const [items, setItems] = useState<PublishedNoteSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "idle" | "error">("loading");
-  const [error, setError] = useState("");
+  // 保存错误详情而不是译文，切换界面语言后提示随之切换
+  const [error, setError] = useState<RequestError | null>(null);
   // 每次请求递增；只有最新一次请求的结果会写入状态，避免切换筛选后旧请求覆盖或追加到新结果
   const generation = useRef(0);
 
@@ -57,50 +56,51 @@ export function GalleryPage() {
       setStatus("idle");
     } catch (e) {
       if (current !== generation.current) return;
-      setError(e instanceof ApiRequestError ? e.detail.message : "加载失败，请稍后重试。");
+      setError(e instanceof ApiRequestError ? e.detail : null);
       setStatus("error");
     }
   }
 
   useEffect(() => {
-    document.title = "图库 · 墨语笔记 InkScribe";
     // 筛选条件变化时重新加载第一页
     void load(true);
   }, [template, language]);
+
+  useEffect(() => {
+    document.title = t.gallery.documentTitle;
+  }, [t]);
 
   return (
     <main className="gallery-main">
       <div className="gallery-head">
         <div>
-          <h2>图库</h2>
-          <p className="hint">公开发布的手写笔记</p>
+          <h2>{t.gallery.title}</h2>
+          <p className="hint">{t.gallery.subtitle}</p>
         </div>
         <div className="gallery-filters">
-          <div className="chip-group" role="radiogroup" aria-label="模板筛选">
+          <div className="chip-group" role="radiogroup" aria-label={t.gallery.templateFilter}>
             <button type="button" role="radio" aria-checked={template === ""} className={`chip${template === "" ? " is-active" : ""}`} onClick={() => setTemplate("")}>
-              全部
+              {t.gallery.all}
             </button>
-            {TEMPLATES.map((t) => (
-              <button key={t} type="button" role="radio" aria-checked={template === t} className={`chip${template === t ? " is-active" : ""}`} onClick={() => setTemplate(t)}>
-                {TEMPLATE_LABELS[t]}
+            {TEMPLATES.map((id) => (
+              <button key={id} type="button" role="radio" aria-checked={template === id} className={`chip${template === id ? " is-active" : ""}`} onClick={() => setTemplate(id)}>
+                {t.options.templates[id]}
               </button>
             ))}
           </div>
-          <select aria-label="语言筛选" value={language} onChange={(e) => setLanguage(e.target.value)}>
-            {LANGUAGE_FILTERS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
+          <select aria-label={t.gallery.languageFilter} value={language} onChange={(e) => setLanguage(e.target.value)}>
+            <option value="">{t.gallery.allLanguages}</option>
+            <option value="zh">{t.options.languages.zh}</option>
+            <option value="en">{t.options.languages.en}</option>
           </select>
         </div>
       </div>
 
       {status === "error" ? (
         <div className="alert alert-error" role="alert">
-          <span>{error}</span>
+          <span>{error ? errorMessage(t, error) : t.gallery.loadFailed}</span>
           <button type="button" className="btn btn-small" onClick={() => void load(items.length === 0)}>
-            重试
+            {t.gallery.retry}
           </button>
         </div>
       ) : null}
@@ -113,18 +113,23 @@ export function GalleryPage() {
         </div>
       ) : status === "idle" ? (
         <div className="empty-state">
-          <h2>还没有公开的笔记</h2>
+          <h2>{t.gallery.emptyTitle}</h2>
           <p className="hint">
-            通过 API 发布笔记时把 <code>visibility</code> 设为 <code>public</code>，就会出现在这里。参见{" "}
-            <a href="/llms.txt">接口说明</a>。
+            {t.gallery.emptyBefore}
+            <code>visibility</code>
+            {t.gallery.emptyMiddle}
+            <code>public</code>
+            {t.gallery.emptyAfter}
+            <a href="/llms.txt">{t.gallery.apiDocs}</a>
+            {t.htmlLang === "en" ? "." : "。"}
           </p>
         </div>
       ) : null}
 
-      {status === "loading" ? <p className="hint gallery-loading">正在加载…</p> : null}
+      {status === "loading" ? <p className="hint gallery-loading">{t.gallery.loading}</p> : null}
       {cursor && status === "idle" ? (
         <button type="button" className="btn btn-secondary gallery-more" onClick={() => void load(false)}>
-          加载更多
+          {t.gallery.more}
         </button>
       ) : null}
     </main>

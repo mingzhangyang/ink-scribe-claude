@@ -10,9 +10,12 @@ import {
   type ExportFormat,
   type ExportScale,
 } from "../export/exportImage.ts";
+import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 
-type Status = { kind: "idle" } | { kind: "working"; label: string } | { kind: "done"; message: string } | { kind: "error"; message: string };
+// 只保存状态与参数，文案在渲染时按当前界面语言生成
+type Task = "download" | "copy";
+type Status = { kind: "idle" } | { kind: "working"; task: Task } | { kind: "done"; task: Task; reducedScale?: number } | { kind: "error"; task: Task };
 
 export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | null> }) {
   const note = useNoteStore((s) => s.note);
@@ -21,6 +24,7 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   const [format, setFormat] = useState<ExportFormat>("png");
   const [scale, setScale] = useState<ExportScale>(2);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const t = useT();
   const clipboard = clipboardSupport();
   const page = pageRef.current;
   const width = page?.offsetWidth ?? 840;
@@ -43,28 +47,25 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   }
 
   async function handleDownload() {
-    setStatus({ kind: "working", label: "正在渲染高清图片…" });
+    setStatus({ kind: "working", task: "download" });
     try {
       const { blob, scale: used } = await render(format);
       downloadBlob(blob, fileNameFor(note!.title, format));
-      setStatus({
-        kind: "done",
-        message: used < scale ? `已下载（画面过大，已自动降为 ${used.toFixed(2)}x）。` : "图片已下载。",
-      });
+      setStatus({ kind: "done", task: "download", ...(used < scale ? { reducedScale: used } : {}) });
     } catch {
-      setStatus({ kind: "error", message: "导出失败，请稍后重试。" });
+      setStatus({ kind: "error", task: "download" });
     }
   }
 
   function handleCopy() {
     if (!clipboard.supported) return;
-    setStatus({ kind: "working", label: "正在复制到剪贴板…" });
-    const fail = () => setStatus({ kind: "error", message: "复制失败：浏览器可能拒绝了剪贴板权限。可以改用下载图片。" });
+    setStatus({ kind: "working", task: "copy" });
+    const fail = () => setStatus({ kind: "error", task: "copy" });
     // ClipboardItem 必须在点击事件中同步创建，图片内容以 Promise 形式提供
     const blob = render("png").then((r) => r.blob);
     try {
       copyToClipboard(blob)
-        .then(() => setStatus({ kind: "done", message: "已复制到剪贴板，可直接粘贴到聊天或文档中。" }))
+        .then(() => setStatus({ kind: "done", task: "copy" }))
         .catch(fail);
     } catch {
       blob.catch(() => undefined);
@@ -75,18 +76,18 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   return (
     <div className="panel-body">
       <fieldset className="field">
-        <legend>格式</legend>
-        <div className="chip-group" role="radiogroup" aria-label="导出格式">
+        <legend>{t.export.format}</legend>
+        <div className="chip-group" role="radiogroup" aria-label={t.export.formatLabel}>
           {(["png", "jpeg"] as const).map((f) => (
             <button key={f} type="button" role="radio" aria-checked={format === f} className={`chip${format === f ? " is-active" : ""}`} onClick={() => setFormat(f)}>
-              {f === "png" ? "PNG（无损）" : "JPG（体积小）"}
+              {f === "png" ? t.export.png : t.export.jpeg}
             </button>
           ))}
         </div>
       </fieldset>
       <fieldset className="field">
-        <legend>清晰度</legend>
-        <div className="chip-group" role="radiogroup" aria-label="导出倍率">
+        <legend>{t.export.scale}</legend>
+        <div className="chip-group" role="radiogroup" aria-label={t.export.scaleLabel}>
           {([1, 2, 3] as const).map((s) => (
             <button key={s} type="button" role="radio" aria-checked={scale === s} className={`chip${scale === s ? " is-active" : ""}`} onClick={() => setScale(s)}>
               {s}x
@@ -94,31 +95,39 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
           ))}
         </div>
         <p className="hint">
-          输出尺寸约 {Math.round(width * actualScale)} × {Math.round(height * actualScale)} 像素
-          {actualScale < scale ? "（长图过大，已自动限制倍率）" : ""}
+          {t.export.size(Math.round(width * actualScale), Math.round(height * actualScale))}
+          {actualScale < scale ? t.export.sizeLimited : ""}
         </p>
       </fieldset>
 
       <button type="button" className="btn btn-primary btn-block" disabled={busy} onClick={() => void handleDownload()}>
-        下载图片
+        {t.export.download}
       </button>
       <button
         type="button"
         className="btn btn-secondary btn-block"
         disabled={busy || !clipboard.supported}
         onClick={handleCopy}
-        title={clipboard.supported ? "复制 PNG 到剪贴板" : clipboard.reason}
+        title={clipboard.supported ? t.export.copyTitle : clipboard.reason}
       >
-        复制到剪贴板
+        {t.export.copy}
       </button>
-      {!clipboard.supported ? <p className="hint">{clipboard.reason}，请使用下载图片。</p> : null}
+      {!clipboard.supported ? <p className="hint">{t.export.copyUnsupported(clipboard.reason)}</p> : null}
 
       <div className="export-status" aria-live="polite">
-        {status.kind === "working" ? <p className="hint">{status.label}</p> : null}
-        {status.kind === "done" ? <p className="hint is-ok">{status.message}</p> : null}
-        {status.kind === "error" ? <p className="hint is-error">{status.message}</p> : null}
+        {status.kind === "working" ? <p className="hint">{status.task === "copy" ? t.export.copying : t.export.rendering}</p> : null}
+        {status.kind === "done" ? (
+          <p className="hint is-ok">
+            {status.task === "copy"
+              ? t.export.copied
+              : status.reducedScale !== undefined
+                ? t.export.downloadedReduced(status.reducedScale.toFixed(2))
+                : t.export.downloaded}
+          </p>
+        ) : null}
+        {status.kind === "error" ? <p className="hint is-error">{status.task === "copy" ? t.export.copyFailed : t.export.failed}</p> : null}
       </div>
-      <p className="hint">导出在浏览器本地完成，图片不会上传到服务器。</p>
+      <p className="hint">{t.export.local}</p>
     </div>
   );
 }

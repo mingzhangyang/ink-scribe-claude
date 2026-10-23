@@ -1,7 +1,8 @@
 import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { PAGE_WIDTH } from "../config/appearance.ts";
+import { useT } from "../i18n/index.ts";
 import { StickerArt } from "./StickerArt.tsx";
-import { STICKER_LABELS, STICKER_SIZES, type StickerItem } from "./types.ts";
+import { STICKER_SIZES, type StickerItem } from "./types.ts";
 
 type Props = {
   stickers: StickerItem[];
@@ -159,9 +160,11 @@ export function StickerLayer({
   }
 
   const selectedItem = interactive ? stickers.find((s) => s.id === selectedId) : undefined;
+  const t = useT();
 
   return (
-    <div className="sticker-layer" aria-label="贴纸图层">
+    // 贴纸层位于按笔记语言标注的画布中，但其中的操作提示是界面文案，按界面语言标注
+    <div className="sticker-layer" lang={t.htmlLang} aria-label={t.stickers.layer}>
       {stickers.map((item) => {
         const selected = item.id === selectedItem?.id;
         return (
@@ -170,7 +173,7 @@ export function StickerLayer({
             className={`sticker sticker-${item.type}${selected ? " is-selected" : ""}${interactive ? " is-interactive" : ""}`}
             style={boxStyle(item)}
             role={interactive ? "button" : undefined}
-            aria-label={interactive ? `${STICKER_LABELS[item.type]}（拖动移动，Delete 删除）` : undefined}
+            aria-label={interactive ? t.stickers.itemLabel(t.options.stickers[item.type]) : undefined}
             tabIndex={interactive ? 0 : undefined}
             onFocus={interactive ? () => onSelect(item.id) : undefined}
             onPointerDown={(e) => begin(e, item, "move")}
@@ -188,7 +191,7 @@ export function StickerLayer({
           <div className="sticker-frame" />
           <span
             className="sticker-handle handle-rotate"
-            title="旋转（按住 Shift 以 15° 吸附）"
+            title={t.stickers.rotateHandle}
             style={{ transform: `translate(-50%, -50%) scale(${1 / (selectedItem.scale * displayScale)})` }}
             onPointerDown={(e) => begin(e, selectedItem, "rotate")}
             onPointerMove={update}
@@ -197,7 +200,7 @@ export function StickerLayer({
           />
           <span
             className="sticker-handle handle-scale"
-            title="缩放"
+            title={t.stickers.scaleHandle}
             style={{ transform: `translate(50%, 50%) scale(${1 / (selectedItem.scale * displayScale)})` }}
             onPointerDown={(e) => begin(e, selectedItem, "scale")}
             onPointerMove={update}
@@ -207,8 +210,8 @@ export function StickerLayer({
           <button
             type="button"
             className="sticker-handle handle-delete"
-            title="删除"
-            aria-label="删除贴纸"
+            title={t.stickers.deleteHandle}
+            aria-label={t.stickers.deleteLabel}
             style={{ transform: `translate(50%, -50%) scale(${1 / (selectedItem.scale * displayScale)})` }}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onRemove(selectedItem.id)}

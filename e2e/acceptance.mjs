@@ -23,7 +23,8 @@ const pngSize = (file) => {
 const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {});
 
 async function newPage(options = {}, init) {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, ...options });
+  // 界面语言按浏览器首选语言选择；除专门测试英文界面的用例外，都以中文浏览器运行
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, locale: "zh-CN", ...options });
   if (init) await context.addInitScript(init);
   const page = await context.newPage();
   page.errors = [];
@@ -123,6 +124,16 @@ check("F2", "字号/行距/字距可调", vars[0] === "17px" && vars[1] === "1.6
 
 // ---------- G. 贴纸 ----------
 await page.getByRole("tab", { name: "贴纸" }).click();
+const doodleGrid = await page.locator(".doodle-palette").evaluate((grid) => {
+  const panel = grid.getBoundingClientRect();
+  const buttons = [...grid.children].map((el) => el.getBoundingClientRect());
+  return {
+    overflow: grid.scrollWidth - grid.clientWidth,
+    lastRight: Math.round(Math.max(...buttons.map((b) => b.right)) - panel.right),
+    square: buttons.every((b) => Math.abs(b.width - b.height) < 1),
+  };
+});
+check("G7", "手绘插图库五列完整显示在面板内且按钮为正方形", doodleGrid.overflow <= 0 && doodleGrid.lastRight <= 0 && doodleGrid.square, JSON.stringify(doodleGrid));
 await page.getByTitle("和纸胶带 · 薄荷").click();
 const stickers = page.locator(".sticker");
 const first = stickers.nth(0);
@@ -574,12 +585,115 @@ if (process.env.E2E_API_KEY) {
   await c8.close();
 }
 
-// ---------- Q. 移动端 ----------
+// ---------- T. 界面语言与外观主题 ----------
 {
-  const { page: p5, context: c5 } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const { page: p9, context: c9 } = await newPage({ locale: "en-US", colorScheme: "light" });
+  await p9.goto(URL, { waitUntil: "networkidle" });
+  const state = () =>
+    p9.evaluate(() => ({
+      lang: document.documentElement.lang,
+      theme: document.documentElement.dataset.theme,
+      brand: document.querySelector(".brand h1")?.textContent ?? "",
+      generate: document.querySelector(".input-panel .btn-primary")?.textContent ?? "",
+      title: document.querySelector(".note-title")?.textContent ?? "",
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+  const en = await state();
+  check(
+    "T1",
+    "英文浏览器默认显示英文界面与英文示例笔记",
+    en.lang === "en" && en.brand === "InkScribe" && en.generate.includes("Turn into a handwritten note") && en.title.includes("Spaced Repetition"),
+    JSON.stringify(en),
+  );
+  check("T2", "系统为浅色时默认使用浅色主题", en.theme === "light" && en.bg !== "rgb(24, 24, 27)", `${en.theme} ${en.bg}`);
+
+  await p9.click(".pref-lang");
+  const zh = await state();
+  check("T3", "切换为中文界面，未修改的示例笔记随之切换", zh.lang === "zh-CN" && zh.brand === "墨语笔记" && zh.title.includes("深度工作"), JSON.stringify(zh));
+
+  // 跟随系统 → 浅色 → 深色
+  await p9.click(".pref-btn:not(.pref-lang)");
+  await p9.click(".pref-btn:not(.pref-lang)");
+  const dark = await state();
+  check("T4", "可手动切换为深色主题", dark.theme === "dark" && dark.bg === "rgb(24, 24, 27)", `${dark.theme} ${dark.bg}`);
+
+  await p9.reload({ waitUntil: "networkidle" });
+  const reloaded = await state();
+  check("T5", "语言与主题偏好在刷新后保留", reloaded.lang === "zh-CN" && reloaded.theme === "dark", JSON.stringify(reloaded));
+  // 第一次生成仍在进行时（画布上还是示例笔记）切换语言，不能把生成结果当作过期结果丢掉
+  await p9.route("**/api/structure", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await p9.selectOption(".sample-picker select", "en-lecture");
+  await p9.click(".input-panel .btn-primary");
+  await p9.waitForSelector(".loading-overlay");
+  await p9.click(".pref-lang");
+  await p9.waitForSelector(".loading-overlay", { state: "detached", timeout: 20_000 });
+  const midSwitch = await p9.evaluate(() => ({
+    title: document.querySelector(".note-title")?.textContent ?? "",
+    ai: document.querySelectorAll(".badge-ai").length,
+    alert: document.querySelector(".alert-error")?.textContent ?? "",
+  }));
+  check(
+    "T8",
+    "生成过程中切换界面语言不会丢弃生成结果",
+    midSwitch.ai === 1 && !midSwitch.alert && !midSwitch.title.includes("深度工作") && midSwitch.title !== "How Memory Works: Spaced Repetition",
+    JSON.stringify(midSwitch),
+  );
+  await p9.unroute("**/api/structure");
+  const layerLang = await p9.evaluate(() => ({
+    layer: document.querySelector(".sticker-layer")?.getAttribute("lang"),
+    ui: document.documentElement.lang,
+  }));
+  check("T9", "画布中的贴纸操作提示按界面语言标注", layerLang.layer === layerLang.ui, JSON.stringify(layerLang));
+  check("T6", "切换语言与主题时无脚本错误", p9.errors.length === 0, p9.errors.join("; "));
+  await c9.close();
+
+  const { page: p10, context: c10 } = await newPage({ colorScheme: "dark" });
+  await p10.goto(URL, { waitUntil: "networkidle" });
+  check("T7", "系统为深色时默认使用深色主题", (await p10.evaluate(() => document.documentElement.dataset.theme)) === "dark");
+  await c10.close();
+
+  // 第一次生成失败后切换语言：错误提示与重试按钮保留，并换成新语言；已显示的导入提示也随语言切换
+  const { page: p11, context: c11 } = await newPage();
+  await p11.route("**/api/structure", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "AI_UNAVAILABLE", message: "AI 服务繁忙，请稍后重试。", requestId: "t10" } }),
+    }),
+  );
+  await p11.goto(URL, { waitUntil: "networkidle" });
+  await p11.selectOption(".sample-picker select", "zh-meeting");
+  await p11.click(".input-panel .btn-primary");
+  await p11.waitForSelector(".alert-error");
+  await p11.locator('input[type="file"]').setInputFiles({ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") });
+  await p11.waitForSelector(".upload-row + div .hint.is-error");
+  await p11.click(".pref-lang");
+  const afterSwitch = await p11.evaluate(() => ({
+    alert: document.querySelector(".alert-error strong")?.textContent ?? "",
+    retry: document.querySelector(".alert-error .btn")?.textContent ?? "",
+    title: document.querySelector(".note-title")?.textContent ?? "",
+    importHint: document.querySelector(".upload-row + div .hint.is-error")?.textContent ?? "",
+  }));
+  check(
+    "T10",
+    "生成失败后切换界面语言，错误提示与重试按钮保留并换成新语言",
+    afterSwitch.alert.includes("AI service") && afterSwitch.retry === "Retry" && afterSwitch.title.includes("深度工作"),
+    JSON.stringify(afterSwitch),
+  );
+  check("T11", "已显示的导入提示随界面语言切换", afterSwitch.importHint.includes("isn't supported"), afterSwitch.importHint);
+  check("T12", "失败与切换流程无脚本错误", p11.errors.length === 0, p11.errors.join("; "));
+  await c11.close();
+}
+
+// ---------- Q. 移动端 ----------
+for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
+  const { page: p5, context: c5 } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, locale });
   await p5.goto(URL, { waitUntil: "networkidle" });
   const overflowX = await p5.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  check("Q1", "移动端（390px）无横向滚动", overflowX <= 0, `${overflowX}px`);
+  check(id, `移动端（390px，${locale}）无横向滚动`, overflowX <= 0, `${overflowX}px`);
   await c5.close();
 }
 

@@ -26,6 +26,7 @@
 | 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
 | SEO 与 GEO | 首页、图库与笔记查看页由 Worker 注入标题、canonical、Open Graph、JSON-LD 和可读正文；提供 `robots.txt`、`sitemap.xml` 与 `llms.txt`；标志、图标与 OG 图由代码生成（`npm run brand`）。详见 [docs/seo.md](docs/seo.md) |
 | 兜底 | AI 不可用时可一键“本地快速排版”（基于段落与关键词的抽取式整理，不调用模型） |
+| 界面语言与主题 | 界面支持中文 / English（首次访问按浏览器语言选择），外观支持浅色 / 深色 / 跟随系统；右上角一键切换，偏好保存在本机。笔记画布上的标签始终跟随笔记本身的语言 |
 
 ## 快速开始
 
@@ -51,7 +52,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（55 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（76 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
@@ -107,7 +108,7 @@ docs/        API、部署、模型评测、字体与导出说明
 | `DOODLE_API_ENABLED` | `false` | 是否启用 `/api/doodle` |
 | `DOODLE_CACHE_TTL_SECONDS` | `86400` | AI 插图缓存时长（只缓存校验后的图元，缓存键为哈希） |
 | `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
-| `PUBLIC_BASE_URL` | `https://ink-scribe.orangely.xyz` | 分享链接使用的站点地址；为空时使用请求的域名。本地开发与 mock 构建中自动清空 |
+| `PUBLIC_BASE_URL` | `https://scribe.orangely.xyz` | 分享链接使用的站点地址；为空时使用请求的域名。本地开发与 mock 构建中自动清空 |
 | `DEFAULT_TIMEZONE` | `Asia/Shanghai` | 发布时自动补全笔记日期使用的时区 |
 | `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥每分钟的请求上限 |
 
