@@ -26,6 +26,11 @@ export type JsonTask<T> = {
   schemaName: string;
   schema: Record<string, unknown>;
   normalize: (raw: unknown) => NormalizeResult<T>;
+  /**
+   * 结构合法之后的附加检查（如输出语言），返回发现的问题。还能重试时把问题交给模型修复；
+   * 修复仍未通过时返回最早的合法结果，问题记入 warnings，不让整个请求失败。
+   */
+  check?: (value: T) => string[];
   /** 多次尝试仍无法得到合法结构时返回给用户的提示。 */
   invalidMessage: string;
   /**
@@ -230,6 +235,7 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
   let messages = baseMessages;
   let attempts = 0;
   let lastUpstreamError: AppError | undefined;
+  let fallback: JsonTaskResult<T> | undefined;
 
   while (attempts <= task.maxRetries) {
     // 只有在时间预算的前一半内才发起重试，保证整体延迟有上限
@@ -262,9 +268,11 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
       const result = job.normalize(parsed);
       if (result.ok) {
         const warnings = attempts > 1 ? [...result.warnings, "模型输出经过一次修复"] : result.warnings;
-        return { value: result.value, warnings, attempts, usage };
-      }
-      errors = result.errors;
+        const issues = job.check?.(result.value) ?? [];
+        if (issues.length === 0) return { value: result.value, warnings, attempts, usage };
+        fallback ??= { value: result.value, warnings: [...warnings, ...issues], attempts, usage };
+        errors = issues;
+      } else errors = result.errors;
     } catch {
       errors = ["输出不是合法的 JSON 对象"];
     }
@@ -277,6 +285,7 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
     ];
   }
 
+  if (fallback) return { ...fallback, attempts };
   if (lastUpstreamError) throw lastUpstreamError;
   throw new AppError(502, "AI_OUTPUT_INVALID", job.invalidMessage);
 }

@@ -1,11 +1,11 @@
 import type { StructureRequest, StructureResponse } from "../../shared/api.ts";
 import { structureLocally } from "../../shared/heuristic.ts";
-import { NOTE_JSON_SCHEMA, normalizeNoteStructure, type NoteStructure } from "../../shared/note.ts";
+import { NOTE_JSON_SCHEMA, normalizeNoteStructure, noteLanguage, type NoteStructure } from "../../shared/note.ts";
 import { DETAILS, isOneOf, LANGUAGES, STYLES, TEMPLATES } from "../../shared/options.ts";
 import { charLength, cleanText } from "../../shared/text.ts";
 import { runJsonTask, type AiBinding } from "../ai.ts";
 import { AppError, jsonResponse, readJsonBody } from "../http.ts";
-import { buildStructureMessages } from "../prompts.ts";
+import { buildStructureMessages, outputLanguage } from "../prompts.ts";
 import type { RouteContext } from "../router.ts";
 
 function enumField<T extends string>(body: Record<string, unknown>, field: string, values: readonly T[], fallback: T): T {
@@ -42,6 +42,11 @@ export function validateStructureRequest(body: unknown, maxInputChars: number): 
   };
 }
 
+const LANGUAGE_MISMATCH: Record<"zh" | "en", string> = {
+  zh: "输出语言不对：所有文字字段都必须使用简体中文。",
+  en: "Wrong output language: every text field must be written in English.",
+};
+
 export type GeneratedNote = { note: NoteStructure; model: string; attempts: number; warnings: string[] };
 
 /** 把原文整理为 NoteStructure（mock 模式下使用本地启发式整理器），并把用量写入请求日志。 */
@@ -58,12 +63,14 @@ export async function generateNoteFromText(ctx: RouteContext, input: StructureRe
   const model = config.structure.model;
   log.model = model;
   const { system, user } = buildStructureMessages({ ...input, detail: input.detail ?? "standard" });
+  const language = outputLanguage(input.language, input.text);
   const result = await runJsonTask(env.AI as unknown as AiBinding, config.structure, {
     system,
     user,
     schemaName: "note_structure",
     schema: NOTE_JSON_SCHEMA as unknown as Record<string, unknown>,
     normalize: normalizeNoteStructure,
+    check: (note) => (noteLanguage(note) === language ? [] : [LANGUAGE_MISMATCH[language]]),
     invalidMessage: "无法生成有效的笔记结构，请重试。",
     onUsage: (attempts, usage) => {
       log.attempts = attempts;

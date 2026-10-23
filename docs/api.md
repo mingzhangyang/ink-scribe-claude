@@ -30,7 +30,7 @@
 | --- | --- | --- |
 | `text` | 是 | 非空字符串，不超过 `MAX_INPUT_CHARS` 个字符 |
 | `template` | 否 | `general`（默认）· `reading-notes` · `meeting-minutes` · `lecture-summary` · `idea-fragments` |
-| `language` | 否 | 输出语言：`auto`（默认，跟随原文）· `zh` · `en` |
+| `language` | 否 | 输出语言：`auto`（默认，跟随原文：服务端按原文主要语言判定为 `zh` 或 `en`，混合文本以占比较多的语言为准）· `zh` · `en` |
 | `style` | 否 | 版式：`hybrid-cornell`（默认）· `classic-cornell` · `free-journal` · `minimal`，影响线索的写法与段落密度 |
 | `detail` | 否 | `concise` · `standard`（默认）· `detailed`，控制段落数量与总字数，避免溢出单页 |
 
@@ -39,7 +39,7 @@
 1. 检查方法、`Content-Type`、`Origin`、限流，流式读取请求体并强制字节上限；
 2. 校验枚举与长度，清理控制字符与 HTML 标签；
 3. 组装提示词与 JSON Schema，按模型调用约定（见 `MODEL_PROFILES`）调用 Workers AI，带超时；
-4. 宽松解析输出（去除思考块、代码块标记），规范化为 `NoteStructure`；不合规时把错误反馈给模型做有限次数的修复；
+4. 宽松解析输出（去除思考块、代码块标记），规范化为 `NoteStructure`；不合规时把错误反馈给模型做有限次数的修复。笔记语言与目标语言不符时同样要求修复；修复后仍不符则返回已得到的合法笔记，并在 `meta.warnings` 中说明；
 5. 返回统一格式。
 
 成功响应：

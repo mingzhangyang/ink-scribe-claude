@@ -1,9 +1,8 @@
 import type { NoteListResponse, PublishedNote, PublishValidation, PublishValidationResponse } from "../../shared/api.ts";
-import type { NoteStructure } from "../../shared/note.ts";
+import { noteLanguage, type NoteStructure } from "../../shared/note.ts";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { PUBLISH_SCHEMA_VERSION, validatePublishRequest, type PublishRequest } from "../../shared/publishing.ts";
 import { DEFAULT_SETTINGS, type Settings } from "../../shared/settings.ts";
-import { detectLanguage } from "../../shared/text.ts";
 import { AppError, jsonResponse, readJsonBody } from "../http.ts";
 import { clientKey } from "../rate-limit.ts";
 import type { RouteContext } from "../router.ts";
@@ -134,10 +133,6 @@ function withDate(note: NoteStructure, language: "zh" | "en", timeZone: string):
     date = now.toISOString().slice(0, 10);
   }
   return { ...note, date };
-}
-
-function noteLanguage(note: NoteStructure): "zh" | "en" {
-  return detectLanguage([note.title, note.summary, ...note.sections.map((s) => s.content)].join("\n"));
 }
 
 function ownedRowOr404<T>(row: T | null): T {

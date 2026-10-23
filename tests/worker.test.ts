@@ -112,6 +112,30 @@ describe("POST /api/structure", () => {
     expect(secondInputs.messages[3].content).toContain("无法通过校验");
   });
 
+  it("resolves the source language for auto and repairs a note written in another language", async () => {
+    const englishNote = { ...goodNote, title: "Spaced repetition", sections: [{ content: "Review notes at growing intervals.", highlights: ["growing intervals"] }], summary: "Spacing beats cramming." };
+    let n = 0;
+    const env = makeEnv(async () => ({ response: n++ === 0 ? goodNote : englishNote }));
+    const text = "Spaced repetition beats cramming. Review notes at growing intervals to remember more.";
+    const { response, body } = await call(post("/api/structure", { text, language: "auto" }), env);
+    expect(response.status).toBe(200);
+    expect(body.note.title).toBe("Spaced repetition");
+    expect(body.meta.attempts).toBe(2);
+    const calls = (env.AI.run as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][1].messages[0].content).toContain("Write every text field in English");
+    expect(calls[0][1].messages[1].content).toMatch(/Output language: English\.$/);
+    expect(calls[1][1].messages[3].content).toContain("every text field must be written in English");
+  });
+
+  it("keeps a note in the wrong language with a warning when the repair also misses", async () => {
+    const env = makeEnv(async () => ({ response: goodNote }));
+    const { response, body } = await call(post("/api/structure", { text: "Spaced repetition beats cramming.", language: "en" }), env);
+    expect(response.status).toBe(200);
+    expect(body.note.title).toBe("测试标题");
+    expect(body.meta.warnings).toContain("Wrong output language: every text field must be written in English.");
+    expect((env.AI.run as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
+  });
+
   it("returns AI_OUTPUT_INVALID when output stays invalid", async () => {
     const env = makeEnv(async () => ({ response: JSON.stringify({ title: "" }) }));
     const { response, body } = await call(post("/api/structure", { text: SECRET_TEXT }), env);

@@ -126,4 +126,27 @@ describe("runJsonTask", () => {
     ).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
     expect(reports.at(-1)).toEqual([2, { promptTokens: 200, completionTokens: 40 }]);
   });
+
+  it("asks the model to fix failed checks, then keeps a valid result instead of failing", async () => {
+    const task = { ...loadConfig(env({})).structure, maxRetries: 1, timeoutMs: 60_000 };
+    const outputs = ["中文", "仍是中文", "English"];
+    const calls: Array<Record<string, any>> = [];
+    const ai = { run: async (_model: string, inputs: Record<string, unknown>) => { calls.push(inputs); return { response: JSON.stringify(outputs[calls.length - 1]) }; } };
+    const job = {
+      system: "s",
+      user: "u",
+      schemaName: "x",
+      schema: {},
+      normalize: (raw: unknown) => ({ ok: true as const, value: String(raw), warnings: [] }),
+      check: (value: string) => (/^[A-Za-z]+$/.test(value) ? [] : ["wrong language"]),
+      invalidMessage: "invalid",
+    };
+    const kept = await runJsonTask(ai, task, job);
+    expect(kept).toMatchObject({ value: "中文", attempts: 2, warnings: ["wrong language"] });
+    expect(calls[1].messages.at(-1).content).toContain("wrong language");
+
+    outputs.splice(0, 2, "中文");
+    calls.length = 0;
+    expect(await runJsonTask(ai, task, job)).toMatchObject({ value: "English", attempts: 2, warnings: ["模型输出经过一次修复"] });
+  });
 });
