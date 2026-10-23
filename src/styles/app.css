@@ -25,9 +25,9 @@
   --primary-bg: var(--paper-ui);
   --primary-fg: #1c1917;
   --primary-hover: #fff;
-  /* “撰写”按钮的珊瑚橙，深浅两种主题共用 */
-  --compose-bg: #ff7759;
-  --compose-hover: #f5603f;
+  /* “撰写”按钮：Logo 笔尖的蜂蜜金 */
+  --compose-bg: #e8c468;
+  --compose-hover: #f0d080;
   --compose-fg: #1c1917;
   --overlay: rgba(24, 24, 27, 0.75);
   --overlay-soft: rgba(24, 24, 27, 0.45);
@@ -67,6 +67,8 @@
   --primary-bg: #27272a;
   --primary-fg: #fafaf9;
   --primary-hover: #3f3f46;
+  --compose-bg: #f0c75e;
+  --compose-hover: #e6b84a;
   --overlay: rgba(244, 242, 238, 0.8);
   --overlay-soft: rgba(244, 242, 238, 0.5);
   --canvas-bg: #e6e2da;
