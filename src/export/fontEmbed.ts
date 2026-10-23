@@ -6,6 +6,8 @@ import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } fro
  * 避免一次导出下载并编码数 MB 的字体。
  */
 
+type FontSource = { url: string; format: string };
+
 type FontFaceSource = {
   rule: CSSFontFaceRule;
   base: string;
@@ -14,25 +16,33 @@ type FontFaceSource = {
   weight: string;
   stretch: string;
   unicodeRange: string;
-  url: string;
-  format: string;
+  sources: FontSource[];
 };
 
 const dataUrlCache = new Map<string, Promise<string>>();
 const retrySources = new WeakMap<CSSFontFaceRule, { src: string; attempt: number }>();
 
-function pickUrl(src: string, base: string): { url: string; format: string } | undefined {
-  const candidates = [...src.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)\s*(?:format\(\s*['"]?([\w-]+)['"]?\s*\))?/g)].map((m) => ({
-    url: m[2],
-    format: m[3] ?? "",
-  }));
-  const chosen = candidates.find((c) => c.format === "woff2" || c.url.endsWith(".woff2")) ?? candidates[0];
-  if (!chosen) return undefined;
-  try {
-    return { url: new URL(chosen.url, base).href, format: chosen.format || "woff2" };
-  } catch {
-    return undefined;
+function sourceFormat(url: string, declared: string): string {
+  if (declared) return declared;
+  const pathname = new URL(url).pathname.toLowerCase();
+  if (pathname.endsWith(".woff2")) return "woff2";
+  if (pathname.endsWith(".woff")) return "woff";
+  if (pathname.endsWith(".ttf")) return "truetype";
+  if (pathname.endsWith(".otf")) return "opentype";
+  return "";
+}
+
+function parseSources(src: string, base: string): FontSource[] {
+  const sources: FontSource[] = [];
+  for (const match of src.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)\s*(?:format\(\s*['"]?([\w-]+)['"]?\s*\))?/g)) {
+    try {
+      const url = new URL(match[2], base).href;
+      sources.push({ url, format: sourceFormat(url, match[3] ?? "") });
+    } catch {
+      // Ignore invalid URLs; a later declared source may still work.
+    }
   }
+  return sources;
 }
 
 function collectRules(rules: CSSRuleList, base: string, families: Set<string>, out: FontFaceSource[]): void {
@@ -40,8 +50,8 @@ function collectRules(rules: CSSRuleList, base: string, families: Set<string>, o
     if (rule instanceof CSSFontFaceRule) {
       const family = rule.style.getPropertyValue("font-family");
       if (!families.has(normalizeFamily(family))) continue;
-      const source = pickUrl(rule.style.getPropertyValue("src"), base);
-      if (!source) continue;
+      const sources = parseSources(rule.style.getPropertyValue("src"), base);
+      if (!sources.length) continue;
       out.push({
         rule,
         base,
@@ -50,7 +60,7 @@ function collectRules(rules: CSSRuleList, base: string, families: Set<string>, o
         weight: rule.style.getPropertyValue("font-weight") || "normal",
         stretch: rule.style.getPropertyValue("font-stretch") || "normal",
         unicodeRange: rule.style.getPropertyValue("unicode-range"),
-        ...source,
+        sources,
       });
     } else if (rule instanceof CSSImportRule && rule.styleSheet) {
       try {
@@ -135,17 +145,29 @@ export async function ensureFontsLoaded(families: string[], text: string, option
   await document.fonts.ready;
 }
 
+async function embedFirstAvailable(sources: FontSource[]): Promise<{ data: string; format: string }> {
+  let lastError: unknown;
+  for (const source of sources) {
+    try {
+      return { data: await toDataUrl(source.url), format: source.format };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("No usable font source");
+}
+
 export async function buildFontEmbedCss(families: string[], text: string): Promise<string> {
   const faces = findFontFaces(families, text);
   const css = await Promise.all(
     faces.map(async (face) => {
-      const data = await toDataUrl(face.url);
+      const { data, format } = await embedFirstAvailable(face.sources);
       return [
         "@font-face{",
         `font-family:"${face.family}";`,
         `font-style:${face.style};`,
         `font-weight:${face.weight};`,
-        `src:url(${data}) format("${face.format}");`,
+        `src:url(${data})${format ? ` format("${format}")` : ""};`,
         face.unicodeRange ? `unicode-range:${face.unicodeRange};` : "",
         "}",
       ].join("");

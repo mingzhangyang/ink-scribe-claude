@@ -69,6 +69,26 @@ describe("retrying downloaded font faces", () => {
     expect(rule.properties.src).toBe(recoveredSource);
   });
 
+  it("falls back to WOFF when WOFF2 embedding is unavailable", async () => {
+    const rule = new FontRule("Kalam", 'url("./latin.woff2") format("woff2"), url("./latin.woff") format("woff")');
+    fontDocument([rule], [rule.face("loaded")]);
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(new Response(new Blob(["woff"], { type: "font/woff" })));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("FileReader", class {
+      result = "data:font/woff;base64,d29mZg==";
+      onload = () => {};
+      readAsDataURL() { this.onload(); }
+    });
+
+    const css = await buildFontEmbedCss(["Kalam"], "A");
+
+    expect(fetch).toHaveBeenNthCalledWith(1, "https://example.test/assets/latin.woff2", { cache: "force-cache" });
+    expect(fetch).toHaveBeenNthCalledWith(2, "https://example.test/assets/latin.woff", { cache: "force-cache" });
+    expect(css).toContain('src:url(data:font/woff;base64,d29mZg==) format("woff");');
+  });
+
   it("finds later-loaded CSS and embeds the recovered source on export", async () => {
     const doc = fontDocument([], []);
     const lazy = new FontRule("Long Cang", 'url("./lazy.woff2") format("woff2")', { "font-weight": "400" });
