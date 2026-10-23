@@ -41,6 +41,18 @@ describe("draft lifecycle", () => {
     expect((await readDraft())?.document).not.toHaveProperty("status");
   });
 
+  it("ignores untouched samples, but saves sample replacements after user input", async () => {
+    const c = await boot();
+    c.store.getState().setResult({ ...savedDocument.note!, title: "中文示例" }, null, "sample");
+    expect(await readDraft()).toBeNull();
+    c.store.getState().setInput({ text: "用户已输入原文" });
+    await saved(c);
+    c.store.getState().setResult({ ...savedDocument.note!, title: "English sample" }, null, "sample");
+    const seed = c.store.getState().settings.seed;
+    await saved(c);
+    expect((await readDraft())?.document).toMatchObject({ note: { title: "English sample" }, settings: { seed } });
+  });
+
   it("keeps the latest rapid edit when a save is in flight", async () => {
     const c = await boot();
     for (let i = 0; i < 20; i++) c.store.getState().setInput({ text: `edit ${i}` });

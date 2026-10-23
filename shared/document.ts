@@ -46,8 +46,9 @@ export function readDocument(value: unknown): NoteDocument {
         return { keyword: c.keyword, note: c.note };
       }),
       sections: n.sections.map((s: unknown) => {
-        if (!record(s) || !text(s.content) || !optionalText(s.heading) || !Array.isArray(s.highlights) || !s.highlights.every(text)) throw new Error("Invalid draft section");
-        return { content: s.content, highlights: s.highlights, ...(s.heading !== undefined ? { heading: s.heading } : {}) };
+        if (!record(s) || !text(s.content) || !optionalText(s.heading) || !optionalText(s.highlightInput) || !Array.isArray(s.highlights) || !s.highlights.every(text)) throw new Error("Invalid draft section");
+        return { content: s.content, highlights: s.highlights, ...(s.heading !== undefined ? { heading: s.heading } : {}),
+          ...(s.highlightInput !== undefined ? { highlightInput: s.highlightInput } : {}) };
       }),
     };
   }

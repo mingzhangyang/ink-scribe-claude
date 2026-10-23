@@ -11,6 +11,8 @@ export type NoteSection = {
   heading?: string;
   content: string;
   highlights: string[];
+  /** Editor-only raw field, preserved by local drafts; publishing normalization ignores it. */
+  highlightInput?: string;
 };
 
 export type NoteStructure = {

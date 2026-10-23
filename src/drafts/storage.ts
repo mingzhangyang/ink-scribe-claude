@@ -51,7 +51,8 @@ export async function writeDraft(expected: string | null, document: NoteDocument
       const next: DraftRecord = { version: 1, revision: crypto.randomUUID(), enabled, document, savedAt: Date.now() };
       let failure: Error | null = null;
       get.onsuccess = () => {
-        if (!discard && (get.result?.revision ?? null) !== expected) {
+        const matches = expected === null ? get.result === undefined : get.result?.revision === expected;
+        if (!discard && !matches) {
           failure = new DraftConflict("Draft changed in another tab");
           tx.abort();
           return;

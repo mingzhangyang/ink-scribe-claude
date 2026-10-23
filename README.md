@@ -53,7 +53,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（82 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（84 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |

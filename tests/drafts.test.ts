@@ -6,7 +6,7 @@ import { DraftConflict, readDraft, writeDraft } from "../src/drafts/storage.ts";
 
 const document: NoteDocument = {
   input: { text: "原文\n完整保留", template: "general", language: "auto", detail: "standard" },
-  note: { title: "", cues: [{ keyword: "", note: "未完成" }], sections: [{ heading: "", content: "", highlights: ["待补正文"] }], summary: "" },
+  note: { title: "", cues: [{ keyword: "", note: "未完成" }], sections: [{ heading: "", content: "", highlights: ["待补正文"], highlightInput: "待补正文； " }], summary: "" },
   settings: { ...DEFAULT_SETTINGS, seed: 1234 },
   stickers: [{ id: "sticker", type: "star", x: 17, y: 500, rotation: 31, scale: 1.2 }],
   aiDoodle: null, source: "local",
@@ -57,7 +57,7 @@ describe("local draft storage", () => {
     await expect(writeDraft(null, document, true)).rejects.toThrow("Denied");
   });
 
-  it("preserves invalid/unknown records until the user explicitly discards them", async () => {
+  it.each([{ version: 99, revision: "future" }, { broken: true }])("preserves malformed records until explicit discard: %j", async (corrupt) => {
     const db = await new Promise<IDBDatabase>((resolve) => {
       const req = indexedDB.open("ink-scribe-drafts", 1);
       req.onupgradeneeded = () => req.result.createObjectStore("drafts");
@@ -65,7 +65,7 @@ describe("local draft storage", () => {
     });
     await new Promise<void>((resolve) => {
       const tx = db.transaction("drafts", "readwrite");
-      tx.objectStore("drafts").put({ version: 99, revision: "future" }, "current");
+      tx.objectStore("drafts").put(corrupt, "current");
       tx.oncomplete = () => resolve();
     });
     db.close();
