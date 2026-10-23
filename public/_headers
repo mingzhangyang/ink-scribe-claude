@@ -1,0 +1,11 @@
+# Workers Static Assets 响应头。
+# 导出图片依赖 data:/blob: 图片（SVG foreignObject 渲染）与同源字体请求；
+# 不加载任何第三方脚本、样式或字体。
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), clipboard-write=(self)
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
