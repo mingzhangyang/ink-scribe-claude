@@ -141,6 +141,9 @@ export function Sheet({ open, onClose, labelledBy, className, children }: {
       className={`sheet${className ? ` ${className}` : ""}`}
       aria-labelledby={labelledBy}
       tabIndex={-1}
+      // 模态只让背景不可操作，按键事件仍会冒泡到 window 上的快捷键（如选中贴纸的删除、移动）。
+      // 在对话框处停止冒泡，但不阻止默认行为：输入与 Esc 关闭照常
+      onKeyDown={(event) => event.stopPropagation()}
       onCancel={(event) => {
         // Esc：交给 onClose，以便播放关闭动画
         event.preventDefault();

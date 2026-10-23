@@ -1552,6 +1552,24 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await context.close();
 }
 
+// 弹窗内的按键不能触发背后画布的贴纸快捷键，Esc 仍能关闭弹窗
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "贴纸", exact: true }).click();
+  await page.getByTitle("和纸胶带 · 薄荷", { exact: true }).click();
+  await page.locator(".sticker-selection").waitFor();
+  const before = await page.locator(".sticker").count();
+  await openInput(page);
+  await page.locator(".input-sheet .sheet-close").focus();
+  for (const key of ["Delete", "Backspace", "ArrowLeft"]) await page.keyboard.press(key);
+  const after = await page.locator(".sticker").count();
+  await page.keyboard.press("Escape");
+  const closed = await page.locator(".input-sheet").waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
+  check("IS23", "弹窗打开时按键不删除或移动背后选中的贴纸，Esc 关闭弹窗", before > 0 && after === before && closed, JSON.stringify({ before, after, closed }));
+  await context.close();
+}
+
 // ---------- D. 本地草稿 ----------
 {
   const { page, context } = await newPage();
