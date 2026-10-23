@@ -1,21 +1,21 @@
 import { STICKER_SIZES, type StickerType } from "../types.ts";
 import { Frame, pen, pt, type ArtProps } from "./common.tsx";
-import { FORMULA_TEXT } from "./glyphs.ts";
+import { FORMULA_TEXT, GREEK_LETTERS } from "./glyphs.ts";
 import { fitText, Handwriting } from "./handwriting.tsx";
 
-/** 公式：数学、物理公式与化学式，用笔画手写，颜色跟随所选的笔。 */
+/** 公式与希腊字母：数学、物理公式与化学式，用笔画手写，颜色跟随所选的笔。 */
 
 const WEIGHT = 2.4;
 
-/** 一行公式缩放到贴纸内居中。 */
-function written(type: keyof typeof FORMULA_TEXT & StickerType) {
+/** 一行公式或一个字母，缩放到贴纸内居中。 */
+function written(type: StickerType, text: string) {
   return function Formula({ color, seed }: ArtProps) {
     const { w, h } = STICKER_SIZES[type];
     return (
       <Frame type={type}>
         <Handwriting
-          text={FORMULA_TEXT[type]}
-          {...fitText(FORMULA_TEXT[type], { x: 5, y: 5, w: w - 10, h: h - 10 })}
+          text={text}
+          {...fitText(text, { x: 5, y: 5, w: w - 10, h: h - 10 })}
           color={color}
           seed={seed}
           weight={WEIGHT}
@@ -25,18 +25,23 @@ function written(type: keyof typeof FORMULA_TEXT & StickerType) {
   };
 }
 
-export const Pi = written("pi");
-export const Pythagorean = written("pythagorean");
-export const Euler = written("euler");
-export const Integral = written("integral");
-export const InfinitySign = written("infinity");
-export const MassEnergy = written("emc2");
-export const NewtonSecond = written("fma");
-export const Ohm = written("ohm");
-export const WaterFormula = written("h2o");
-export const CarbonDioxide = written("co2");
-export const SodiumChloride = written("nacl");
-export const GlucoseFormula = written("glucose-formula");
+export const Pi = written("pi", FORMULA_TEXT.pi);
+export const Pythagorean = written("pythagorean", FORMULA_TEXT.pythagorean);
+export const Euler = written("euler", FORMULA_TEXT.euler);
+export const Integral = written("integral", FORMULA_TEXT.integral);
+export const InfinitySign = written("infinity", FORMULA_TEXT.infinity);
+export const MassEnergy = written("emc2", FORMULA_TEXT.emc2);
+export const NewtonSecond = written("fma", FORMULA_TEXT.fma);
+export const Ohm = written("ohm", FORMULA_TEXT.ohm);
+export const WaterFormula = written("h2o", FORMULA_TEXT.h2o);
+export const CarbonDioxide = written("co2", FORMULA_TEXT.co2);
+export const SodiumChloride = written("nacl", FORMULA_TEXT.nacl);
+export const GlucoseFormula = written("glucose-formula", FORMULA_TEXT["glucose-formula"]);
+
+/** 每个希腊字母一张贴纸。 */
+export const GREEK_ART = Object.fromEntries(
+  Object.entries(GREEK_LETTERS).map(([type, letter]) => [type, written(type as keyof typeof GREEK_LETTERS, letter)]),
+) as Record<keyof typeof GREEK_LETTERS, ReturnType<typeof written>>;
 
 export function Sigma({ color, seed }: ArtProps) {
   // 大写 Σ，上下是求和范围，右边是通项

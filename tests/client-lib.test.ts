@@ -13,7 +13,7 @@ import {
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
 import { fetchPublishedNote } from "../src/api.ts";
-import { FORMULA_TEXT, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
+import { FORMULA_TEXT, GREEK_LETTERS, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
@@ -232,10 +232,12 @@ describe("sticker catalog", () => {
 });
 
 describe("handwritten formula glyphs", () => {
-  it("has a stroke glyph for every character in the formulas and diagram labels", () => {
+  it("has a stroke glyph for every character in the formulas, Greek letters and diagram labels", () => {
     // 求和、根号、坐标轴与各图示的标注（见 src/stickers/art/formulas.tsx、science.tsx）
     const labels = ["n", "i=1", "a_i", "2", "x", "y", "O", "H", "CH_2OH", "OH", "HO", "N", "S", "F", "+", "Σ"];
-    for (const text of [...Object.values(FORMULA_TEXT), ...labels]) expect(missingGlyphs(text), text).toEqual([]);
+    for (const text of [...Object.values(FORMULA_TEXT), ...Object.values(GREEK_LETTERS), ...labels]) {
+      expect(missingGlyphs(text), text).toEqual([]);
+    }
   });
 
   it("raises superscripts, lowers subscripts and keeps the following glyph on the baseline", () => {

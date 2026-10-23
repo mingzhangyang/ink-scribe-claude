@@ -14,6 +14,9 @@ export const STICKER_TYPES = [
   "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
   "benzene", "water-molecule", "glucose-ring", "dna", "alpha-helix", "antibody", "trna",
   "atom", "magnet", "lens", "circuit", "beaker", "flask", "microscope",
+  "greek-alpha", "greek-beta", "greek-gamma", "greek-delta", "greek-epsilon", "greek-theta",
+  "greek-lambda", "greek-mu", "greek-pi", "greek-sigma", "greek-phi", "greek-omega",
+  "greek-capital-delta", "greek-capital-sigma", "greek-capital-omega",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -108,10 +111,25 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   beaker: "烧杯",
   flask: "锥形瓶",
   microscope: "显微镜",
+  "greek-alpha": "α 阿尔法",
+  "greek-beta": "β 贝塔",
+  "greek-gamma": "γ 伽马",
+  "greek-delta": "δ 德尔塔",
+  "greek-epsilon": "ε 艾普西隆",
+  "greek-theta": "θ 西塔",
+  "greek-lambda": "λ 兰布达",
+  "greek-mu": "μ 缪",
+  "greek-pi": "π 派",
+  "greek-sigma": "σ 西格玛",
+  "greek-phi": "φ 斐",
+  "greek-omega": "ω 欧米伽",
+  "greek-capital-delta": "Δ 大写德尔塔",
+  "greek-capital-sigma": "Σ 大写西格玛",
+  "greek-capital-omega": "Ω 大写欧米伽",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "science"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "greek", "science"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -122,6 +140,7 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   mood: "心情点缀",
   fruit: "水果",
   formulas: "公式",
+  greek: "希腊字母",
   science: "科学图示",
 };
 
@@ -135,6 +154,11 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   formulas: [
     "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
     "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
+  ],
+  greek: [
+    "greek-alpha", "greek-beta", "greek-gamma", "greek-delta", "greek-epsilon", "greek-theta",
+    "greek-lambda", "greek-mu", "greek-pi", "greek-sigma", "greek-phi", "greek-omega",
+    "greek-capital-delta", "greek-capital-sigma", "greek-capital-omega",
   ],
   science: [
     "benzene", "water-molecule", "glucose-ring", "dna", "alpha-helix", "antibody", "trna",
@@ -214,6 +238,21 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   beaker: { w: 76, h: 88 },
   flask: { w: 76, h: 92 },
   microscope: { w: 84, h: 104 },
+  "greek-alpha": { w: 56, h: 56 },
+  "greek-beta": { w: 56, h: 56 },
+  "greek-gamma": { w: 56, h: 56 },
+  "greek-delta": { w: 56, h: 56 },
+  "greek-epsilon": { w: 56, h: 56 },
+  "greek-theta": { w: 56, h: 56 },
+  "greek-lambda": { w: 56, h: 56 },
+  "greek-mu": { w: 56, h: 56 },
+  "greek-pi": { w: 56, h: 56 },
+  "greek-sigma": { w: 56, h: 56 },
+  "greek-phi": { w: 56, h: 56 },
+  "greek-omega": { w: 56, h: 56 },
+  "greek-capital-delta": { w: 56, h: 56 },
+  "greek-capital-sigma": { w: 56, h: 56 },
+  "greek-capital-omega": { w: 56, h: 56 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -232,7 +271,7 @@ const INK_VARIANTS = {
   green: { id: "green", label: "绿笔", color: "#16A34A" },
 } as const satisfies Record<string, StickerVariant>;
 
-/** 公式：和标注符号一样用笔的颜色。 */
+/** 公式与希腊字母：和标注符号一样用笔的颜色。 */
 const PEN_VARIANTS = [INK_VARIANTS.ink, INK_VARIANTS.red, INK_VARIANTS.blue] as const;
 
 /** 科学图示：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
@@ -449,6 +488,21 @@ export const STICKER_VARIANTS = {
   beaker: scienceVariants("#60A5FA"),
   flask: scienceVariants("#34D399"),
   microscope: scienceVariants("#475569"),
+  "greek-alpha": PEN_VARIANTS,
+  "greek-beta": PEN_VARIANTS,
+  "greek-gamma": PEN_VARIANTS,
+  "greek-delta": PEN_VARIANTS,
+  "greek-epsilon": PEN_VARIANTS,
+  "greek-theta": PEN_VARIANTS,
+  "greek-lambda": PEN_VARIANTS,
+  "greek-mu": PEN_VARIANTS,
+  "greek-pi": PEN_VARIANTS,
+  "greek-sigma": PEN_VARIANTS,
+  "greek-phi": PEN_VARIANTS,
+  "greek-omega": PEN_VARIANTS,
+  "greek-capital-delta": PEN_VARIANTS,
+  "greek-capital-sigma": PEN_VARIANTS,
+  "greek-capital-omega": PEN_VARIANTS,
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];

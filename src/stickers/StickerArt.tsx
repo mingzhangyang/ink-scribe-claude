@@ -9,6 +9,7 @@ import {
   CarbonDioxide,
   Euler,
   GlucoseFormula,
+  GREEK_ART,
   InfinitySign,
   Integral,
   MassEnergy,
@@ -116,6 +117,7 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   beaker: Beaker,
   flask: Flask,
   microscope: Microscope,
+  ...GREEK_ART,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };
