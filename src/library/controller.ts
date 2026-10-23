@@ -6,7 +6,7 @@ import { deleteEntry, getEntry, LibraryConflict, saveEntry, type LibraryEntry, t
 type Status = "idle" | "saving" | "saved" | "error" | "conflict" | "deleted";
 /**
  * `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes;
- * `source` is its source text, which tells a regenerated note apart from a note made from other text.
+ * `source` is the text its note was generated from, which tells a regenerated note apart from one made from other text.
  */
 type Baseline = { revision: string; text: string; source: string } | null;
 export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
@@ -48,7 +48,7 @@ useNoteStore.subscribe((next, previous) => {
 });
 
 function baselineOf(revision: string, document: NoteDocument): Baseline {
-  return { revision, text: serialize(document), source: document.input.text };
+  return { revision, text: serialize(document), source: document.generatedFrom ?? document.input.text };
 }
 
 function isUntouchedSample(state: SampleParts & Pick<NoteDocument, "source">): boolean {
@@ -113,7 +113,7 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
   // Another document was opened or restored, or a note was generated from other text meanwhile: the result, success
   // or failure, no longer describes the editor, and the status now belongs to that note. Regenerating the same text
   // keeps the save current.
-  const job = { source: document.input.text };
+  const job = { source: state.generatedFrom };
   saving = job;
   const replaced = () => {
     const now = useNoteStore.getState();

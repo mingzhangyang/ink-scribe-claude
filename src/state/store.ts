@@ -37,7 +37,7 @@ type State = {
   documentSerial: number;
   /** 当前编辑内容对应的本机笔记库条目；为空时“保存到笔记库”会新建一条。 */
   libraryLink: LibraryLink | null;
-  /** 生成当前笔记时提交的原文。生成期间原文仍可编辑，所以判断笔记来自哪段原文时不能用 input.text。 */
+  /** 生成当前笔记时提交的原文。原文在生成期间和之后仍可编辑，所以判断笔记来自哪段原文时不能用 input.text。 */
   generatedFrom: string;
 
   setLibraryLink: (link: LibraryLink | null) => void;
@@ -84,8 +84,8 @@ export const useNoteStore = create<State>()(
 
       setLibraryLink: (link) => set({ libraryLink: link }),
       loadDocument: (document, link) =>
-        set((s) => ({ ...document, libraryLink: link, generatedFrom: document.input.text, meta: null, status: "idle", error: null, selectedStickerId: null,
-          noteSerial: s.noteSerial + 1, documentSerial: s.documentSerial + 1 })),
+        set((s) => ({ ...document, libraryLink: link, generatedFrom: document.generatedFrom ?? document.input.text, meta: null, status: "idle", error: null,
+          selectedStickerId: null, noteSerial: s.noteSerial + 1, documentSerial: s.documentSerial + 1 })),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
@@ -113,6 +113,8 @@ export const useNoteStore = create<State>()(
           documentSerial: s.documentSerial + 1,
           meta: null,
           source: "shared",
+          // 已发布的笔记不是由当前原文生成的
+          generatedFrom: "",
           libraryLink: null,
           status: "idle",
           error: null,
@@ -180,6 +182,6 @@ export const useNoteStore = create<State>()(
 
 /** 当前编辑内容中需要保存的部分（不含请求状态与选中状态）。 */
 export function currentDocument(): NoteDocument {
-  const { input, note, settings, stickers, aiDoodle, source } = useNoteStore.getState();
-  return { input, note, settings, stickers, aiDoodle, source };
+  const { input, note, settings, stickers, aiDoodle, source, generatedFrom } = useNoteStore.getState();
+  return { input, note, settings, stickers, aiDoodle, source, generatedFrom };
 }

@@ -12,6 +12,11 @@ export type NoteDocument = {
   stickers: StickerItem[];
   aiDoodle: DoodleSpec | null;
   source: "ai" | "local" | "sample" | "shared" | null;
+  /**
+   * The source text the note was generated from, which tells a regenerated note apart from one made from other text.
+   * The text stays editable during and after generation; omitted when it equals `input.text`.
+   */
+  generatedFrom?: string;
 };
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -28,7 +33,7 @@ function doodle(v: unknown): DoodleSpec | null {
 export function readDocument(value: unknown): NoteDocument {
   if (!record(value) || !record(value.input) || !text(value.input.text)
     || !isOneOf(TEMPLATES, value.input.template) || !isOneOf(LANGUAGES, value.input.language)
-    || !isOneOf(DETAILS, value.input.detail) || !Array.isArray(value.stickers)
+    || !isOneOf(DETAILS, value.input.detail) || !Array.isArray(value.stickers) || !optionalText(value.generatedFrom)
     || ![null, "ai", "local", "sample", "shared"].includes(value.source as string | null)) throw new Error("Invalid draft");
   let note: NoteStructure | null = null;
   if (value.note !== null) {
@@ -54,6 +59,7 @@ export function readDocument(value: unknown): NoteDocument {
   }
   return {
     input: { text: value.input.text, template: value.input.template, language: value.input.language, detail: value.input.detail },
+    ...(value.generatedFrom !== undefined && value.generatedFrom !== value.input.text ? { generatedFrom: value.generatedFrom } : {}),
     note, settings: sanitizeSettings(value.settings),
     stickers: value.stickers.map((s: unknown): StickerItem => {
       if (!record(s) || !text(s.id) || !isOneOf(STICKER_TYPES, s.type) || !optionalText(s.variant)

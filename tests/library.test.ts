@@ -191,21 +191,53 @@ describe("library in the editor", () => {
     expect((await listEntries()).entries.map((e) => e.title).sort()).toEqual(["读书笔记", "未保存", "第二篇"].sort());
   });
 
-  it("decides by the text submitted for generation, not text edited while it runs", async () => {
-    const c = await boot();
+  it("keeps the submitted source, not text edited while generating, through saving, reloading and reopening", async () => {
+    let c = await boot();
     const { generateNote } = await import("../src/state/actions.ts");
     c.store.getState().loadDocument(document, null);
-    await c.saveToLibrary();
     let respond!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { respond = resolve; })));
-    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setInput({ text: "B 原文" });
     const pending = generateNote();
-    // Edited back to the saved text before the result arrives.
-    c.store.getState().setInput({ text: document.input.text });
+    // The textarea is edited to other text before the result arrives.
+    c.store.getState().setInput({ text: "A 原文" });
     const meta = { requestId: "r", model: "m", latencyMs: 1, attempts: 1, warnings: [] };
-    respond(new Response(JSON.stringify({ note: edited("第二篇").note, meta }), { status: 200 }));
+    respond(new Response(JSON.stringify({ note: edited("B 笔记").note, meta }), { status: 200 }));
     await pending;
-    expect(c.store.getState()).toMatchObject({ note: { title: "第二篇" }, generatedFrom: "另一篇文章", libraryLink: null });
+    expect(c.store.getState()).toMatchObject({ note: { title: "B 笔记" }, generatedFrom: "B 原文" });
+
+    await c.saveToLibrary();
+    const link = c.store.getState().libraryLink!;
+    expect((await getEntry(link.id))?.document.generatedFrom).toBe("B 原文");
+    expect(c.hasUnsavedWork()).toBe(false);
+    await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(link));
+
+    vi.resetModules();
+    c = await boot();
+    await c.checkLibraryLink();
+    expect(c.store.getState()).toMatchObject({ generatedFrom: "B 原文", input: { text: "A 原文" }, libraryLink: link });
+    expect(c.hasUnsavedWork()).toBe(false);
+
+    // Generating from the textarea's text makes a new note, even though it matches the saved input text.
+    c.store.getState().setResult(edited("A 笔记").note!, null, "local");
+    expect(c.store.getState().libraryLink).toBeNull();
+
+    c.openEntry((await getEntry(link.id))!);
+    expect(c.store.getState().generatedFrom).toBe("B 原文");
+    expect(c.hasUnsavedWork()).toBe(false);
+    c.store.getState().setInput({ text: "B 原文" });
+    c.store.getState().setResult(edited("B 重新生成").note!, null, "local");
+    expect(c.store.getState().libraryLink?.id).toBe(link.id);
+  });
+
+  it("invalidates a pending save by the source its note was generated from", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument({ ...edited("B 笔记"), input: { ...document.input, text: "A 原文" }, generatedFrom: "B 原文" }, null);
+    const pending = c.saveToLibrary();
+    c.store.getState().setResult(edited("A 笔记").note!, null, "local");
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    await pending;
+    expect(c.store.getState().libraryLink).toBeNull();
   });
 
   it("reports edits from another tab and deletions instead of overwriting them", async () => {

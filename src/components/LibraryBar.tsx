@@ -18,9 +18,10 @@ export function LibraryBar() {
   const stickers = useNoteStore((s) => s.stickers);
   const aiDoodle = useNoteStore((s) => s.aiDoodle);
   const source = useNoteStore((s) => s.source);
+  const generatedFrom = useNoteStore((s) => s.generatedFrom);
   const modified = useMemo(
-    () => !!link && isModified({ input, note, settings, stickers, aiDoodle, source }, link, baseline),
-    [link, baseline, input, note, settings, stickers, aiDoodle, source],
+    () => !!link && isModified({ input, note, settings, stickers, aiDoodle, source, generatedFrom }, link, baseline),
+    [link, baseline, input, note, settings, stickers, aiDoodle, source, generatedFrom],
   );
 
   // Always read the entry: changes made while the editor was unmounted sent messages nobody received.

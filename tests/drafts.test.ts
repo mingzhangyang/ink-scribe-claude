@@ -80,4 +80,10 @@ describe("local draft storage", () => {
     const many = { ...document, stickers: Array.from({ length: 60 }, (_, i) => ({ ...document.stickers[0], id: `s${i}` })) };
     expect(readDocument(many).stickers).toHaveLength(60);
   });
+
+  it("records the generation source only when it differs from the current source text", () => {
+    expect(readDocument({ ...document, generatedFrom: "提交生成时的原文" }).generatedFrom).toBe("提交生成时的原文");
+    expect(readDocument({ ...document, generatedFrom: document.input.text })).toEqual(document);
+    expect(() => readDocument({ ...document, generatedFrom: 1 })).toThrow();
+  });
 });
