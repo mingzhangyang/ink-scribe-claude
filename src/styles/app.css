@@ -1984,9 +1984,17 @@ a.brand {
   display: block;
   height: 12px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--paper-ui) 78%, var(--text));
-  opacity: 0.22;
+  opacity: 0.72;
   animation: gallery-skeleton-pulse 1.5s ease-in-out infinite alternate;
+}
+
+.gallery-skeleton-line {
+  /* Thumbnail paper stays light even when the site theme is dark. */
+  background: #8799bb;
+}
+
+.gallery-skeleton-caption {
+  background: var(--muted);
 }
 
 .gallery-skeleton-title {
@@ -2011,8 +2019,8 @@ a.brand {
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: var(--muted);
-  border: 1px dashed var(--border);
+  color: #44403c;
+  border: 1px dashed #94a3b8;
   overflow-wrap: anywhere;
 }
 
@@ -2021,7 +2029,7 @@ a.brand {
 }
 
 @keyframes gallery-skeleton-pulse {
-  to { opacity: 0.42; }
+  to { opacity: 0.94; }
 }
 
 @keyframes gallery-card-appear {

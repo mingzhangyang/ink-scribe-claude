@@ -62,9 +62,29 @@ export const usePreferences = create<State>()(
  */
 export function subscribeToPreferenceSync(): () => void {
   if (typeof window === "undefined") return () => {};
-  const sync = () => { void usePreferences.persist.rehydrate(); };
+  // Some privacy modes deny localStorage access altogether; Zustand then keeps its
+  // initial state in memory and does not expose a persist API.
+  const persistence = usePreferences.persist;
+  if (!persistence) return () => {};
+  let storage: Storage;
+  try {
+    storage = window.localStorage;
+  } catch {
+    return () => {};
+  }
+
+  const sync = () => {
+    try {
+      void Promise.resolve(persistence.rehydrate()).catch(() => {
+        // Persistence can become unavailable after a tab was opened. Preserve
+        // the current in-memory choice rather than breaking focus handlers.
+      });
+    } catch {
+      // Storage was blocked after setup; continue with the in-memory locale.
+    }
+  };
   const onStorage = (event: StorageEvent) => {
-    if (event.storageArea === localStorage && (event.key === PREFERENCES_KEY || event.key === null)) sync();
+    if (event.storageArea === storage && (event.key === PREFERENCES_KEY || event.key === null)) sync();
   };
   const onVisible = () => { if (!document.hidden) sync(); };
 

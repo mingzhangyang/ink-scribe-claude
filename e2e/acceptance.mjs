@@ -1853,11 +1853,21 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await placeholders.locator(".gallery-thumb-skeleton").first().waitFor();
   check("LS1", "图库数据加载时展示与缩略图等比例的骨架占位",
     await placeholders.locator(".gallery-thumb-skeleton").count() === 3);
+  await setAppPreference(placeholders, "theme", "dark");
+  const darkSkeleton = await placeholders.locator(".gallery-thumb-skeleton").first().evaluate((thumb) => ({
+    theme: document.documentElement.dataset.theme,
+    lineColor: getComputedStyle(thumb.querySelector(".gallery-skeleton-line")).backgroundColor,
+  }));
+  check("LS1b", "深色主题下浅色纸张的缩略图骨架仍清晰可见",
+    darkSkeleton.theme === "dark" && darkSkeleton.lineColor === "rgb(135, 153, 187)", JSON.stringify(darkSkeleton));
   release();
   await placeholders.locator(".gallery-thumb-failed").waitFor();
   check("LS2", "图库加载失败后展示失败占位与重试入口",
     await placeholders.locator(".gallery-thumb-failed").count() === 1 &&
     await placeholders.getByRole("button", { name: "重试" }).isVisible());
+  const errorInk = await placeholders.locator(".gallery-thumb-failed").evaluate((thumb) => getComputedStyle(thumb).color);
+  check("LS2b", "深色主题下浅纸错误信息仍有足够文字对比度",
+    errorInk === "rgb(68, 64, 60)", errorInk);
 
   await placeholders.goto(`${URL}missing/route`, { waitUntil: "domcontentloaded" });
   await placeholders.locator(".empty-state h2").waitFor();
@@ -1868,15 +1878,62 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     await placeholders.locator('.empty-state a[href="/gallery"]').isVisible());
   await placeholders.goto(URL, { waitUntil: "networkidle" });
   await waitForNoteReady(placeholders);
-  const overlap = await placeholders.locator(".note-page").evaluate((el) => {
+  await placeholders.getByRole("tab", { name: "内容", exact: true }).click();
+  const measureFooter = () => placeholders.locator(".note-page").evaluate((el) => {
     const summary = el.querySelector(".summary-sticky, .classic-summary");
     const artwork = el.querySelector(".doodle-slot");
     if (!summary || !artwork) return null;
     const a = summary.getBoundingClientRect(), b = artwork.getBoundingClientRect();
-    return { summaryRight: a.right, artworkLeft: b.left, gap: b.left - a.right };
+    return {
+      gap: b.left - a.right,
+      content: summary.querySelector(".summary-text")?.textContent ?? "",
+      status: el.dataset.renderStatus,
+      layout: el.className,
+    };
   });
-  check("LS4", "笔记摘要与插画保留实际视觉间距", overlap !== null && overlap.gap > 2, JSON.stringify(overlap));
+
+  const summaries = [
+    { label: "zh-short", locale: "zh", text: "简短总结，不遮挡插图。" },
+    { label: "zh-long", locale: "zh", text: "详细的中文总结需要正确换行，同时确保旁边的手绘插图保持在独立区域。".repeat(9) },
+    { label: "en-short", locale: "en", text: "A short English summary does not overlap the doodle." },
+    { label: "en-long", locale: "en", text: "A long English summary must wrap naturally without pushing any text into the illustration beside the note. ".repeat(3) },
+  ];
+  for (const item of summaries) {
+    await setAppPreference(placeholders, "locale", item.locale);
+    await placeholders.locator(".content-editor textarea").last().fill(item.text);
+    await waitForNoteReady(placeholders);
+    const geometry = await measureFooter();
+    check(`LS4-${item.label}`, `笔记摘要与插画无重叠：${item.label}`,
+      geometry !== null && geometry.status === "ready" && geometry.gap > 8 && geometry.content === item.text,
+      JSON.stringify(geometry && { ...geometry, contentLength: geometry.content.length, content: undefined }));
+  }
+
+  // Free-journal and Classic Cornell share the same summary/artwork contract.
+  await setAppPreference(placeholders, "locale", "zh");
+  await placeholders.getByRole("tab", { name: "样式", exact: true }).click();
+  for (const [label, pattern] of [["free-journal", /自由手账/], ["classic-cornell", /经典康奈尔/]]) {
+    await placeholders.getByRole("radio", { name: pattern }).click();
+    await waitForNoteReady(placeholders);
+    const geometry = await measureFooter();
+    check(`LS4-${label}`, `${label} 摘要与插图保留间距`,
+      geometry !== null && geometry.gap > 8 && geometry.content === summaries.at(-1).text, JSON.stringify(geometry));
+  }
   await placeholderContext.close();
+
+  const { page: storageBlocked, context: blockedContext } = await newPage({}, `Object.defineProperty(window, "localStorage", {
+    configurable: true, get() { throw new DOMException("Storage unavailable", "SecurityError"); }
+  });`);
+  await storageBlocked.goto(URL, { waitUntil: "domcontentloaded" });
+  await storageBlocked.locator(".app-menu-toggle").waitFor();
+  await setAppPreference(storageBlocked, "locale", "en");
+  await storageBlocked.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  check("LS5", "禁止访问 localStorage 时语言选择及焦点恢复不抛错",
+    (await storageBlocked.locator("html").getAttribute("lang")) === "en" && storageBlocked.errors.length === 0,
+    storageBlocked.errors.join("; "));
+  await blockedContext.close();
 }
 
 await browser.close();
