@@ -39,7 +39,7 @@ export async function generateNote(): Promise<void> {
       current.signal,
     );
     if (stale()) return;
-    setResult(withDate(response.note), response.meta, "ai");
+    setResult(withDate(response.note), response.meta, "ai", input.text);
   } catch (error) {
     if (stale()) return;
     if (current.signal.aborted) {

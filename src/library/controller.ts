@@ -4,11 +4,16 @@ import { currentDocument, useNoteStore } from "../state/store.ts";
 import { deleteEntry, getEntry, LibraryConflict, saveEntry, type LibraryEntry, type LibraryLink } from "./storage.ts";
 
 type Status = "idle" | "saving" | "saved" | "error" | "conflict" | "deleted";
-/** `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes. */
-type Baseline = { revision: string; text: string } | null;
+/**
+ * `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes;
+ * `source` is the text its note was generated from, which tells a regenerated note apart from one made from other text.
+ */
+type Baseline = { revision: string; text: string; source: string } | null;
 export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
 const set = (patch: Partial<{ status: Status; baseline: Baseline }>) => useLibraryStatus.setState(patch);
 let persistRequested = false;
+/** The save in progress. A note generated from other source text clears it, so that save no longer links the editor. */
+let saving: { source: string } | null = null;
 type SampleParts = Pick<NoteDocument, "input" | "note" | "settings" | "stickers" | "aiDoodle">;
 /** The sample exactly as the editor loaded it; any change to these parts counts as the user's work. */
 let sample: SampleParts | null = null;
@@ -24,8 +29,30 @@ useNoteStore.subscribe((next, previous) => {
     const fresh = next.source === "sample" && next.documentSerial === previous.documentSerial
       && !input.text.trim() && stickers.length === 0 && !aiDoodle && (!previous.note || isUntouchedSample(previous));
     sample = fresh ? { input, note, settings, stickers, aiDoodle } : null;
+    // A note generated from other source text is a new note: saving it must add an entry, not replace the linked
+    // one or the one being saved. Regenerating the same text (another template, condensing) still updates it.
+    if (next.documentSerial === previous.documentSerial && (next.source === "ai" || next.source === "local")) {
+      const from = next.generatedFrom;
+      if (saving && saving.source !== from) {
+        saving = null;
+        set({ status: "idle" });
+      }
+      // Without the linked revision's baseline (a restored draft whose entry changed or is gone), the note being
+      // replaced is still the one linked to it, so its source decides.
+      const link = next.libraryLink;
+      const { baseline } = useLibraryStatus.getState();
+      const linkedSource = baseline?.revision === link?.revision ? baseline?.source : previous.generatedFrom;
+      if (link && linkedSource !== from) {
+        useNoteStore.getState().setLibraryLink(null);
+        set({ status: "idle", baseline: null });
+      }
+    }
   }
 });
+
+function baselineOf(revision: string, document: NoteDocument): Baseline {
+  return { revision, text: serialize(document), source: document.generatedFrom ?? document.input.text };
+}
 
 function isUntouchedSample(state: SampleParts & Pick<NoteDocument, "source">): boolean {
   return state.source === "sample" && !!sample && (Object.keys(sample) as Array<keyof SampleParts>).every((key) => sample![key] === state[key]);
@@ -69,7 +96,7 @@ export async function checkLibraryLink(recheck = false) {
       // The expected revision is there again (e.g. restored from a backup), so earlier failures no longer apply.
       const current = useLibraryStatus.getState();
       if (current.status === "deleted" || current.status === "conflict" || current.status === "error") set({ status: "idle" });
-      if (current.baseline?.revision !== link.revision) set({ baseline: { revision: entry.revision, text: serialize(entry.document) } });
+      if (current.baseline?.revision !== link.revision) set({ baseline: baselineOf(entry.revision, entry.document) });
     }
   } catch { if (!stale()) set({ status: "error" }); }
 }
@@ -86,27 +113,32 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     // Best effort: asks the browser not to evict the library under storage pressure.
     void navigator.storage?.persist?.().catch(() => {});
   }
-  // Another document was opened or restored meanwhile: the result, success or failure, no longer describes the
-  // editor, and the status now belongs to that document. Regenerating the same note keeps the link current.
+  // Another document was opened or restored, or a note was generated from other text meanwhile: the result, success
+  // or failure, no longer describes the editor, and the status now belongs to that note. Regenerating the same text
+  // keeps the save current.
+  const job = { source: state.generatedFrom };
+  saving = job;
   const replaced = () => {
     const now = useNoteStore.getState();
-    return now.documentSerial !== state.documentSerial || now.libraryLink !== state.libraryLink;
+    return saving !== job || now.documentSerial !== state.documentSerial || now.libraryLink !== state.libraryLink;
   };
   try {
     const entry = await saveEntry(link, document, force);
     if (replaced()) return;
     useNoteStore.getState().setLibraryLink({ id: entry.id, revision: entry.revision });
-    set({ status: "saved", baseline: { revision: entry.revision, text: serialize(document) } });
+    set({ status: "saved", baseline: baselineOf(entry.revision, document) });
   } catch (error) {
     if (replaced()) return;
     if (error instanceof LibraryConflict && error.deleted) set({ status: "deleted", baseline: null });
     else set({ status: error instanceof LibraryConflict ? "conflict" : "error" });
+  } finally {
+    if (saving === job) saving = null;
   }
 }
 
 export function openEntry(entry: LibraryEntry) {
   useNoteStore.getState().loadDocument(entry.document, { id: entry.id, revision: entry.revision });
-  set({ status: "idle", baseline: { revision: entry.revision, text: serialize(entry.document) } });
+  set({ status: "idle", baseline: baselineOf(entry.revision, entry.document) });
 }
 
 export async function removeEntry(entry: LibraryLink) {

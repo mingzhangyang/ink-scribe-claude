@@ -1,6 +1,6 @@
 import { parseContentLines, splitHighlights } from "./content.ts";
 import { normalizeDoodleSpec, type DoodleSpec, type NormalizeResult } from "./doodle.ts";
-import { cleanText } from "./text.ts";
+import { cleanText, detectLanguage } from "./text.ts";
 import { DOODLE_THEMES, inferDoodleTheme, type DoodleTheme } from "./themes.ts";
 
 export type NoteCue = {
@@ -27,6 +27,11 @@ export type NoteStructure = {
   doodleSpec?: DoodleSpec;
   summary: string;
 };
+
+/** 笔记正文的主要语言：标题、正文与总结。 */
+export function noteLanguage(note: NoteStructure): "zh" | "en" {
+  return detectLanguage([note.title, note.summary, ...note.sections.map((s) => s.content)].join("\n"));
+}
 
 export const NOTE_LIMITS = {
   title: 60,

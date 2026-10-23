@@ -26,6 +26,7 @@ export const en: Messages = {
     mockTitle: "AI_MOCK is on: notes are structured by local rules, Workers AI is not called",
     notFound: "Page not found",
     backToEditor: "Back to the editor",
+    cancel: "Cancel",
     preferencesLabel: "Display preferences",
     languageLabel: "Language",
     themeLabel: "Theme",
@@ -351,6 +352,7 @@ export const en: Messages = {
     restoreConfirm: "Replace your current edits with the latest local draft? Export anything you want to keep first.",
     forget: "Delete draft and stop saving",
     forgetConfirm: "Delete the local draft and stop autosaving? Current edits stay on screen but will be lost on refresh.",
+    forgetAction: "Delete draft",
     enable: "Enable local autosave",
   },
 
@@ -369,7 +371,7 @@ export const en: Messages = {
       deleted: "This note was deleted from the library. You can save it as a new note.",
     },
     saved: "Saved to the library.",
-    save: "Save to library",
+    save: "Save changes",
     saveNew: "Save to library",
     saveCopy: "Save as new note",
     overwrite: "Overwrite with my edits",
@@ -398,6 +400,7 @@ export const en: Messages = {
     deleteLabel: (title) => `Delete “${title}”`,
     deleteConfirm: (title) => `Delete “${title}” from the library? This can't be undone.`,
     replaceConfirm: "Your current edits aren't saved to the library and will be replaced. Continue?",
+    replaceAction: "Open anyway",
   },
 
   view: {

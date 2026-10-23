@@ -41,6 +41,7 @@ export const zh = {
     mockTitle: "AI_MOCK 已开启：使用本地规则整理，不调用 Workers AI",
     notFound: "页面不存在",
     backToEditor: "回到编辑器",
+    cancel: "取消",
     preferencesLabel: "界面偏好",
     languageLabel: "语言",
     themeLabel: "主题",
@@ -305,6 +306,7 @@ export const zh = {
     restoreConfirm: "恢复本机最新草稿将替换当前编辑。请先导出需要保留的内容。继续吗？",
     forget: "删除草稿并停止保存",
     forgetConfirm: "删除本机草稿并停止自动保存？当前编辑会保留在页面中，刷新后丢失。",
+    forgetAction: "删除草稿",
     enable: "启用本机自动保存",
   },
 
@@ -323,7 +325,7 @@ export const zh = {
       deleted: "这条笔记已从笔记库删除，可另存为新笔记。",
     },
     saved: "已保存到笔记库。",
-    save: "保存到笔记库",
+    save: "保存修改",
     saveNew: "保存到笔记库",
     saveCopy: "另存为新笔记",
     overwrite: "用当前编辑覆盖",
@@ -352,6 +354,7 @@ export const zh = {
     deleteLabel: (title: string) => `删除“${title}”`,
     deleteConfirm: (title: string) => `从笔记库删除“${title}”？此操作无法撤销。`,
     replaceConfirm: "当前编辑尚未保存到笔记库，打开后将被替换。继续吗？",
+    replaceAction: "仍然打开",
   },
 
   view: {

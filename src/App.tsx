@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { PublicConfig } from "../shared/api.ts";
 import { fetchPublicConfig } from "./api.ts";
 import { AppMenu } from "./components/AppMenu.tsx";
+import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
 import { useT } from "./i18n/index.ts";
 import { EditorPage } from "./pages/EditorPage.tsx";
 import { GalleryPage } from "./pages/GalleryPage.tsx";
@@ -93,6 +94,8 @@ export function App() {
           </div>
         </main>
       ) : null}
+
+      <ConfirmDialog />
 
       {toast ? (
         <div className="toast" role="status">

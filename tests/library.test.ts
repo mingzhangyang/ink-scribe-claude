@@ -146,6 +146,100 @@ describe("library in the editor", () => {
     expect(c.store.getState()).toMatchObject({ input: document.input, libraryLink: original });
   });
 
+  it("saves a note generated from other source text as a new entry, but updates on regeneration", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    const first = c.store.getState().libraryLink!;
+    c.store.getState().setInput({ template: "general" });
+    c.store.getState().setResult(edited("重新生成").note!, null, "ai");
+    expect(c.store.getState().libraryLink).toEqual(first);
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).toBe(first.id);
+
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "ai");
+    expect(c.store.getState().libraryLink).toBeNull();
+    expect(c.hasUnsavedWork()).toBe(true);
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).not.toBe(first.id);
+    // Both saves can land in the same millisecond, so the list order is not defined here.
+    expect((await listEntries()).entries.map((e) => e.title).sort()).toEqual(["第二篇", "重新生成"].sort());
+    await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(c.store.getState().libraryLink));
+  });
+
+  it("does not attach a save still in flight to a note generated from other text", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    let pending = c.saveToLibrary();
+    c.store.getState().setResult(edited("同一原文").note!, null, "local");
+    await pending;
+    // Same text: the save still links the editor, whose regenerated note is then a change to that entry.
+    expect(c.useLibraryStatus.getState().status).toBe("saved");
+    expect(c.hasUnsavedWork()).toBe(true);
+    const first = c.store.getState().libraryLink!;
+
+    c.store.getState().loadDocument(edited("未保存"), null);
+    pending = c.saveToLibrary();
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "local");
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    await pending;
+    expect(c.store.getState().libraryLink).toBeNull();
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).not.toBe(first.id);
+    expect((await listEntries()).entries.map((e) => e.title).sort()).toEqual(["读书笔记", "未保存", "第二篇"].sort());
+  });
+
+  it("keeps the submitted source, not text edited while generating, through saving, reloading and reopening", async () => {
+    let c = await boot();
+    const { generateNote } = await import("../src/state/actions.ts");
+    c.store.getState().loadDocument(document, null);
+    let respond!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { respond = resolve; })));
+    c.store.getState().setInput({ text: "B 原文" });
+    const pending = generateNote();
+    // The textarea is edited to other text before the result arrives.
+    c.store.getState().setInput({ text: "A 原文" });
+    const meta = { requestId: "r", model: "m", latencyMs: 1, attempts: 1, warnings: [] };
+    respond(new Response(JSON.stringify({ note: edited("B 笔记").note, meta }), { status: 200 }));
+    await pending;
+    expect(c.store.getState()).toMatchObject({ note: { title: "B 笔记" }, generatedFrom: "B 原文" });
+
+    await c.saveToLibrary();
+    const link = c.store.getState().libraryLink!;
+    expect((await getEntry(link.id))?.document.generatedFrom).toBe("B 原文");
+    expect(c.hasUnsavedWork()).toBe(false);
+    await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(link));
+
+    vi.resetModules();
+    c = await boot();
+    await c.checkLibraryLink();
+    expect(c.store.getState()).toMatchObject({ generatedFrom: "B 原文", input: { text: "A 原文" }, libraryLink: link });
+    expect(c.hasUnsavedWork()).toBe(false);
+
+    // Generating from the textarea's text makes a new note, even though it matches the saved input text.
+    c.store.getState().setResult(edited("A 笔记").note!, null, "local");
+    expect(c.store.getState().libraryLink).toBeNull();
+
+    c.openEntry((await getEntry(link.id))!);
+    expect(c.store.getState().generatedFrom).toBe("B 原文");
+    expect(c.hasUnsavedWork()).toBe(false);
+    c.store.getState().setInput({ text: "B 原文" });
+    c.store.getState().setResult(edited("B 重新生成").note!, null, "local");
+    expect(c.store.getState().libraryLink?.id).toBe(link.id);
+  });
+
+  it("invalidates a pending save by the source its note was generated from", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument({ ...edited("B 笔记"), input: { ...document.input, text: "A 原文" }, generatedFrom: "B 原文" }, null);
+    const pending = c.saveToLibrary();
+    c.store.getState().setResult(edited("A 笔记").note!, null, "local");
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    await pending;
+    expect(c.store.getState().libraryLink).toBeNull();
+  });
+
   it("reports edits from another tab and deletions instead of overwriting them", async () => {
     const c = await boot();
     c.store.getState().loadDocument(document, null);
@@ -161,6 +255,23 @@ describe("library in the editor", () => {
 
     await c.removeEntry((await getEntry(link.id))!);
     expect(c.store.getState().libraryLink).toBeNull();
+  });
+
+  it("keeps a restored link and its conflict when regenerating the same text without a baseline", async () => {
+    const entry = await saveEntry(null, document);
+    await writeDraft(null, document, true, false, { id: entry.id, revision: entry.revision });
+    await saveEntry({ id: entry.id, revision: entry.revision }, edited("另一个标签页"));
+    const c = await boot();
+    await c.checkLibraryLink();
+    expect(c.useLibraryStatus.getState()).toMatchObject({ status: "conflict", baseline: null });
+    c.store.getState().setResult(edited("重新生成").note!, null, "local");
+    expect(c.store.getState().libraryLink?.id).toBe(entry.id);
+    expect(c.useLibraryStatus.getState().status).toBe("conflict");
+
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "local");
+    expect(c.store.getState().libraryLink).toBeNull();
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
   });
 
   it("detects a deleted entry after reload", async () => {

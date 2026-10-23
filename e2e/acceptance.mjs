@@ -37,6 +37,17 @@ async function newPage(options = {}, init) {
   return { context, page };
 }
 
+// 确认使用页面内的对话框：没有注册 dialog 处理器时，Playwright 会自动取消原生 confirm()，
+// 浏览器屏蔽对话框时也是如此，所以这些按钮不能依赖原生对话框。返回对话框中的提示文字
+async function confirmInPage(page, label) {
+  const dialog = page.locator(".confirm-sheet");
+  await dialog.waitFor({ state: "visible" });
+  const message = await dialog.locator(".sheet-body").innerText();
+  await dialog.getByRole("button", { name: label, exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  return message;
+}
+
 async function waitForNoteReady(page) {
   await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30_000 });
 }
@@ -1703,8 +1714,8 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await fillSource(other, "第二标签页未保存内容");
   await other.locator('[data-draft-status="conflict"]').waitFor();
   check("DR3", "多标签页冲突暂停保存并保留当前编辑", await other.locator(".source-text").inputValue() === "第二标签页未保存内容");
-  page.on("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "删除草稿并停止保存", exact: true }).click();
+  await confirmInPage(page, "删除草稿");
   await page.locator('[data-draft-status="disabled"]').waitFor();
   await page.reload({ waitUntil: "networkidle" });
   check("DR4", "删除后刷新不恢复旧内容，不留存模式持续生效", await page.locator(".source-text").inputValue() === "" && await page.locator('[data-draft-status="disabled"]').count() === 1);
@@ -1733,7 +1744,8 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
 // ---------- L. 本机笔记库 ----------
 {
   const { page, context } = await newPage();
-  page.on("dialog", (dialog) => dialog.accept());
+  const nativeDialogs = [];
+  page.on("dialog", (dialog) => { nativeDialogs.push(dialog.message()); void dialog.dismiss(); });
   await page.goto(URL, { waitUntil: "networkidle" });
   const editTitle = async (title) => {
     await page.getByRole("tab", { name: "内容", exact: true }).click();
@@ -1775,6 +1787,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const backup = `${SP}/library-backup.json`;
   await (await download).saveAs(backup);
   await page.getByRole("button", { name: "删除“笔记库第二条”", exact: true }).click();
+  await confirmInPage(page, "删除");
   await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
   await page.locator('.library-main input[type="file"]').setInputFiles(backup);
   await page.locator(".library-main .hint.is-ok").waitFor();
@@ -1783,16 +1796,32 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   check("LB5", "导出备份后可导入恢复已删除的笔记", restored);
   // The editor still holds "笔记库第一条"; once another tab deletes it, opening another note must ask first.
   const other = await context.newPage();
-  other.on("dialog", (dialog) => dialog.accept());
   await other.goto(`${URL}library`, { waitUntil: "networkidle" });
   await other.getByRole("button", { name: "删除“笔记库第一条”", exact: true }).click();
+  await confirmInPage(other, "删除");
   await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
-  const prompts = [];
-  page.on("dialog", (dialog) => prompts.push(dialog.message()));
   await page.getByRole("button", { name: "打开“笔记库第二条”", exact: true }).click();
+  const prompt = await confirmInPage(page, "仍然打开");
   await page.locator(".note-title").first().waitFor();
-  check("LB6", "另一标签页删除当前笔记后，打开其他笔记前先确认", prompts.some((m) => m.includes("尚未保存到笔记库")), JSON.stringify(prompts));
+  check("LB6", "另一标签页删除当前笔记后，打开其他笔记前先确认", prompt.includes("尚未保存到笔记库"), prompt);
   await other.close();
+
+  // 用另一段原文生成的是另一条笔记：保存时新建条目，不能覆盖之前关联的笔记
+  await page.locator('[data-library-status="linked"]').waitFor();
+  await openInput(page);
+  await page.locator(".source-text").fill("Another article about spaced repetition.\n\nActive recall strengthens memory over time.");
+  await page.getByRole("button", { name: "转化为手写笔记", exact: true }).click();
+  await page.locator(".input-sheet").waitFor({ state: "hidden" });
+  await page.locator('[data-library-status="unsaved"]').waitFor();
+  const newTitle = await page.locator(".note-title").first().innerText();
+  await page.getByRole("button", { name: "保存到笔记库", exact: true }).click();
+  await page.locator('[data-library-status="linked"]').waitFor();
+  await openAppMenu(page);
+  await page.getByRole("link", { name: "笔记库", exact: true }).click();
+  await cards.nth(1).waitFor();
+  const kept = await cards.locator(".gallery-caption strong").allInnerTexts();
+  check("LB8", "用另一段原文生成的笔记保存为新条目，不覆盖原笔记", JSON.stringify(kept) === JSON.stringify([newTitle, "笔记库第二条"]), JSON.stringify(kept));
+  check("LB9", "确认操作不依赖浏览器原生对话框", nativeDialogs.length === 0, JSON.stringify(nativeDialogs));
   check("LB7", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();
 }
