@@ -596,6 +596,53 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* 适配提示浮在画布底部，不挤占画布上方的空间 */
+.fit-notice-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+.fit-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  pointer-events: auto;
+}
+
+.fit-notice .icon-btn {
+  margin-right: -8px;
+  border: none;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+/* 查看页随整个页面滚动：提示固定在屏幕底部 */
+.fit-notice.is-fixed {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+}
+
 .viewport {
   flex: 1;
   min-height: 0;
@@ -1446,6 +1493,13 @@ html:has(.sheet[open]) {
     z-index: 31;
     max-width: 480px;
     margin: 0 auto;
+  }
+
+  /* 窄屏上画布不限高：适配提示固定在底部“编辑原文”按钮上方，加载提示出现时让位于它 */
+  .fit-notice-anchor {
+    position: fixed;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 29;
   }
 
   .workspace {

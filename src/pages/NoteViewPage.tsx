@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.ts";
 import { NotePage } from "../components/note/NotePage.tsx";
-import { NoteFitStatus } from "../components/note/NoteFitStatus.tsx";
+import { NoteFitNotice, NoteFitStatus } from "../components/note/NoteFitStatus.tsx";
 import type { NoteFitState } from "../components/note/useNoteFit.ts";
 import { byId, PAGE_WIDTH, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
@@ -159,6 +159,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
         </div>
       </div>
       <NoteFitStatus fit={fit} />
+      <NoteFitNotice fit={fit} fixed />
       <div className="view-frame" ref={frameRef}>
         <div className="page-frame" style={{ width: PAGE_WIDTH * scale, height: pageHeight * scale }}>
           <div className="page-scaler" style={{ transform: `scale(${scale})` }}>
