@@ -19,6 +19,7 @@
 | 自然手写感 | 逐字基线浮动、墨色深浅、段落微旋转，幅度可调且可复现（同一笔记预览与导出一致）；“换一种笔迹” |
 | 插图与贴纸 | 20 个内置手绘插图（受控 SVG 生成器绘制）；和纸胶带、便利贴、回形针、星星、咖啡渍；拖拽、缩放、旋转、删除、层级调整、键盘微调 |
 | AI 插图（可选） | `POST /api/doodle` 只返回受限图元规格（线、箭头、圆、矩形、折线），经校验后由本地生成器绘制，默认关闭 |
+| 本地草稿 | 自动保存原文、笔记、样式、贴纸与插图，刷新后恢复；存储失败可重试，多标签页冲突暂停保存；可删除并关闭自动保存 |
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
 | 溢出处理 | 自动检测文字超出页面，一键缩小字号、切换为长图，或以“精简”档位重新生成 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
@@ -52,7 +53,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（76 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（82 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
@@ -123,7 +124,7 @@ docs/        API、部署、模型评测、字体与导出说明
 - AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
 - 上传的文件只在浏览器内解析（PDF 使用按需加载的 pdf.js，CMap 文件同源提供），文件本身不会发送到服务器。
 - 发布接口只接受 API 密钥（只存哈希、可吊销）；笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`；入库与读取时都会再次规范化。
-- 本机只保存外观偏好（localStorage），不保存原文与笔记。
+- 编辑器默认将原文、笔记、样式、贴纸与插图作为草稿保存在本机 IndexedDB，不上传服务器；刷新后自动恢复。可随时“删除草稿并停止保存”，进入不留存模式。外观偏好仍保存在 localStorage。
 
 ## 文档
 
@@ -137,3 +138,13 @@ docs/        API、部署、模型评测、字体与导出说明
 ## 许可证说明
 
 手写字体均使用 SIL Open Font License 1.1（霞鹜文楷屏幕阅读版、龙藏体、马善政楷书、站酷快乐体、志莽行书、Kalam、Caveat、Patrick Hand、Indie Flower），随静态资源一起分发，详见 [docs/fonts-and-export.md](docs/fonts-and-export.md)。
+
+## 本地草稿
+
+编辑器仅保留一份当前工作草稿，保存在本机 IndexedDB，与 API 发布的服务端笔记独立。
+关闭页面前请确认状态为“草稿已保存在本机”。这不是云端备份：浏览器清理站点数据、隐私窗口结束或设备损坏仍会丢失草稿，重要作品请及时导出图片。
+
+原文、未完成的内容字段、外观（包括手写随机种子）、贴纸和 AI 插图会一起保存；网络请求状态、错误及选中项不恢复。
+多个标签页从同一版本编辑时，只有先提交的一页能保存，另一页显示冲突并保留当前编辑，恢复最新草稿前需要确认。
+“删除草稿并停止保存”会删除持久化内容，保留不含内容的关闭标记，阻止旧标签页恢复已删除内容；当前页面仍可编辑和导出。
+未知版本或损坏草稿不会被静默覆盖，用户可选择删除并重新开启。初次示例笔记不会自动生成草稿。

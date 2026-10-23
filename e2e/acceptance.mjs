@@ -697,6 +697,41 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await c5.close();
 }
 
+// ---------- D. 本地草稿 ----------
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await page.locator(".source-text").fill("草稿原文：刷新后必须保留。");
+  await page.locator('[data-draft-status="saved"]').waitFor();
+  await page.getByRole("tab", { name: "内容", exact: true }).click();
+  const titleInput = page.locator(".content-editor input").first();
+  await titleInput.fill("恢复测试标题");
+  await page.locator('[data-draft-status="saved"]').waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  check("D1", "刷新恢复原文和编辑后的笔记", await page.locator(".source-text").inputValue() === "草稿原文：刷新后必须保留。" && await page.locator(".note-title").first().innerText() === "恢复测试标题");
+  check("D2", "恢复后明确显示本机保存状态", await page.locator('[data-draft-status="restored"]').count() === 1);
+
+  const other = await context.newPage();
+  await other.goto(URL, { waitUntil: "networkidle" });
+  await page.locator(".source-text").fill("第一标签页的新内容");
+  await page.locator('[data-draft-status="saved"]').waitFor();
+  await other.locator(".source-text").fill("第二标签页未保存内容");
+  await other.locator('[data-draft-status="conflict"]').waitFor();
+  check("D3", "多标签页冲突暂停保存并保留当前编辑", await other.locator(".source-text").inputValue() === "第二标签页未保存内容");
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "删除草稿并停止保存", exact: true }).click();
+  await page.locator('[data-draft-status="disabled"]').waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  check("D4", "删除后刷新不恢复旧内容，不留存模式持续生效", await page.locator(".source-text").inputValue() === "" && await page.locator('[data-draft-status="disabled"]').count() === 1);
+  await page.getByRole("button", { name: "启用本机自动保存", exact: true }).click();
+  await page.locator(".source-text").fill("重新启用后的内容");
+  await page.locator('[data-draft-status="saved"]').waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  check("D5", "可重新启用自动保存", await page.locator(".source-text").inputValue() === "重新启用后的内容");
+  check("D6", "草稿流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

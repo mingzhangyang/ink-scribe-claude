@@ -6,6 +6,7 @@ import { ACCEPTED_EXTENSIONS, extractTextFromFile, FileImportError, type Extract
 import { SAMPLE_TEXTS } from "../samples.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { usePreferences } from "../state/preferences.ts";
+import { DraftBar } from "./DraftBar.tsx";
 import { useNoteStore } from "../state/store.ts";
 
 export function InputPanel({ maxChars }: { maxChars: number }) {
@@ -88,6 +89,8 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
           </select>
         </label>
       </div>
+
+      <DraftBar />
 
       <div
         className={`textarea-wrap${dragging ? " is-dragging" : ""}`}

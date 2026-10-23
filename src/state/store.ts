@@ -146,7 +146,7 @@ export const useNoteStore = create<State>()(
     {
       name: "ink-scribe:v1",
       storage: createJSONStorage(() => localStorage),
-      // 只在本机保存外观偏好；粘贴的原文与生成的笔记不落盘
+      // 外观偏好单独保存；完整文档由 drafts/controller 通过 IndexedDB 事务保存。
       partialize: (state) => ({ settings: state.settings }),
       merge: (persisted, current) => ({
         ...current,
