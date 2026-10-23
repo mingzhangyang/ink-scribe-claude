@@ -72,9 +72,10 @@ describe("library storage", () => {
   });
 
   it("searches the full note, not only the truncated preview", () => {
-    const long = { ...document, note: { ...document.note!, summary: `${"长".repeat(200)}尾部词`, sections: [{ content: "章节里的词", highlights: [] }] } };
+    const long = { ...document, note: { ...document.note!, summary: `${"长".repeat(200)}尾部词`, sections: [{ heading: "小标题词", content: "章节里的词", highlights: [] }] } };
     expect(searchTextOf(long)).toContain("尾部词");
     expect(searchTextOf(long)).toContain("章节里的词");
+    expect(searchTextOf(long)).toContain("小标题词");
     expect(searchTextOf(document)).toContain("提示");
   });
 

@@ -90,8 +90,10 @@ export function LibraryPage() {
     // Imported copies can share a revision, so the id must match too.
     const link = useNoteStore.getState().libraryLink;
     const alreadyOpen = link?.id === entry.id && link.revision === entry.revision;
+    // The editor cannot notice a deletion made elsewhere while it is unmounted; then its copy is all that is left.
+    const linkedGone = !!link && status === "idle" && !entries.some((e) => e.id === link.id);
     if (!alreadyOpen) {
-      if (hasUnsavedWork() && !window.confirm(t.library.replaceConfirm)) return;
+      if ((linkedGone || hasUnsavedWork()) && !window.confirm(t.library.replaceConfirm)) return;
       openEntry(entry);
     }
     navigate("/");

@@ -802,7 +802,19 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   // The notice appears before the list reloads, so wait for the restored card rather than counting at once.
   const restored = await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 2, null, { timeout: 5000 }).then(() => true, () => false);
   check("LB5", "导出备份后可导入恢复已删除的笔记", restored);
-  check("LB6", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
+  // The editor still holds "笔记库第一条"; once another tab deletes it, opening another note must ask first.
+  const other = await context.newPage();
+  other.on("dialog", (dialog) => dialog.accept());
+  await other.goto(`${URL}library`, { waitUntil: "networkidle" });
+  await other.getByRole("button", { name: "删除“笔记库第一条”", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
+  const prompts = [];
+  page.on("dialog", (dialog) => prompts.push(dialog.message()));
+  await page.getByRole("button", { name: "打开“笔记库第二条”", exact: true }).click();
+  await page.locator(".note-title").first().waitFor();
+  check("LB6", "另一标签页删除当前笔记后，打开其他笔记前先确认", prompts.some((m) => m.includes("尚未保存到笔记库")), JSON.stringify(prompts));
+  await other.close();
+  check("LB7", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();
 }
 

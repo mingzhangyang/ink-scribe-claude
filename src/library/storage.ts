@@ -53,7 +53,7 @@ export function titleOf(document: NoteDocument): string {
 /** Everything a search should find, including note text that card previews truncate or leave out. */
 export function searchTextOf(document: NoteDocument): string {
   const note = document.note;
-  const parts = note ? [note.title, ...note.cues.flatMap((c) => [c.keyword, c.note]), ...note.sections.map((s) => s.content), note.summary] : [];
+  const parts = note ? [note.title, ...note.cues.flatMap((c) => [c.keyword, c.note]), ...note.sections.flatMap((s) => [s.heading ?? "", s.content]), note.summary] : [];
   return [...parts, document.input.text].join("\n").toLowerCase();
 }
 
