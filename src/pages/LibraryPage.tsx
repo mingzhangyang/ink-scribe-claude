@@ -3,7 +3,7 @@ import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { downloadBlob } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { hasUnsavedWork, openEntry, removeEntry } from "../library/controller.ts";
-import { backupOf, importBackup, listEntries, onLibraryChange, searchTextOf, type LibraryEntry } from "../library/storage.ts";
+import { backupOf, importBackup, LibraryConflict, listEntries, onLibraryChange, searchTextOf, type LibraryEntry } from "../library/storage.ts";
 import { linkProps, navigate } from "../router.ts";
 import { useNoteStore } from "../state/store.ts";
 
@@ -102,10 +102,11 @@ export function LibraryPage() {
   async function remove(entry: LibraryEntry) {
     if (!window.confirm(t.library.deleteConfirm(entry.title || t.library.untitled))) return;
     try {
-      await removeEntry(entry.id);
+      await removeEntry(entry);
       setNotice(null);
-    } catch {
-      setNotice({ kind: "error", text: t.library.deleteFailed });
+    } catch (error) {
+      // Another tab saved a newer version meanwhile: keep it, and let the refreshed list show it first.
+      setNotice({ kind: "error", text: error instanceof LibraryConflict ? t.library.deleteChanged : t.library.deleteFailed });
     }
     await load();
   }

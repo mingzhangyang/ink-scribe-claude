@@ -45,7 +45,8 @@ export function isModified(document: NoteDocument, link: LibraryLink, baseline: 
 export function hasUnsavedWork(): boolean {
   const state = useNoteStore.getState();
   if (state.libraryLink) return isModified(currentDocument(), state.libraryLink, useLibraryStatus.getState().baseline);
-  return !!state.note && !isUntouchedSample(state);
+  // Typed text counts before any note is generated: a restored draft may hold only that.
+  return (!!state.note || !!state.input.text.trim()) && !isUntouchedSample(state);
 }
 
 /**
@@ -108,9 +109,9 @@ export function openEntry(entry: LibraryEntry) {
   set({ status: "idle", baseline: { revision: entry.revision, text: serialize(entry.document) } });
 }
 
-export async function removeEntry(id: string) {
-  await deleteEntry(id);
-  if (useNoteStore.getState().libraryLink?.id === id) {
+export async function removeEntry(entry: LibraryLink) {
+  await deleteEntry(entry);
+  if (useNoteStore.getState().libraryLink?.id === entry.id) {
     useNoteStore.getState().setLibraryLink(null);
     set({ status: "idle", baseline: null });
   }

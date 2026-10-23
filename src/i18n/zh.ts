@@ -316,6 +316,7 @@ export const zh = {
     unreadable: (count: number) => `有 ${count} 条笔记无法读取（可能来自更新版本），已原样保留。`,
     loadFailed: "无法读取笔记库：浏览器可能禁用了本地存储。",
     deleteFailed: "删除失败，请重试。",
+    deleteChanged: "这条笔记已在其他标签页更新，未删除。请查看最新内容后再决定。",
     retry: "重试",
     loading: "正在读取笔记库…",
     emptyTitle: "笔记库还是空的",

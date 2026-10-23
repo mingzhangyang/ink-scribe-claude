@@ -45,11 +45,21 @@ describe("library storage", () => {
 
   it("never recreates a deleted entry from a stale link, even when forced", async () => {
     const entry = await saveEntry(null, document);
-    await deleteEntry(entry.id);
+    await deleteEntry(entry);
     const failure = await saveEntry(entry, document, true).catch((error) => error);
     expect(failure).toBeInstanceOf(LibraryConflict);
     expect(failure.deleted).toBe(true);
     expect(await getEntry(entry.id)).toBeNull();
+  });
+
+  it("deletes only the revision the caller saw", async () => {
+    const entry = await saveEntry(null, document);
+    const newer = await saveEntry(entry, edited("另一个标签页"));
+    await expect(deleteEntry(entry)).rejects.toBeInstanceOf(LibraryConflict);
+    expect((await getEntry(entry.id))?.title).toBe("另一个标签页");
+    await deleteEntry(newer);
+    expect(await getEntry(entry.id)).toBeNull();
+    await deleteEntry(newer);
   });
 
   it("keeps unreadable records instead of dropping them", async () => {
@@ -149,19 +159,26 @@ describe("library in the editor", () => {
     await c.saveToLibrary({ force: true });
     expect((await getEntry(link.id))?.document.input.text).toBe("本标签页");
 
-    await c.removeEntry(link.id);
+    await c.removeEntry((await getEntry(link.id))!);
     expect(c.store.getState().libraryLink).toBeNull();
   });
 
   it("detects a deleted entry after reload", async () => {
     const entry = await saveEntry(null, document);
     await writeDraft(null, document, true, false, { id: entry.id, revision: entry.revision });
-    await deleteEntry(entry.id);
+    await deleteEntry(entry);
     const c = await boot();
     await c.checkLibraryLink();
     expect(c.useLibraryStatus.getState().status).toBe("deleted");
     await c.saveToLibrary({ asNew: true });
     expect(c.store.getState().libraryLink?.id).not.toBe(entry.id);
+  });
+
+  it("treats a restored text-only draft as unsaved work before the editor loads a sample", async () => {
+    await writeDraft(null, { ...document, note: null, stickers: [] }, true);
+    const c = await boot();
+    expect(c.store.getState().note).toBeNull();
+    expect(c.hasUnsavedWork()).toBe(true);
   });
 
   it("treats edits to the startup sample as unsaved work", async () => {
@@ -188,7 +205,7 @@ describe("library in the editor", () => {
     c.store.getState().loadDocument(document, null);
     await c.saveToLibrary();
     expect(c.hasUnsavedWork()).toBe(false);
-    await deleteEntry(c.store.getState().libraryLink!.id);
+    await deleteEntry(c.store.getState().libraryLink!);
     await c.checkLibraryLink(true);
     expect(c.hasUnsavedWork()).toBe(true);
   });
@@ -197,7 +214,7 @@ describe("library in the editor", () => {
     const c = await boot();
     c.store.getState().loadDocument(document, null);
     await c.saveToLibrary();
-    await deleteEntry(c.store.getState().libraryLink!.id);
+    await deleteEntry(c.store.getState().libraryLink!);
     await c.checkLibraryLink();
     expect(c.useLibraryStatus.getState().status).toBe("saved");
     await c.checkLibraryLink(true);
@@ -210,7 +227,7 @@ describe("library in the editor", () => {
     await c.saveToLibrary();
     const link = c.store.getState().libraryLink!;
     const backup = backupOf([(await getEntry(link.id))!]);
-    await deleteEntry(link.id);
+    await deleteEntry(link);
     await c.checkLibraryLink(true);
     expect(c.useLibraryStatus.getState().status).toBe("deleted");
     await importBackup(backup);

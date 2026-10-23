@@ -120,12 +120,26 @@ export async function saveEntry(link: LibraryLink | null, value: NoteDocument, f
   return saved;
 }
 
-export async function deleteEntry(id: string): Promise<void> {
+/** Deletes an entry only at the revision the caller saw, so a stale card never deletes newer work. */
+export async function deleteEntry(link: LibraryLink): Promise<void> {
   await using((db) => new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
+    const store = tx.objectStore(STORE);
+    let failure: Error | null = null;
+    const get = store.get(link.id);
+    get.onsuccess = () => {
+      const current = get.result as Partial<LibraryEntry> | undefined;
+      if (!current) return;
+      if (current.revision !== link.revision) {
+        failure = new LibraryConflict(false);
+        tx.abort();
+        return;
+      }
+      store.delete(link.id);
+    };
     tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error("Library transaction aborted"));
+    tx.onabort = () => reject(failure ?? tx.error ?? new Error("Library transaction aborted"));
+    tx.onerror = () => { failure ??= tx.error; };
   }));
   announce();
 }

@@ -362,6 +362,7 @@ export const en: Messages = {
     unreadable: (count) => `${count} ${count === 1 ? "note" : "notes"} couldn't be read (possibly from a newer version) and were left untouched.`,
     loadFailed: "Couldn't read the library: the browser may have disabled local storage.",
     deleteFailed: "Couldn't delete. Please try again.",
+    deleteChanged: "This note was updated in another tab, so it wasn't deleted. Review the latest version first.",
     retry: "Retry",
     loading: "Reading the library…",
     emptyTitle: "Your library is empty",
