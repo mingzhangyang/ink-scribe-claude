@@ -71,7 +71,7 @@ const publicationSchema = {
     },
     {
       type: "object", required: ["schemaVersion", "note", "settings", "stickers"],
-      description: "Previously published notes retain their legacy illustration settings.",
+      description: "Normalized content: notes published before the strict contract keep their legacy illustration settings, and stored snapshots that no longer pass it are served this way.",
       properties: {
         ...publicationProperties,
         schemaVersion: { type: "integer", const: 0 },

@@ -155,4 +155,4 @@ npm run keys -- revoke --id key_xxxxxxxxxxxx --remote
 
 接口路径继续使用 `/api/v1/notes`，创建请求统一升级为 `schemaVersion: 1` 与 `note` 两项必填。原先仅传 `note` 的调用方应补充版本号并遵守完整契约；仅传 `text` 的调用方应先完成整理，再提交结构。服务不会自动猜测或代为生成缺少的数据，附带 `text` 的新建请求也会返回 `422`。升级前已经完成的幂等请求仍按原键和原请求体重放历史作品，不重新生成或套用新建契约。
 
-部署前执行全部 D1 迁移：`0002_publish_reservations.sql` 提供发布占用与删除后重放保护，`0003_publication_schema.sql` 记录作品契约版本。已有作品标为 `schemaVersion: 0` 并继续可查看，新作品为 `1`；`0` 不是可提交的新发布版本。升级没有新增云服务绑定，也不会把原文加入存储。
+部署前执行全部 D1 迁移：`0002_publish_reservations.sql` 提供发布占用与删除后重放保护，`0003_publication_schema.sql` 记录作品契约版本。已有作品标为 `schemaVersion: 0` 并继续可查看，新作品为 `1`；`0` 不是可提交的新发布版本。之后新增的外观设置在读取旧快照时取默认值；若契约收紧后某个已存快照不再通过严格校验，读取时按 `schemaVersion: 0` 规范化返回，库中内容不变，并记录 `note.snapshot_fallback` 日志。升级没有新增云服务绑定，也不会把原文加入存储。
