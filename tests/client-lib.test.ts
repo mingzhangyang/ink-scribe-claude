@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizeStickers } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
+import { fetchPublishedNote } from "../src/api.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
@@ -184,5 +185,22 @@ describe("effectiveScale", () => {
     expect(840 * tall * 100_000 * tall).toBeLessThanOrEqual(16_000_000);
     expect(100_000 * tall).toBeLessThanOrEqual(MAX_CANVAS_DIMENSION);
     expect(840 * tall).toBeLessThanOrEqual(MAX_CANVAS_DIMENSION);
+  });
+});
+
+describe("fetchPublishedNote", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("still displays a version 1 note from a newer contract than the page knows", async () => {
+    const note = { title: "标题", cues: [], sections: [{ content: "正文", highlights: [] }], summary: "" };
+    const body = {
+      id: "A".repeat(22), title: "标题", summary: "", language: "zh", template: "general", layout: "hybrid-cornell",
+      visibility: "unlisted", createdAt: "2026-10-23T00:00:00.000Z", updatedAt: "2026-10-23T00:00:00.000Z",
+      schemaVersion: 1, note, settings: { ...DEFAULT_SETTINGS, settingFromLaterRelease: true }, stickers: [],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+    const viewable = await fetchPublishedNote("A".repeat(22));
+    expect(viewable.note).toEqual(note);
+    expect(viewable.settings).toEqual(DEFAULT_SETTINGS);
   });
 });
