@@ -37,6 +37,8 @@ type State = {
   documentSerial: number;
   /** 当前编辑内容对应的本机笔记库条目；为空时“保存到笔记库”会新建一条。 */
   libraryLink: LibraryLink | null;
+  /** 生成当前笔记时提交的原文。生成期间原文仍可编辑，所以判断笔记来自哪段原文时不能用 input.text。 */
+  generatedFrom: string;
 
   setLibraryLink: (link: LibraryLink | null) => void;
   /** 整体替换编辑内容（恢复草稿、打开笔记库条目），并清除请求状态。 */
@@ -45,7 +47,8 @@ type State = {
   setSettings: (patch: Partial<Settings>) => void;
   resetSettings: () => void;
   startLoading: () => void;
-  setResult: (note: NoteStructure, meta: ResponseMeta | null, source: "ai" | "local" | "sample") => void;
+  /** `from` 是生成时提交的原文，默认为当前原文。 */
+  setResult: (note: NoteStructure, meta: ResponseMeta | null, source: "ai" | "local" | "sample", from?: string) => void;
   /** 把已发布的笔记（含外观与贴纸）载入编辑器。 */
   loadShared: (input: { note: NoteStructure; settings: Settings; stickers: StickerItem[]; doodle: DoodleSpec | null }) => void;
   setError: (error: RequestError) => void;
@@ -77,20 +80,22 @@ export const useNoteStore = create<State>()(
       noteSerial: 0,
       documentSerial: 0,
       libraryLink: null,
+      generatedFrom: "",
 
       setLibraryLink: (link) => set({ libraryLink: link }),
       loadDocument: (document, link) =>
-        set((s) => ({ ...document, libraryLink: link, meta: null, status: "idle", error: null, selectedStickerId: null, noteSerial: s.noteSerial + 1,
-          documentSerial: s.documentSerial + 1 })),
+        set((s) => ({ ...document, libraryLink: link, generatedFrom: document.input.text, meta: null, status: "idle", error: null, selectedStickerId: null,
+          noteSerial: s.noteSerial + 1, documentSerial: s.documentSerial + 1 })),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
       startLoading: () => set({ status: "loading", error: null }),
-      setResult: (note, meta, source) =>
+      setResult: (note, meta, source, from) =>
         set((s) => ({
           note,
           meta,
           source,
+          generatedFrom: from ?? s.input.text,
           status: "idle",
           error: null,
           aiDoodle: null,

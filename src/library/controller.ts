@@ -12,6 +12,8 @@ type Baseline = { revision: string; text: string; source: string } | null;
 export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
 const set = (patch: Partial<{ status: Status; baseline: Baseline }>) => useLibraryStatus.setState(patch);
 let persistRequested = false;
+/** The save in progress. A note generated from other source text clears it, so that save no longer links the editor. */
+let saving: { source: string } | null = null;
 type SampleParts = Pick<NoteDocument, "input" | "note" | "settings" | "stickers" | "aiDoodle">;
 /** The sample exactly as the editor loaded it; any change to these parts counts as the user's work. */
 let sample: SampleParts | null = null;
@@ -28,13 +30,19 @@ useNoteStore.subscribe((next, previous) => {
       && !input.text.trim() && stickers.length === 0 && !aiDoodle && (!previous.note || isUntouchedSample(previous));
     sample = fresh ? { input, note, settings, stickers, aiDoodle } : null;
     // A note generated from other source text is a new note: saving it must add an entry, not replace the linked
-    // one. Regenerating the same text (another template, condensing) still updates it.
-    const link = next.libraryLink;
-    const { baseline } = useLibraryStatus.getState();
-    if (link && next.documentSerial === previous.documentSerial && (next.source === "ai" || next.source === "local")
-      && (baseline?.revision !== link.revision || baseline.source !== input.text)) {
-      useNoteStore.getState().setLibraryLink(null);
-      set({ status: "idle", baseline: null });
+    // one or the one being saved. Regenerating the same text (another template, condensing) still updates it.
+    if (next.documentSerial === previous.documentSerial && (next.source === "ai" || next.source === "local")) {
+      const from = next.generatedFrom;
+      if (saving && saving.source !== from) {
+        saving = null;
+        set({ status: "idle" });
+      }
+      const link = next.libraryLink;
+      const { baseline } = useLibraryStatus.getState();
+      if (link && (baseline?.revision !== link.revision || baseline.source !== from)) {
+        useNoteStore.getState().setLibraryLink(null);
+        set({ status: "idle", baseline: null });
+      }
     }
   }
 });
@@ -102,11 +110,14 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     // Best effort: asks the browser not to evict the library under storage pressure.
     void navigator.storage?.persist?.().catch(() => {});
   }
-  // Another document was opened or restored meanwhile: the result, success or failure, no longer describes the
-  // editor, and the status now belongs to that document. Regenerating the same note keeps the link current.
+  // Another document was opened or restored, or a note was generated from other text meanwhile: the result, success
+  // or failure, no longer describes the editor, and the status now belongs to that note. Regenerating the same text
+  // keeps the save current.
+  const job = { source: document.input.text };
+  saving = job;
   const replaced = () => {
     const now = useNoteStore.getState();
-    return now.documentSerial !== state.documentSerial || now.libraryLink !== state.libraryLink;
+    return saving !== job || now.documentSerial !== state.documentSerial || now.libraryLink !== state.libraryLink;
   };
   try {
     const entry = await saveEntry(link, document, force);
@@ -117,6 +128,8 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     if (replaced()) return;
     if (error instanceof LibraryConflict && error.deleted) set({ status: "deleted", baseline: null });
     else set({ status: error instanceof LibraryConflict ? "conflict" : "error" });
+  } finally {
+    if (saving === job) saving = null;
   }
 }
 

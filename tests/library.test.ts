@@ -168,6 +168,46 @@ describe("library in the editor", () => {
     await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(c.store.getState().libraryLink));
   });
 
+  it("does not attach a save still in flight to a note generated from other text", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    let pending = c.saveToLibrary();
+    c.store.getState().setResult(edited("同一原文").note!, null, "local");
+    await pending;
+    // Same text: the save still links the editor, whose regenerated note is then a change to that entry.
+    expect(c.useLibraryStatus.getState().status).toBe("saved");
+    expect(c.hasUnsavedWork()).toBe(true);
+    const first = c.store.getState().libraryLink!;
+
+    c.store.getState().loadDocument(edited("未保存"), null);
+    pending = c.saveToLibrary();
+    c.store.getState().setInput({ text: "另一篇文章" });
+    c.store.getState().setResult(edited("第二篇").note!, null, "local");
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    await pending;
+    expect(c.store.getState().libraryLink).toBeNull();
+    await c.saveToLibrary();
+    expect(c.store.getState().libraryLink?.id).not.toBe(first.id);
+    expect((await listEntries()).entries.map((e) => e.title).sort()).toEqual(["读书笔记", "未保存", "第二篇"].sort());
+  });
+
+  it("decides by the text submitted for generation, not text edited while it runs", async () => {
+    const c = await boot();
+    const { generateNote } = await import("../src/state/actions.ts");
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    let respond!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { respond = resolve; })));
+    c.store.getState().setInput({ text: "另一篇文章" });
+    const pending = generateNote();
+    // Edited back to the saved text before the result arrives.
+    c.store.getState().setInput({ text: document.input.text });
+    const meta = { requestId: "r", model: "m", latencyMs: 1, attempts: 1, warnings: [] };
+    respond(new Response(JSON.stringify({ note: edited("第二篇").note, meta }), { status: 200 }));
+    await pending;
+    expect(c.store.getState()).toMatchObject({ note: { title: "第二篇" }, generatedFrom: "另一篇文章", libraryLink: null });
+  });
+
   it("reports edits from another tab and deletions instead of overwriting them", async () => {
     const c = await boot();
     c.store.getState().loadDocument(document, null);
