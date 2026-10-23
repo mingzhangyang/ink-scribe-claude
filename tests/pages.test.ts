@@ -103,6 +103,10 @@ describe("note page", () => {
     expect(meta.status).toBe(404);
     expect(meta.robots).toBe("noindex");
     expect(meta.canonical).toBeUndefined();
+    expect(meta.title).toContain(meta.description);
+    expect(meta.body).toContain(`<h1>${meta.description}</h1>`);
+    expect(meta.body).toContain('href="/"');
+    expect(meta.body).toContain('href="/gallery"');
   });
 });
 

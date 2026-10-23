@@ -55,6 +55,49 @@ export const usePreferences = create<State>()(
   ),
 );
 
+/**
+ * Same-origin tabs share one persisted preference snapshot. Rehydrate rather than calling
+ * setState: rehydration does not write back and cannot echo an outdated state to other tabs.
+ * Focus/visibility also recovers notifications missed while a mobile tab was suspended.
+ */
+export function subscribeToPreferenceSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  // Some privacy modes deny localStorage access altogether; Zustand then keeps its
+  // initial state in memory and does not expose a persist API.
+  const persistence = usePreferences.persist;
+  if (!persistence) return () => {};
+  let storage: Storage;
+  try {
+    storage = window.localStorage;
+  } catch {
+    return () => {};
+  }
+
+  const sync = () => {
+    try {
+      void Promise.resolve(persistence.rehydrate()).catch(() => {
+        // Persistence can become unavailable after a tab was opened. Preserve
+        // the current in-memory choice rather than breaking focus handlers.
+      });
+    } catch {
+      // Storage was blocked after setup; continue with the in-memory locale.
+    }
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.storageArea === storage && (event.key === PREFERENCES_KEY || event.key === null)) sync();
+  };
+  const onVisible = () => { if (!document.hidden) sync(); };
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener("focus", sync);
+  document.addEventListener("visibilitychange", onVisible);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener("focus", sync);
+    document.removeEventListener("visibilitychange", onVisible);
+  };
+}
+
 export function resolveTheme(theme: ThemePreference): "light" | "dark" {
   if (theme !== "system") return theme;
   return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";

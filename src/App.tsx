@@ -11,7 +11,7 @@ import { LegalPage } from "./pages/LegalPage.tsx";
 import { LibraryPage } from "./pages/LibraryPage.tsx";
 import { NoteViewPage } from "./pages/NoteViewPage.tsx";
 import { linkProps, useRoute } from "./router.ts";
-import { resolveTheme, usePreferences } from "./state/preferences.ts";
+import { resolveTheme, subscribeToPreferenceSync, usePreferences } from "./state/preferences.ts";
 
 const DEFAULT_CONFIG: PublicConfig = { maxInputChars: 12_000, doodleEnabled: false, mock: false };
 const THEME_COLORS = { light: "#f4f2ee", dark: "#18181b" } as const;
@@ -43,6 +43,8 @@ export function App() {
   const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   useAppliedTheme();
 
+  useEffect(() => subscribeToPreferenceSync(), []);
+
   useEffect(() => {
     // 直接访问英文笔记时 Worker 会把 <html lang> 设为笔记语言；应用界面按界面语言标注，笔记画布自行标注语言
     document.documentElement.lang = t.htmlLang;
@@ -54,6 +56,7 @@ export function App() {
 
   useEffect(() => {
     if (route.name === "editor") document.title = t.app.documentTitle;
+    if (route.name === "not-found") document.title = `${t.app.notFound} · ${t.app.name}`;
   }, [route.name, t]);
 
   useEffect(() => {
@@ -88,9 +91,11 @@ export function App() {
         <main className="page-center">
           <div className="empty-state">
             <h2>{t.app.notFound}</h2>
-            <a className="btn btn-secondary" {...linkProps("/")}>
-              {t.app.backToEditor}
-            </a>
+            <p className="hint">{t.app.notFoundDescription}</p>
+            <div className="button-row">
+              <a className="btn btn-secondary" {...linkProps("/")}>{t.app.backToEditor}</a>
+              <a className="btn btn-secondary" {...linkProps("/gallery")}>{t.app.gallery}</a>
+            </div>
           </div>
         </main>
       ) : null}

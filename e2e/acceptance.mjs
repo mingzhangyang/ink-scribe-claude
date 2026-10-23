@@ -1039,6 +1039,20 @@ if (process.env.E2E_API_KEY) {
   // hide a regression in the language switch above.
   await guide.locator(".app-menu-toggle").click();
 
+  // Two live tabs must agree without reload. A subsequent reload keeps the last choice.
+  const peer = await guideContext.newPage();
+  await peer.goto(`${URL}guide`, { waitUntil: "networkidle" });
+  await setAppPreference(guide, "locale", "zh");
+  await peer.waitForFunction(() => document.documentElement.lang === "zh-CN");
+  await setAppPreference(peer, "locale", "en");
+  await guide.waitForFunction(() => document.documentElement.lang === "en");
+  await peer.reload({ waitUntil: "networkidle" });
+  check("U14", "语言修改实时同步到同站其他标签页并在刷新后保留最后选择",
+    (await guide.locator("html").getAttribute("lang")) === "en" &&
+    (await peer.locator("html").getAttribute("lang")) === "en" &&
+    (await peer.locator("main.guide-page h1").innerText()).includes("InkScribe"));
+  await peer.close();
+
   await setAppPreference(guide, "theme", "dark");
   const darkGuide = await guide.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
@@ -1824,6 +1838,136 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   check("LB9", "确认操作不依赖浏览器原生对话框", nativeDialogs.length === 0, JSON.stringify(nativeDialogs));
   check("LB7", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();
+}
+
+// ---------- LS. Gallery / library loading, note footer, and not-found states ----------
+{
+  const { page: placeholders, context: placeholderContext } = await newPage();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  await placeholders.route("**/api/gallery?**", async (route) => {
+    await pending;
+    await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":{"code":"INTERNAL_ERROR","message":"unavailable"}}' });
+  });
+  await placeholders.goto(`${URL}gallery`, { waitUntil: "domcontentloaded" });
+  await placeholders.locator(".gallery-thumb-skeleton").first().waitFor();
+  check("LS1", "图库数据加载时展示与缩略图等比例的骨架占位",
+    await placeholders.locator(".gallery-thumb-skeleton").count() === 3);
+  await setAppPreference(placeholders, "theme", "dark");
+  const darkSkeleton = await placeholders.locator(".gallery-thumb-skeleton").first().evaluate((thumb) => ({
+    theme: document.documentElement.dataset.theme,
+    lineColor: getComputedStyle(thumb.querySelector(".gallery-skeleton-line")).backgroundColor,
+  }));
+  check("LS1b", "深色主题下浅色纸张的缩略图骨架仍清晰可见",
+    darkSkeleton.theme === "dark" && darkSkeleton.lineColor === "rgb(135, 153, 187)", JSON.stringify(darkSkeleton));
+  release();
+  await placeholders.locator(".gallery-thumb-failed").waitFor();
+  check("LS2", "图库加载失败后展示失败占位与重试入口",
+    await placeholders.locator(".gallery-thumb-failed").count() === 1 &&
+    await placeholders.getByRole("button", { name: "重试" }).isVisible());
+  const errorInk = await placeholders.locator(".gallery-thumb-failed").evaluate((thumb) => getComputedStyle(thumb).color);
+  check("LS2b", "深色主题下浅纸错误信息仍有足够文字对比度",
+    errorInk === "rgb(68, 64, 60)", errorInk);
+
+  await placeholders.goto(`${URL}missing/route`, { waitUntil: "domcontentloaded" });
+  await placeholders.locator(".empty-state h2").waitFor();
+  check("LS3", "未知路径显示一致的 404 标题、说明以及编辑器/图库入口",
+    (await placeholders.title()).includes("页面不存在") &&
+    (await placeholders.locator(".empty-state h2").innerText()) === "页面不存在" &&
+    await placeholders.locator('.empty-state a[href="/"]').isVisible() &&
+    await placeholders.locator('.empty-state a[href="/gallery"]').isVisible());
+  await placeholders.goto(URL, { waitUntil: "networkidle" });
+  await waitForNoteReady(placeholders);
+  await placeholders.getByRole("tab", { name: "内容", exact: true }).click();
+  const measureFooter = () => placeholders.locator(".note-page").evaluate((el) => {
+    const summary = el.querySelector(".summary-sticky, .classic-summary");
+    const artwork = el.querySelector(".doodle-slot");
+    if (!summary || !artwork) return null;
+
+    const summaryText = summary.querySelector(".summary-text");
+    const summaryBounds = summary.getBoundingClientRect();
+    const artworkBounds = artwork.getBoundingClientRect();
+    const paperBounds = el.getBoundingClientRect();
+    // Check glyph rectangles as well as the containing grid cells: a positive CSS gap
+    // alone cannot catch text escaping an overflowing summary into the illustration.
+    const textRects = summaryText
+      ? [...summaryText.querySelectorAll("[data-fit-text]")].flatMap((node) => [...node.getClientRects()])
+      : [];
+    const textTouchesArtwork = textRects.some((rect) =>
+      rect.left < artworkBounds.right && rect.right > artworkBounds.left &&
+      rect.top < artworkBounds.bottom && rect.bottom > artworkBounds.top);
+    const textOutsidePaper = textRects.some((rect) =>
+      rect.left < paperBounds.left - 2 || rect.right > paperBounds.right + 2 ||
+      rect.top < paperBounds.top - 2 || rect.bottom > paperBounds.bottom + 2);
+    const clipped = [summary, summary.closest(".note-footer, .journal-footer")]
+      .filter(Boolean)
+      .some((region) => {
+        const style = getComputedStyle(region);
+        return (style.overflowY !== "visible" && region.scrollHeight > region.clientHeight + 2) ||
+          (style.overflowX !== "visible" && region.scrollWidth > region.clientWidth + 2);
+      });
+    return {
+      gap: artworkBounds.left - summaryBounds.right,
+      content: summaryText?.textContent ?? "",
+      status: el.dataset.renderStatus,
+      layout: el.className,
+      glyphs: textRects.length,
+      textTouchesArtwork,
+      textOutsidePaper,
+      clipped,
+    };
+  });
+  const summaryFits = (geometry, originalText) =>
+    geometry !== null && geometry.status === "ready" && geometry.gap > 8 &&
+    geometry.glyphs > 0 && !geometry.textTouchesArtwork &&
+    !geometry.textOutsidePaper && !geometry.clipped &&
+    // The shared visible-content parser strips whitespace at the edges of each line.
+    // The long English fixture intentionally ends with a space; that is not lost text.
+    geometry.content === originalText.trim();
+
+  const summaries = [
+    { label: "zh-short", locale: "zh", text: "简短总结，不遮挡插图。" },
+    { label: "zh-long", locale: "zh", text: "详细的中文总结需要正确换行，同时确保旁边的手绘插图保持在独立区域。".repeat(9) },
+    { label: "en-short", locale: "en", text: "A short English summary does not overlap the doodle." },
+    { label: "en-long", locale: "en", text: "A long English summary must wrap naturally without pushing any text into the illustration beside the note. ".repeat(3) },
+  ];
+  for (const item of summaries) {
+    await setAppPreference(placeholders, "locale", item.locale);
+    await placeholders.locator(".content-editor textarea").last().fill(item.text);
+    await waitForNoteReady(placeholders);
+    const geometry = await measureFooter();
+    check(`LS4-${item.label}`, `笔记摘要与插画无重叠：${item.label}`,
+      summaryFits(geometry, item.text),
+      JSON.stringify(geometry && { ...geometry, contentLength: geometry.content.length, content: undefined }));
+  }
+
+  // Free-journal and Classic Cornell share the same summary/artwork contract.
+  await setAppPreference(placeholders, "locale", "zh");
+  await placeholders.getByRole("tab", { name: "样式", exact: true }).click();
+  for (const [label, pattern] of [["free-journal", /自由手账/], ["classic-cornell", /经典康奈尔/]]) {
+    await placeholders.getByRole("radio", { name: pattern }).click();
+    await waitForNoteReady(placeholders);
+    const geometry = await measureFooter();
+    check(`LS4-${label}`, `${label} 摘要与插图保留间距`,
+      summaryFits(geometry, summaries.at(-1).text),
+      JSON.stringify(geometry && { ...geometry, contentLength: geometry.content.length, content: undefined }));
+  }
+  await placeholderContext.close();
+
+  const { page: storageBlocked, context: blockedContext } = await newPage({}, `Object.defineProperty(window, "localStorage", {
+    configurable: true, get() { throw new DOMException("Storage unavailable", "SecurityError"); }
+  });`);
+  await storageBlocked.goto(URL, { waitUntil: "domcontentloaded" });
+  await storageBlocked.locator(".app-menu-toggle").waitFor();
+  await setAppPreference(storageBlocked, "locale", "en");
+  await storageBlocked.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  check("LS5", "禁止访问 localStorage 时语言选择及焦点恢复不抛错",
+    (await storageBlocked.locator("html").getAttribute("lang")) === "en" && storageBlocked.errors.length === 0,
+    storageBlocked.errors.join("; "));
+  await blockedContext.close();
 }
 
 await browser.close();
