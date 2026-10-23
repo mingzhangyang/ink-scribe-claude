@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { normalizeStickers } from "../shared/stickers.ts";
+import { validatePublishedStickers } from "../shared/publishing.ts";
+import {
+  isDecorStickerType,
+  normalizeStickers,
+  STICKER_CATEGORIES,
+  STICKER_CATEGORY_TYPES,
+  STICKER_SIZES,
+  STICKER_TYPES,
+  STICKER_VARIANTS,
+  stickerVariant,
+  type StickerVariant,
+} from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
 import { fetchPublishedNote } from "../src/api.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
@@ -174,6 +185,48 @@ describe("normalizeStickers", () => {
   it("keeps positions far down a long page", () => {
     const [sticker] = normalizeStickers([{ id: "low", type: "star", x: 100, y: 5000 }]);
     expect(sticker.y).toBe(5000);
+  });
+
+  it("keeps the newer sticker types with their own variants and drops variants of other types", () => {
+    const stickers = normalizeStickers([
+      { id: "flower", type: "pressed-flower", x: 10, y: 10, variant: "ginkgo" },
+      { id: "tape", type: "tape", x: 20, y: 20, variant: "checks" },
+      { id: "seal", type: "seal", x: 30, y: 30, variant: "ginkgo" },
+    ]);
+    expect(stickers.map((s) => [s.type, s.variant])).toEqual([
+      ["pressed-flower", "ginkgo"],
+      ["tape", "checks"],
+      ["seal", undefined],
+    ]);
+  });
+});
+
+describe("sticker catalog", () => {
+  const decor = STICKER_TYPES.filter(isDecorStickerType);
+
+  it("lists every decoration in exactly one panel category", () => {
+    const listed = STICKER_CATEGORIES.flatMap((category) => STICKER_CATEGORY_TYPES[category]);
+    expect([...listed].sort()).toEqual([...decor].sort());
+  });
+
+  it("gives every decoration a size and distinct variant ids", () => {
+    for (const type of decor) {
+      const ids = STICKER_VARIANTS[type].map((v: StickerVariant) => v.id);
+      expect(new Set(ids).size, type).toBe(ids.length);
+      expect(STICKER_SIZES[type].w * STICKER_SIZES[type].h, type).toBeGreaterThan(0);
+    }
+  });
+
+  it("falls back to the first variant for a missing or unknown id", () => {
+    expect(stickerVariant("face", undefined).id).toBe("happy");
+    expect(stickerVariant("face", "grumpy").id).toBe("happy");
+    expect(stickerVariant("face", "surprised").id).toBe("surprised");
+  });
+
+  it("accepts the newer types in the publishing contract and rejects another type's variant", () => {
+    const sticker = { id: "s1", type: "wavy-underline", x: 40, y: 50, rotation: 0, scale: 1 };
+    expect(validatePublishedStickers([{ ...sticker, variant: "blue" }]).ok).toBe(true);
+    expect(validatePublishedStickers([{ ...sticker, variant: "lavender" }]).ok).toBe(false);
   });
 });
 

@@ -3,17 +3,26 @@ import { DETAIL_LABELS, LANGUAGE_LABELS, STYLE_LABELS, TEMPLATE_LABELS, type Not
 import { DOODLE_THEME_LABELS } from "../../shared/themes.ts";
 import { ACCENTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS, type AccentId, type InkId, type PageSizeId, type PaperId, type ZhFontId } from "../config/appearance.ts";
 import type { FileKind } from "../import/extractText.ts";
-import { STICKER_LABELS, STICKER_VARIANTS, type StickerType } from "../stickers/types.ts";
+import {
+  STICKER_CATEGORY_LABELS,
+  STICKER_LABELS,
+  STICKER_VARIANTS,
+  type DecorStickerType,
+  type StickerVariant,
+  type StickerVariantId,
+} from "../stickers/types.ts";
 import type { ThemePreference } from "../state/preferences.ts";
 
 const labelsOf = <T extends { id: string; label: string }>(list: readonly T[]) =>
   Object.fromEntries(list.map((item) => [item.id, item.label])) as Record<T["id"], string>;
 
+/** 每种装饰贴纸的变体名称；类型列出全部变体 ID，英文词典漏掉任何一个都无法通过类型检查。 */
 const variantsOf = () =>
-  Object.fromEntries(Object.entries(STICKER_VARIANTS).map(([type, list]) => [type, labelsOf(list)])) as Record<
-    Exclude<StickerType, "custom-doodle">,
-    Record<string, string>
-  >;
+  Object.fromEntries(
+    Object.entries(STICKER_VARIANTS as Record<string, readonly StickerVariant[]>).map(([type, list]) => [type, labelsOf(list)]),
+  ) as {
+    [T in DecorStickerType]: Record<StickerVariantId<T>, string>;
+  };
 
 /** 中文界面文案。英文词典（en.ts）必须提供同样的结构。 */
 export const zh = {
@@ -67,6 +76,7 @@ export const zh = {
     doodleThemes: DOODLE_THEME_LABELS,
     stickers: STICKER_LABELS,
     stickerVariants: variantsOf(),
+    stickerCategories: STICKER_CATEGORY_LABELS,
     fileKinds: { text: "文本", html: "网页", docx: "Word", pdf: "PDF" } satisfies Record<FileKind, string>,
   },
 
@@ -188,6 +198,10 @@ export const zh = {
 
   stickers: {
     decor: "装饰贴纸",
+    categories: "贴纸分类",
+    addSticker: (name: string) => `添加贴纸：${name}`,
+    variants: (name: string) => `${name} · 颜色与款式`,
+    variantsHint: "选中画布上的装饰贴纸，就能在这里更换颜色或款式。",
     library: "手绘插图库",
     addTitle: (name: string) => `添加「${name}」`,
     addLabel: (name: string) => `添加插图：${name}`,

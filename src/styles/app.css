@@ -974,48 +974,76 @@ input[type="range"] {
 
 .sticker-palette {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* 与插图库相同：minmax(0, 1fr) 让较长的名称换行，而不是把列撑出面板 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+  margin-top: 4px;
 }
 
 .sticker-option {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 5px 4px 6px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: transparent;
+  color: var(--text);
   cursor: pointer;
-  text-align: left;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .sticker-option:hover {
   border-color: var(--border-hover);
 }
 
-.sticker-option small {
+/* 预览底色用当前纸张色（由面板设置 --paper），深色界面下也能看清墨色贴纸 */
+.sticker-option-art {
+  position: relative;
   display: block;
-  color: var(--muted);
-  font-size: 11px;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--paper);
 }
 
-.sticker-option-swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  flex: none;
-  border: 1px solid var(--swatch-border);
+/* 绝对定位：大括号、书签等细长贴纸不会按自身尺寸把方形预览撑高 */
+.sticker-option-art svg {
+  position: absolute;
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
 }
 
-.sticker-option-star .sticker-option-swatch {
-  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+.sticker-option-name {
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
-.sticker-option-coffee-stain .sticker-option-swatch,
-.sticker-option-paperclip .sticker-option-swatch {
+/* 预留一行高度：选中或取消选中贴纸时，下面的插图库不会上下跳动 */
+.sticker-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 52px;
+  margin-top: 4px;
+}
+
+.sticker-variant {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+}
+
+.sticker-variant-swatch {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
+  border: 1px solid var(--swatch-border);
+  flex: none;
 }
 
 .doodle-palette {

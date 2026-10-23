@@ -6,6 +6,7 @@ import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
 import { verifyFontRetry } from "./font-retry.mjs";
 import { closeInput, fillSource, openInput } from "./input.mjs";
+import { addDecorSticker } from "./stickers.mjs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
 const URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173/";
@@ -199,7 +200,7 @@ const doodleGrid = await page.locator(".doodle-palette").evaluate((grid) => {
   };
 });
 check("G7", "手绘插图库五列完整显示在面板内且按钮为正方形", doodleGrid.overflow <= 0 && doodleGrid.lastRight <= 0 && doodleGrid.square, JSON.stringify(doodleGrid));
-await page.getByTitle("和纸胶带 · 薄荷").click();
+await addDecorSticker(page, "胶带夹子", "和纸胶带", "薄荷");
 const stickers = page.locator(".sticker");
 const first = stickers.nth(0);
 // 贴纸位于正文适配之外：拖动、缩放、旋转都不应让已完成的适配回到 pending
@@ -235,7 +236,7 @@ const fitDuringDrag = await page.evaluate(() => {
   return window.__fitStatuses;
 });
 check("G8", "拖动、缩放和旋转贴纸不会重新适配页面", fitDuringDrag.length === 0, fitDuringDrag.join(","));
-await page.getByTitle("便利贴 · 黄").click();
+await addDecorSticker(page, "纸品标签", "便利贴", "黄");
 await page.getByRole("button", { name: "添加插图：书本·阅读" }).click();
 check("G1", "添加贴纸与插图", (await stickers.count()) === 3);
 await stickers.nth(0).focus(); // 选中最底层的胶带
@@ -247,7 +248,7 @@ await page.keyboard.press("Delete");
 check("G5", "键盘删除选中贴纸", (await stickers.count()) === 2);
 
 // ---------- G6. 贴纸重叠时手柄仍可操作 ----------
-await page.getByTitle("便利贴 · 绿").click();
+await addDecorSticker(page, "纸品标签", "便利贴", "绿");
 await page.evaluate(() => {
   const list = document.querySelectorAll(".sticker");
   const [under, over] = [list[0], list[list.length - 1]];
@@ -316,7 +317,7 @@ await page.evaluate(() => {
     return { ...probe, after: snapshot() };
   };
 });
-await page.getByTitle("和纸胶带 · 薄荷").click();
+await addDecorSticker(page, "胶带夹子", "和纸胶带", "薄荷");
 const movingSticker = page.locator(".sticker-tape");
 const geometryBefore = await movingSticker.evaluate((el) => ({ left: el.style.left, top: el.style.top, transform: el.style.transform }));
 const dragBox = await movingSticker.boundingBox();
@@ -1672,7 +1673,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const { page, context } = await newPage();
   await page.goto(URL, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "贴纸", exact: true }).click();
-  await page.getByTitle("和纸胶带 · 薄荷", { exact: true }).click();
+  await addDecorSticker(page, "胶带夹子", "和纸胶带", "薄荷");
   await page.locator(".sticker-selection").waitFor();
   const before = await page.locator(".sticker").count();
   await openInput(page);
@@ -1682,6 +1683,59 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.keyboard.press("Escape");
   const closed = await page.locator(".input-sheet").waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
   check("IS23", "弹窗打开时按键不删除或移动背后选中的贴纸，Esc 关闭弹窗", before > 0 && after === before && closed, JSON.stringify({ before, after, closed }));
+  await context.close();
+}
+
+// 每种装饰贴纸都能从分类面板添加，每个颜色与款式都能绘制；分类与款式选择在刷新后保留
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "贴纸", exact: true }).click();
+  const categories = page.getByRole("radiogroup", { name: "贴纸分类" }).getByRole("radio");
+  const tiles = [];
+  const notSquare = [];
+  let variantCount = 0;
+  for (let i = 0; i < (await categories.count()); i++) {
+    await categories.nth(i).click();
+    // 细长的贴纸（大括号、丝带书签）也不能把方形预览撑高
+    notSquare.push(
+      ...(await page.locator(".sticker-palette .sticker-option").evaluateAll((els) =>
+        els.filter((el) => {
+          const r = el.querySelector(".sticker-option-art").getBoundingClientRect();
+          return Math.abs(r.width - r.height) >= 1;
+        }).map((el) => el.getAttribute("aria-label")),
+      )),
+    );
+    for (const tile of await page.locator(".sticker-palette .sticker-option").all()) {
+      tiles.push(await tile.getAttribute("aria-label"));
+      await tile.click();
+      const variants = page.locator(".sticker-variants [role=radio]");
+      for (let v = 0; v < (await variants.count()); v++) {
+        await variants.nth(v).click();
+        variantCount++;
+      }
+    }
+  }
+  const drawn = await page.evaluate(() =>
+    [...document.querySelectorAll(".sticker")].map((el) => {
+      const svg = el.querySelector("svg");
+      const box = svg?.getBoundingClientRect();
+      return { type: el.className.match(/sticker-([\w-]+)/)?.[1], shapes: svg?.querySelectorAll("path, circle, ellipse, rect").length ?? 0, w: box?.width ?? 0, h: box?.height ?? 0 };
+    }),
+  );
+  const blank = drawn.filter((d) => d.shapes === 0 || d.w < 4 || d.h < 4);
+  check(
+    "G9",
+    "全部 33 种装饰贴纸按分类添加，预览为正方形，所有颜色与款式都能绘制",
+    tiles.length === 33 && new Set(tiles).size === 33 && notSquare.length === 0 && drawn.length === 33 && variantCount > 33 && blank.length === 0 && page.errors.length === 0,
+    JSON.stringify({ tiles: tiles.length, notSquare, drawn: drawn.length, variantCount, blank, errors: page.errors }),
+  );
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "贴纸", exact: true }).click();
+  const category = (await page.getByRole("radiogroup", { name: "贴纸分类" }).locator("[aria-checked=true]").innerText()).trim();
+  await page.getByRole("button", { name: "添加贴纸：压花", exact: true }).click();
+  const variant = (await page.locator(".sticker-variants [aria-checked=true]").innerText()).trim();
+  check("G10", "刷新后保留上次的贴纸分类，新贴纸沿用这类贴纸上次选择的款式", category === "心情点缀" && variant === "薰衣草", JSON.stringify({ category, variant }));
   await context.close();
 }
 

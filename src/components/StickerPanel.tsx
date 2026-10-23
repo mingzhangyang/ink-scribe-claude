@@ -1,14 +1,49 @@
-import { useState } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import type { DoodleSpec } from "../../shared/doodle.ts";
 import { DOODLE_THEMES } from "../../shared/themes.ts";
 import { ApiRequestError, generateDoodle } from "../api.ts";
+import { byId, INKS, PAPERS } from "../config/appearance.ts";
 import { builtinDoodle } from "../doodles/library.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
+import { usePreferences } from "../state/preferences.ts";
 import { useNoteStore, type RequestError } from "../state/store.ts";
-import { STICKER_VARIANTS, type StickerType } from "../stickers/types.ts";
+import { paint } from "../stickers/art/common.tsx";
+import { StickerArt } from "../stickers/StickerArt.tsx";
+import {
+  isDecorStickerType,
+  STICKER_CATEGORIES,
+  STICKER_CATEGORY_TYPES,
+  STICKER_VARIANTS,
+  stickerVariant,
+  type DecorStickerType,
+  type StickerItem,
+  type StickerPattern,
+  type StickerVariant,
+} from "../stickers/types.ts";
 import { DoodleArt } from "./note/DoodleArt.tsx";
 
-const DECOR_TYPES = ["tape", "sticky-note", "paperclip", "star", "coffee-stain"] as const satisfies readonly Exclude<StickerType, "custom-doodle">[];
+/** 色块上的花纹示意，与胶带花纹、纸片格线对应。 */
+const PATTERN_SWATCHES: Record<StickerPattern, CSSProperties> = {
+  dots: { backgroundImage: "radial-gradient(rgba(255,255,255,0.9) 28%, transparent 32%)", backgroundSize: "7px 7px" },
+  checks: {
+    backgroundImage: "linear-gradient(90deg, rgba(255,255,255,0.45) 50%, transparent 50%), linear-gradient(rgba(255,255,255,0.45) 50%, transparent 50%)",
+    backgroundSize: "8px 8px",
+  },
+  stripes: { backgroundImage: "linear-gradient(90deg, rgba(255,255,255,0.7) 40%, transparent 40%)", backgroundSize: "6px 100%" },
+  grid: {
+    backgroundImage: "linear-gradient(rgba(96,165,250,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(96,165,250,0.6) 1px, transparent 1px)",
+    backgroundSize: "5px 5px",
+  },
+  lines: { backgroundImage: "linear-gradient(rgba(96,165,250,0.6) 1px, transparent 1px)", backgroundSize: "100% 5px" },
+};
+
+const swatchStyle = (variant: StickerVariant): CSSProperties => ({
+  backgroundColor: paint(variant.color),
+  ...(variant.pattern ? PATTERN_SWATCHES[variant.pattern] : {}),
+});
+
+/** 面板预览用固定 ID，墨渍、印章等按 ID 生成形状的贴纸在面板里保持不变。 */
+const preview = (type: DecorStickerType, variant: string): StickerItem => ({ id: `preview-${type}`, type, x: 0, y: 0, rotation: 0, scale: 1, variant });
 
 export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
   const stickers = useNoteStore((s) => s.stickers);
@@ -22,7 +57,15 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
   const clearStickers = useNoteStore((s) => s.clearStickers);
   const setAiDoodle = useNoteStore((s) => s.setAiDoodle);
   const selected = stickers.find((s) => s.id === selectedId) ?? null;
+  const selectedDecor = selected && isDecorStickerType(selected.type) ? selected.type : null;
+  const category = usePreferences((p) => p.stickerCategory);
+  const setCategory = usePreferences((p) => p.setStickerCategory);
+  const lastVariants = usePreferences((p) => p.stickerVariants);
+  const rememberVariant = usePreferences((p) => p.rememberStickerVariant);
+  const variantsLabelId = useId();
   const t = useT();
+  // 预览与画布一致：跟随当前笔记的墨水色和纸张底色
+  const artVars = { "--ink": byId(INKS, settings.ink).color, "--paper": byId(PAPERS, settings.paper).base } as CSSProperties;
 
   const [concept, setConcept] = useState("");
   const [aiState, setAiState] = useState<{ status: "idle" | "loading" | "error"; error?: RequestError; spec?: DoodleSpec }>({ status: "idle" });
@@ -41,25 +84,73 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
 
   return (
     <div className="panel-body">
-      <fieldset className="field">
+      <fieldset className="field" style={artVars}>
         <legend>{t.stickers.decor}</legend>
+        <div className="chip-group" role="radiogroup" aria-label={t.stickers.categories}>
+          {STICKER_CATEGORIES.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={category === id}
+              className={`chip${category === id ? " is-active" : ""}`}
+              onClick={() => setCategory(id)}
+            >
+              {t.options.stickerCategories[id]}
+            </button>
+          ))}
+        </div>
         <div className="sticker-palette">
-          {DECOR_TYPES.flatMap((type) =>
-            STICKER_VARIANTS[type].map((variant) => (
+          {STICKER_CATEGORY_TYPES[category].map((type) => {
+            // 新贴纸沿用这类贴纸上次选的颜色或款式
+            const variant = stickerVariant(type, lastVariants[type]).id;
+            return (
               <button
-                key={`${type}-${variant.id}`}
+                key={type}
                 type="button"
-                className={`sticker-option sticker-option-${type}`}
-                onClick={() => addSticker(type, { variant: variant.id })}
-                title={`${t.options.stickers[type]} · ${t.options.stickerVariants[type][variant.id]}`}
+                className="sticker-option"
+                onClick={() => addSticker(type, { variant })}
+                title={t.stickers.addTitle(t.options.stickers[type])}
+                aria-label={t.stickers.addSticker(t.options.stickers[type])}
               >
-                <span className="sticker-option-swatch" style={{ background: variant.color === "ink" ? "transparent" : variant.color }} />
-                <span>
-                  {t.options.stickers[type]}
-                  <small>{t.options.stickerVariants[type][variant.id]}</small>
+                <span className="sticker-option-art">
+                  <StickerArt item={preview(type, variant)} naturalness={0} seed={0} />
                 </span>
+                <span className="sticker-option-name">{t.options.stickers[type]}</span>
               </button>
-            )),
+            );
+          })}
+        </div>
+        <div className="sticker-variants">
+          {selected && selectedDecor ? (
+            <>
+              <span id={variantsLabelId} className="hint">
+                {t.stickers.variants(t.options.stickers[selectedDecor])}
+              </span>
+              <div className="chip-group" role="radiogroup" aria-labelledby={variantsLabelId}>
+                {STICKER_VARIANTS[selectedDecor].map((variant: StickerVariant) => {
+                  const active = stickerVariant(selectedDecor, selected.variant).id === variant.id;
+                  return (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={`chip sticker-variant${active ? " is-active" : ""}`}
+                      onClick={() => {
+                        updateSticker(selected.id, { variant: variant.id });
+                        rememberVariant(selectedDecor, variant.id);
+                      }}
+                    >
+                      <span className="sticker-variant-swatch" style={swatchStyle(variant)} />
+                      {(t.options.stickerVariants[selectedDecor] as Record<string, string>)[variant.id]}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="hint">{t.stickers.variantsHint}</p>
           )}
         </div>
       </fieldset>
