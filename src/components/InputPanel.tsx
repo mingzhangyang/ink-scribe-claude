@@ -18,7 +18,7 @@ export function InputTrigger({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   return (
     <button type="button" className={`btn btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
-      <span aria-hidden="true">✍️</span> {t.input.open}
+      {t.input.open}
     </button>
   );
 }
