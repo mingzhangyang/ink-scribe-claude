@@ -1,15 +1,9 @@
 import type { CSSProperties } from "react";
-import { STYLE_LABELS, STYLES, type NoteStyle } from "../../shared/options.ts";
-import { DOODLE_THEME_LABELS, DOODLE_THEMES, type DoodleTheme } from "../../shared/themes.ts";
+import { STYLES } from "../../shared/options.ts";
+import { DOODLE_THEMES, type DoodleTheme } from "../../shared/themes.ts";
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS, type EnFontId, type PageSizeId, type ZhFontId } from "../config/appearance.ts";
+import { useT } from "../i18n/index.ts";
 import { useNoteStore, type Settings } from "../state/store.ts";
-
-const LAYOUT_HINTS: Record<NoteStyle, string> = {
-  "hybrid-cornell": "左侧线索 · 中间笔记 · 底部便签",
-  "classic-cornell": "标准三分区，适合复习自测",
-  "free-journal": "卡片拼贴，活泼随性",
-  minimal: "单栏留白，安静克制",
-};
 
 function Range({
   label,
@@ -45,12 +39,13 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
   const resetSettings = useNoteStore((s) => s.resetSettings);
   const aiDoodle = useNoteStore((s) => s.aiDoodle);
   const set = (patch: Partial<Settings>) => setSettings(patch);
+  const t = useT();
 
   return (
     <div className="panel-body">
       <fieldset className="field">
-        <legend>版式</legend>
-        <div className="layout-grid-options" role="radiogroup" aria-label="版式">
+        <legend>{t.style.layout}</legend>
+        <div className="layout-grid-options" role="radiogroup" aria-label={t.style.layout}>
           {STYLES.map((style) => (
             <button
               key={style}
@@ -65,16 +60,16 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
                 <i />
                 <i />
               </span>
-              <strong>{STYLE_LABELS[style]}</strong>
-              <small>{LAYOUT_HINTS[style]}</small>
+              <strong>{t.options.styles[style]}</strong>
+              <small>{t.options.layoutHints[style]}</small>
             </button>
           ))}
         </div>
       </fieldset>
 
       <fieldset className="field">
-        <legend>纸张</legend>
-        <div className="swatch-group" role="radiogroup" aria-label="纸张">
+        <legend>{t.style.paper}</legend>
+        <div className="swatch-group" role="radiogroup" aria-label={t.style.paper}>
           {PAPERS.map((paper) => (
             <button
               key={paper.id}
@@ -84,20 +79,20 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
               className={`paper-swatch paper-${paper.id}${settings.paper === paper.id ? " is-active" : ""}`}
               style={{ "--paper": paper.base, "--paper-line": paper.lineColor } as CSSProperties}
               onClick={() => set({ paper: paper.id })}
-              title={paper.label}
+              title={t.options.papers[paper.id]}
             >
-              <span>{paper.label}</span>
+              <span>{t.options.papers[paper.id]}</span>
             </button>
           ))}
         </div>
       </fieldset>
 
       <label className="field">
-        <span>页面尺寸</span>
+        <span>{t.style.pageSize}</span>
         <select value={settings.pageSize} onChange={(e) => set({ pageSize: e.target.value as PageSizeId })}>
           {PAGE_SIZES.map((size) => (
             <option key={size.id} value={size.id}>
-              {size.label}
+              {t.options.pageSizes[size.id]}
             </option>
           ))}
         </select>
@@ -105,17 +100,17 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
 
       <div className="field-row">
         <label className="field">
-          <span>中文字体</span>
+          <span>{t.style.zhFont}</span>
           <select value={settings.zhFont} onChange={(e) => set({ zhFont: e.target.value as ZhFontId })}>
             {ZH_FONTS.map((font) => (
               <option key={font.id} value={font.id}>
-                {font.label} · {font.note}
+                {t.options.zhFonts[font.id]}
               </option>
             ))}
           </select>
         </label>
         <label className="field">
-          <span>英文字体</span>
+          <span>{t.style.enFont}</span>
           <select value={settings.enFont} onChange={(e) => set({ enFont: e.target.value as EnFontId })}>
             {EN_FONTS.map((font) => (
               <option key={font.id} value={font.id}>
@@ -126,10 +121,10 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
         </label>
       </div>
 
-      <Range label="字号" value={settings.fontSize} min={12} max={28} step={0.5} format={(v) => `${v}px`} onChange={(v) => set({ fontSize: v })} />
-      <Range label="行距" value={settings.lineHeight} min={1.3} max={2.4} step={0.05} format={(v) => v.toFixed(2)} onChange={(v) => set({ lineHeight: v })} />
+      <Range label={t.style.fontSize} value={settings.fontSize} min={12} max={28} step={0.5} format={(v) => `${v}px`} onChange={(v) => set({ fontSize: v })} />
+      <Range label={t.style.lineHeight} value={settings.lineHeight} min={1.3} max={2.4} step={0.05} format={(v) => v.toFixed(2)} onChange={(v) => set({ lineHeight: v })} />
       <Range
-        label="字距"
+        label={t.style.letterSpacing}
         value={settings.letterSpacing}
         min={-0.02}
         max={0.15}
@@ -139,8 +134,8 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
       />
 
       <fieldset className="field">
-        <legend>墨水</legend>
-        <div className="swatch-group" role="radiogroup" aria-label="墨水颜色">
+        <legend>{t.style.ink}</legend>
+        <div className="swatch-group" role="radiogroup" aria-label={t.style.inkLabel}>
           {INKS.map((ink) => (
             <button
               key={ink.id}
@@ -150,16 +145,16 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
               className={`color-swatch${settings.ink === ink.id ? " is-active" : ""}`}
               style={{ background: ink.color }}
               onClick={() => set({ ink: ink.id })}
-              title={ink.label}
-              aria-label={ink.label}
+              title={t.options.inks[ink.id]}
+              aria-label={t.options.inks[ink.id]}
             />
           ))}
         </div>
       </fieldset>
 
       <fieldset className="field">
-        <legend>荧光笔</legend>
-        <div className="swatch-group" role="radiogroup" aria-label="重点颜色">
+        <legend>{t.style.accent}</legend>
+        <div className="swatch-group" role="radiogroup" aria-label={t.style.accentLabel}>
           {ACCENTS.map((accent) => (
             <button
               key={accent.id}
@@ -169,15 +164,15 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
               className={`color-swatch${settings.accent === accent.id ? " is-active" : ""}`}
               style={{ background: accent.color }}
               onClick={() => set({ accent: accent.id })}
-              title={accent.label}
-              aria-label={accent.label}
+              title={t.options.accents[accent.id]}
+              aria-label={t.options.accents[accent.id]}
             />
           ))}
         </div>
       </fieldset>
 
       <Range
-        label="自然手写感"
+        label={t.style.naturalness}
         value={settings.naturalness}
         min={0}
         max={1}
@@ -186,27 +181,27 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
         onChange={(v) => set({ naturalness: v })}
       />
       <button type="button" className="btn btn-small btn-secondary" onClick={() => set({ seed: Math.floor(Math.random() * 100_000) })}>
-        换一种笔迹
+        {t.style.reseed}
       </button>
 
       <fieldset className="field">
-        <legend>插图</legend>
+        <legend>{t.style.doodle}</legend>
         <div className="field-row">
           <select
-            aria-label="插图来源"
+            aria-label={t.style.doodleSource}
             value={settings.doodleMode}
             onChange={(e) => set({ doodleMode: e.target.value as Settings["doodleMode"] })}
           >
-            <option value="auto">按笔记内容自动选择</option>
-            <option value="theme">指定内置插图</option>
-            {doodleEnabled || aiDoodle ? <option value="ai">AI 生成插图</option> : null}
-            <option value="none">不显示插图</option>
+            <option value="auto">{t.style.doodleModes.auto}</option>
+            <option value="theme">{t.style.doodleModes.theme}</option>
+            {doodleEnabled || aiDoodle ? <option value="ai">{t.style.doodleModes.ai}</option> : null}
+            <option value="none">{t.style.doodleModes.none}</option>
           </select>
           {settings.doodleMode === "theme" ? (
-            <select aria-label="内置插图" value={settings.doodleTheme} onChange={(e) => set({ doodleTheme: e.target.value as DoodleTheme })}>
+            <select aria-label={t.style.doodleTheme} value={settings.doodleTheme} onChange={(e) => set({ doodleTheme: e.target.value as DoodleTheme })}>
               {DOODLE_THEMES.map((theme) => (
                 <option key={theme} value={theme}>
-                  {DOODLE_THEME_LABELS[theme]}
+                  {t.options.doodleThemes[theme]}
                 </option>
               ))}
             </select>
@@ -214,13 +209,13 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
         </div>
         {settings.doodleMode === "ai" && doodleEnabled ? (
           <button type="button" className="btn btn-small btn-secondary" onClick={onRequestAiDoodle}>
-            {aiDoodle ? "重新生成 AI 插图" : "生成 AI 插图"}
+            {aiDoodle ? t.style.regenerateAiDoodle : t.style.generateAiDoodle}
           </button>
         ) : null}
       </fieldset>
 
       <button type="button" className="btn btn-link" onClick={resetSettings}>
-        恢复默认样式
+        {t.style.reset}
       </button>
     </div>
   );

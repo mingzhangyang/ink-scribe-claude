@@ -23,7 +23,8 @@ const pngSize = (file) => {
 const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {});
 
 async function newPage(options = {}, init) {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, ...options });
+  // 界面语言按浏览器首选语言选择；除专门测试英文界面的用例外，都以中文浏览器运行
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, locale: "zh-CN", ...options });
   if (init) await context.addInitScript(init);
   const page = await context.newPage();
   page.errors = [];
@@ -574,12 +575,56 @@ if (process.env.E2E_API_KEY) {
   await c8.close();
 }
 
-// ---------- Q. 移动端 ----------
+// ---------- T. 界面语言与外观主题 ----------
 {
-  const { page: p5, context: c5 } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const { page: p9, context: c9 } = await newPage({ locale: "en-US", colorScheme: "light" });
+  await p9.goto(URL, { waitUntil: "networkidle" });
+  const state = () =>
+    p9.evaluate(() => ({
+      lang: document.documentElement.lang,
+      theme: document.documentElement.dataset.theme,
+      brand: document.querySelector(".brand h1")?.textContent ?? "",
+      generate: document.querySelector(".input-panel .btn-primary")?.textContent ?? "",
+      title: document.querySelector(".note-title")?.textContent ?? "",
+      bg: getComputedStyle(document.body).backgroundColor,
+    }));
+  const en = await state();
+  check(
+    "T1",
+    "英文浏览器默认显示英文界面与英文示例笔记",
+    en.lang === "en" && en.brand === "InkScribe" && en.generate.includes("Turn into a handwritten note") && en.title.includes("Spaced Repetition"),
+    JSON.stringify(en),
+  );
+  check("T2", "系统为浅色时默认使用浅色主题", en.theme === "light" && en.bg !== "rgb(24, 24, 27)", `${en.theme} ${en.bg}`);
+
+  await p9.click(".pref-lang");
+  const zh = await state();
+  check("T3", "切换为中文界面，未修改的示例笔记随之切换", zh.lang === "zh-CN" && zh.brand === "墨语笔记" && zh.title.includes("深度工作"), JSON.stringify(zh));
+
+  // 跟随系统 → 浅色 → 深色
+  await p9.click(".pref-btn:not(.pref-lang)");
+  await p9.click(".pref-btn:not(.pref-lang)");
+  const dark = await state();
+  check("T4", "可手动切换为深色主题", dark.theme === "dark" && dark.bg === "rgb(24, 24, 27)", `${dark.theme} ${dark.bg}`);
+
+  await p9.reload({ waitUntil: "networkidle" });
+  const reloaded = await state();
+  check("T5", "语言与主题偏好在刷新后保留", reloaded.lang === "zh-CN" && reloaded.theme === "dark", JSON.stringify(reloaded));
+  check("T6", "切换语言与主题时无脚本错误", p9.errors.length === 0, p9.errors.join("; "));
+  await c9.close();
+
+  const { page: p10, context: c10 } = await newPage({ colorScheme: "dark" });
+  await p10.goto(URL, { waitUntil: "networkidle" });
+  check("T7", "系统为深色时默认使用深色主题", (await p10.evaluate(() => document.documentElement.dataset.theme)) === "dark");
+  await c10.close();
+}
+
+// ---------- Q. 移动端 ----------
+for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
+  const { page: p5, context: c5 } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, locale });
   await p5.goto(URL, { waitUntil: "networkidle" });
   const overflowX = await p5.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  check("Q1", "移动端（390px）无横向滚动", overflowX <= 0, `${overflowX}px`);
+  check(id, `移动端（390px，${locale}）无横向滚动`, overflowX <= 0, `${overflowX}px`);
   await c5.close();
 }
 

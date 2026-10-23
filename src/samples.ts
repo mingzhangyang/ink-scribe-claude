@@ -1,10 +1,11 @@
 import type { NoteStructure } from "../shared/note.ts";
 import type { Template } from "../shared/options.ts";
+import type { Locale } from "./state/preferences.ts";
 
-export const SAMPLE_TEXTS: Array<{ id: string; label: string; template: Template; text: string }> = [
+export const SAMPLE_TEXTS: Array<{ id: string; label: Record<Locale, string>; template: Template; text: string }> = [
   {
     id: "zh-reading",
-    label: "读书摘抄 ·《深度工作》",
+    label: { zh: "读书摘抄 ·《深度工作》", en: "Reading notes · Deep Work (Chinese)" },
     template: "reading-notes",
     text: `《深度工作》读书笔记
 
@@ -20,7 +21,7 @@ export const SAMPLE_TEXTS: Array<{ id: string; label: string; template: Template
   },
   {
     id: "zh-meeting",
-    label: "会议纪要 · 产品周会",
+    label: { zh: "会议纪要 · 产品周会", en: "Meeting minutes · product sync (Chinese)" },
     template: "meeting-minutes",
     text: `2024年5月20日 产品周会
 
@@ -40,7 +41,7 @@ export const SAMPLE_TEXTS: Array<{ id: string; label: string; template: Template
   },
   {
     id: "en-lecture",
-    label: "Lecture · Spaced Repetition",
+    label: { zh: "课程总结 · 间隔重复（英文）", en: "Lecture · Spaced Repetition" },
     template: "lecture-summary",
     text: `Lecture 4: How Memory Works — Spaced Repetition and Active Recall
 
@@ -85,4 +86,36 @@ export const SAMPLE_NOTE: NoteStructure = {
   summary: "与其追求“看起来很忙”，不如每天留出两段不被打扰的整块时间，把最重要的事情放进去。",
   doodlePrompt: "一盏亮着的台灯照在摊开的书上",
   doodleTheme: "lightbulb",
+};
+
+/** 英文界面首次打开时展示的示例笔记。 */
+export const SAMPLE_NOTE_EN: NoteStructure = {
+  title: "How Memory Works: Spaced Repetition",
+  date: "Lecture 4",
+  cues: [
+    { keyword: "Forgetting curve", note: "Ebbinghaus, 1885" },
+    { keyword: "Spaced repetition", note: "Review at growing intervals" },
+    { keyword: "Active recall", note: "Retrieve, don't re-read" },
+    { keyword: "Desirable difficulty", note: "Harder now, stronger later" },
+  ],
+  sections: [
+    {
+      heading: "Why we forget",
+      content: "Newly learned information decays fast: without review, we may forget more than half of it within a day.",
+      highlights: ["more than half"],
+    },
+    {
+      heading: "Spaced repetition",
+      content: "Schedule reviews at increasing intervals:\n- after 1 day\n- after 3 days\n- after 7 and 21 days\nEach successful review flattens the curve.",
+      highlights: ["increasing intervals"],
+    },
+    {
+      heading: "Active recall",
+      content: "Test yourself with flashcards or blank-page summaries instead of re-reading. It feels harder, but that is what builds long-term memory.",
+      highlights: ["Test yourself"],
+    },
+  ],
+  summary: "Use active recall as the review method and spaced repetition to decide when to review: short daily sessions beat one long cram.",
+  doodlePrompt: "a brain with a calendar of review dates",
+  doodleTheme: "brain",
 };

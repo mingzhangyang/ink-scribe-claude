@@ -1,5 +1,6 @@
 import { domToBlob } from "modern-screenshot";
 import { loadFontCss } from "../fonts.ts";
+import { getMessages } from "../i18n/index.ts";
 import { buildFontEmbedCss, ensureFontsLoaded } from "./fontEmbed.ts";
 import { effectiveScale } from "./scale.ts";
 
@@ -89,13 +90,13 @@ export type ClipboardSupport = { supported: true } | { supported: false; reason:
 
 export function clipboardSupport(): ClipboardSupport {
   if (typeof window === "undefined" || !window.isSecureContext) {
-    return { supported: false, reason: "复制图片需要 HTTPS 安全连接" };
+    return { supported: false, reason: getMessages().export.clipboardNeedsHttps };
   }
   if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
-    return { supported: false, reason: "当前浏览器不支持复制图片" };
+    return { supported: false, reason: getMessages().export.clipboardUnsupported };
   }
   if (typeof ClipboardItem.supports === "function" && !ClipboardItem.supports("image/png")) {
-    return { supported: false, reason: "当前浏览器不支持复制 PNG 图片" };
+    return { supported: false, reason: getMessages().export.clipboardNoPng };
   }
   return { supported: true };
 }

@@ -1,5 +1,6 @@
 import type { NoteCue, NoteSection, NoteStructure } from "../../shared/note.ts";
 import { NOTE_LIMITS } from "../../shared/note.ts";
+import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 
 function splitHighlights(value: string): string[] {
@@ -14,6 +15,7 @@ function splitHighlights(value: string): string[] {
 export function ContentEditor() {
   const note = useNoteStore((s) => s.note);
   const updateNote = useNoteStore((s) => s.updateNote);
+  const t = useT();
   if (!note) return null;
 
   const patch = (p: Partial<NoteStructure>) => updateNote((n) => ({ ...n, ...p }));
@@ -31,48 +33,48 @@ export function ContentEditor() {
   return (
     <div className="panel-body content-editor">
       <label className="field">
-        <span>标题</span>
+        <span>{t.content.title}</span>
         <input type="text" value={note.title} maxLength={NOTE_LIMITS.title} onChange={(e) => patch({ title: e.target.value })} />
       </label>
       <label className="field">
-        <span>日期</span>
+        <span>{t.content.date}</span>
         <input type="text" value={note.date ?? ""} maxLength={NOTE_LIMITS.date} onChange={(e) => patch({ date: e.target.value || undefined })} />
       </label>
 
       <fieldset className="field">
-        <legend>线索（{note.cues.length}/{NOTE_LIMITS.maxCues}）</legend>
+        <legend>{t.content.cues(note.cues.length, NOTE_LIMITS.maxCues)}</legend>
         {note.cues.map((cue, i) => (
           <div key={i} className="editor-row">
             <input
               type="text"
               value={cue.keyword}
               maxLength={NOTE_LIMITS.cueKeyword}
-              placeholder="关键词"
-              aria-label={`线索 ${i + 1} 关键词`}
+              placeholder={t.content.cueKeyword}
+              aria-label={t.content.cueKeywordLabel(i + 1)}
               onChange={(e) => patchCue(i, { keyword: e.target.value })}
             />
             <input
               type="text"
               value={cue.note}
               maxLength={NOTE_LIMITS.cueNote}
-              placeholder="提示"
-              aria-label={`线索 ${i + 1} 提示`}
+              placeholder={t.content.cueNote}
+              aria-label={t.content.cueNoteLabel(i + 1)}
               onChange={(e) => patchCue(i, { note: e.target.value })}
             />
-            <button type="button" className="icon-btn" aria-label={`删除线索 ${i + 1}`} onClick={() => patch({ cues: note.cues.filter((_, j) => j !== i) })}>
+            <button type="button" className="icon-btn" aria-label={t.content.removeCue(i + 1)} onClick={() => patch({ cues: note.cues.filter((_, j) => j !== i) })}>
               ×
             </button>
           </div>
         ))}
         {note.cues.length < NOTE_LIMITS.maxCues ? (
-          <button type="button" className="btn btn-link" onClick={() => patch({ cues: [...note.cues, { keyword: "新线索", note: "" }] })}>
-            + 添加线索
+          <button type="button" className="btn btn-link" onClick={() => patch({ cues: [...note.cues, { keyword: t.content.newCue, note: "" }] })}>
+            {t.content.addCue}
           </button>
         ) : null}
       </fieldset>
 
       <fieldset className="field">
-        <legend>段落（{note.sections.length}/{NOTE_LIMITS.maxSections}）</legend>
+        <legend>{t.content.sections(note.sections.length, NOTE_LIMITS.maxSections)}</legend>
         {note.sections.map((section, i) => {
           const missing = section.highlights.filter((h) => !section.content.toLowerCase().includes(h.toLowerCase()));
           return (
@@ -82,20 +84,20 @@ export function ContentEditor() {
                   type="text"
                   value={section.heading ?? ""}
                   maxLength={NOTE_LIMITS.heading}
-                  placeholder="小标题（可空）"
-                  aria-label={`段落 ${i + 1} 小标题`}
+                  placeholder={t.content.heading}
+                  aria-label={t.content.headingLabel(i + 1)}
                   onChange={(e) => patchSection(i, { heading: e.target.value || undefined })}
                 />
-                <button type="button" className="icon-btn" aria-label="上移段落" disabled={i === 0} onClick={() => moveSection(i, -1)}>
+                <button type="button" className="icon-btn" aria-label={t.content.moveUp} disabled={i === 0} onClick={() => moveSection(i, -1)}>
                   ↑
                 </button>
-                <button type="button" className="icon-btn" aria-label="下移段落" disabled={i === note.sections.length - 1} onClick={() => moveSection(i, 1)}>
+                <button type="button" className="icon-btn" aria-label={t.content.moveDown} disabled={i === note.sections.length - 1} onClick={() => moveSection(i, 1)}>
                   ↓
                 </button>
                 <button
                   type="button"
                   className="icon-btn"
-                  aria-label={`删除段落 ${i + 1}`}
+                  aria-label={t.content.removeSection(i + 1)}
                   disabled={note.sections.length <= 1}
                   onClick={() => patch({ sections: note.sections.filter((_, j) => j !== i) })}
                 >
@@ -106,18 +108,18 @@ export function ContentEditor() {
                 value={section.content}
                 rows={4}
                 maxLength={NOTE_LIMITS.content}
-                aria-label={`段落 ${i + 1} 正文`}
+                aria-label={t.content.bodyLabel(i + 1)}
                 onChange={(e) => patchSection(i, { content: e.target.value })}
               />
               <input
                 type="text"
                 defaultValue={section.highlights.join("；")}
                 key={`${i}-${section.highlights.join("|")}`}
-                placeholder="重点短语，用；分隔"
-                aria-label={`段落 ${i + 1} 重点短语`}
+                placeholder={t.content.highlights}
+                aria-label={t.content.highlightsLabel(i + 1)}
                 onBlur={(e) => patchSection(i, { highlights: splitHighlights(e.target.value) })}
               />
-              {missing.length > 0 ? <p className="hint is-warn">未在正文中找到：{missing.join("、")}</p> : null}
+              {missing.length > 0 ? <p className="hint is-warn">{t.content.missing(missing)}</p> : null}
             </div>
           );
         })}
@@ -125,15 +127,15 @@ export function ContentEditor() {
           <button
             type="button"
             className="btn btn-link"
-            onClick={() => patch({ sections: [...note.sections, { heading: "新段落", content: "在这里写下内容。", highlights: [] }] })}
+            onClick={() => patch({ sections: [...note.sections, { heading: t.content.newSectionHeading, content: t.content.newSectionContent, highlights: [] }] })}
           >
-            + 添加段落
+            {t.content.addSection}
           </button>
         ) : null}
       </fieldset>
 
       <label className="field">
-        <span>总结</span>
+        <span>{t.content.summary}</span>
         <textarea value={note.summary} rows={3} maxLength={NOTE_LIMITS.summary} onChange={(e) => patch({ summary: e.target.value })} />
       </label>
     </div>

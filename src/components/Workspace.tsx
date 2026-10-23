@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { PAGE_WIDTH } from "../config/appearance.ts";
+import { errorMessage, useT } from "../i18n/index.ts";
 import { generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
-
-const ERROR_HINTS: Record<string, string> = {
-  AI_TIMEOUT: "可以尝试把“详略”调为精简，或缩短原文。",
-  AI_OUTPUT_INVALID: "模型这次没有给出合规的结构，重试通常可以解决。",
-  AI_RATE_LIMITED: "AI 额度暂时用尽，可以先使用本地快速排版。",
-  AI_UNAVAILABLE: "AI 服务暂时不可用，可以先使用本地快速排版。",
-  RATE_LIMITED: "请求过于频繁，请稍等一分钟。",
-  NETWORK_ERROR: "请检查网络连接。",
-};
 
 function measureOverflow(page: HTMLElement | null): boolean {
   if (!page || page.classList.contains("is-long")) return false;
@@ -39,6 +31,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
   const setSettings = useNoteStore((s) => s.setSettings);
   const clearError = useNoteStore((s) => s.clearError);
   const hasInput = useNoteStore((s) => s.input.text.trim().length > 0);
+  const t = useT();
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: PAGE_WIDTH, height: 1200 });
@@ -115,26 +108,26 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
   if (!note) return null;
 
   return (
-    <section className="workspace" aria-label="笔记画布">
+    <section className="workspace" aria-label={t.workspace.label}>
       <div className="workspace-toolbar">
         <div className="workspace-status">
-          {source === "sample" ? <span className="badge">示例笔记</span> : null}
-          {source === "local" ? <span className="badge badge-muted">本地快速排版</span> : null}
-          {source === "shared" ? <span className="badge badge-muted">来自已发布的笔记</span> : null}
+          {source === "sample" ? <span className="badge">{t.workspace.sample}</span> : null}
+          {source === "local" ? <span className="badge badge-muted">{t.workspace.local}</span> : null}
+          {source === "shared" ? <span className="badge badge-muted">{t.workspace.shared}</span> : null}
           {source === "ai" && meta ? (
-            <span className="badge badge-ai" title={`模型：${meta.model}`}>
-              {meta.mock ? "演示模式（未调用 AI）" : `AI 整理 · ${(meta.latencyMs / 1000).toFixed(1)}s`}
+            <span className="badge badge-ai" title={t.workspace.model(meta.model)}>
+              {meta.mock ? t.workspace.mock : t.workspace.ai((meta.latencyMs / 1000).toFixed(1))}
             </span>
           ) : null}
         </div>
-        <div className="zoom-controls" role="group" aria-label="缩放">
-          <button type="button" className="icon-btn" onClick={() => setZoom(Math.max(0.3, Math.round((scale - 0.1) * 10) / 10))} aria-label="缩小">
+        <div className="zoom-controls" role="group" aria-label={t.workspace.zoom}>
+          <button type="button" className="icon-btn" onClick={() => setZoom(Math.max(0.3, Math.round((scale - 0.1) * 10) / 10))} aria-label={t.workspace.zoomOut}>
             −
           </button>
-          <button type="button" className="zoom-value" onClick={() => setZoom(null)} title="适应宽度">
+          <button type="button" className="zoom-value" onClick={() => setZoom(null)} title={t.workspace.fitWidth}>
             {Math.round(scale * 100)}%
           </button>
-          <button type="button" className="icon-btn" onClick={() => setZoom(Math.min(1.6, Math.round((scale + 0.1) * 10) / 10))} aria-label="放大">
+          <button type="button" className="icon-btn" onClick={() => setZoom(Math.min(1.6, Math.round((scale + 0.1) * 10) / 10))} aria-label={t.workspace.zoomIn}>
             +
           </button>
         </div>
@@ -143,21 +136,21 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
       {error ? (
         <div className="alert alert-error" role="alert">
           <div>
-            <strong>{error.message}</strong>
-            {ERROR_HINTS[error.code] ? <p>{ERROR_HINTS[error.code]}</p> : null}
+            <strong>{errorMessage(t, error)}</strong>
+            {t.workspace.errorHints[error.code] ? <p>{t.workspace.errorHints[error.code]}</p> : null}
             <small>
-              错误码 {error.code}
-              {error.requestId ? ` · 请求 ${error.requestId}` : ""}
+              {t.workspace.errorCode(error.code)}
+              {error.requestId ? t.workspace.requestId(error.requestId) : ""}
             </small>
           </div>
           <div className="alert-actions">
             <button type="button" className="btn btn-small" onClick={() => void generateNote()}>
-              重试
+              {t.workspace.retry}
             </button>
             <button type="button" className="btn btn-small btn-secondary" onClick={generateLocally}>
-              本地快速排版
+              {t.workspace.localFallback}
             </button>
-            <button type="button" className="icon-btn" onClick={clearError} aria-label="关闭提示">
+            <button type="button" className="icon-btn" onClick={clearError} aria-label={t.workspace.dismiss}>
               ×
             </button>
           </div>
@@ -166,17 +159,17 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
 
       {overflow && fixedHeight ? (
         <div className="alert alert-warn" role="status">
-          <span>内容超出了页面，部分文字被裁切。</span>
+          <span>{t.workspace.overflow}</span>
           <div className="alert-actions">
             <button type="button" className="btn btn-small" disabled={fitting} onClick={() => void autoFit()}>
-              {fitting ? "适配中…" : "自动缩小字号"}
+              {fitting ? t.workspace.fitting : t.workspace.autoFit}
             </button>
             <button type="button" className="btn btn-small btn-secondary" onClick={() => setSettings({ pageSize: "long" })}>
-              改为长图
+              {t.workspace.toLong}
             </button>
             {canCondense ? (
-              <button type="button" className="btn btn-small btn-secondary" onClick={condense} title="以“精简”详略重新整理原文">
-                精简后重新生成
+              <button type="button" className="btn btn-small btn-secondary" onClick={condense} title={t.workspace.condenseTitle}>
+                {t.workspace.condense}
               </button>
             ) : null}
           </div>
@@ -206,7 +199,7 @@ export function Workspace({ pageRef }: { pageRef: RefObject<HTMLDivElement | nul
                 <span className="loading-pen" aria-hidden="true">
                   ✍️
                 </span>
-                <span>AI 正在阅读并整理你的文字…</span>
+                <span>{t.workspace.loading}</span>
               </div>
             </div>
           ) : null}

@@ -7,32 +7,33 @@ import { InputPanel } from "../components/InputPanel.tsx";
 import { StickerPanel } from "../components/StickerPanel.tsx";
 import { StylePanel } from "../components/StylePanel.tsx";
 import { Workspace } from "../components/Workspace.tsx";
-import { SAMPLE_NOTE } from "../samples.ts";
+import { errorMessage, useT } from "../i18n/index.ts";
+import { SAMPLE_NOTE, SAMPLE_NOTE_EN } from "../samples.ts";
+import { usePreferences } from "../state/preferences.ts";
 import { useNoteStore } from "../state/store.ts";
 
-const TABS = [
-  { id: "style", label: "样式" },
-  { id: "stickers", label: "贴纸" },
-  { id: "content", label: "内容" },
-  { id: "export", label: "导出" },
-] as const;
-type TabId = (typeof TABS)[number]["id"];
+const TABS = ["style", "stickers", "content", "export"] as const;
+type TabId = (typeof TABS)[number];
 
 export function EditorPage({ config, onToast }: { config: PublicConfig; onToast: (message: string) => void }) {
   const pageRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TabId>("style");
   const hasNote = useNoteStore((s) => s.note !== null);
+  const locale = usePreferences((s) => s.locale);
+  const t = useT();
 
   useEffect(() => {
+    // 首次打开时展示与界面语言一致的示例笔记；切换语言时，未经修改的示例笔记跟着切换
     const { note, setResult } = useNoteStore.getState();
-    if (!note) setResult(SAMPLE_NOTE, null, "sample");
-  }, []);
+    const sample = locale === "en" ? SAMPLE_NOTE_EN : SAMPLE_NOTE;
+    if (!note || (note !== sample && (note === SAMPLE_NOTE || note === SAMPLE_NOTE_EN))) setResult(sample, null, "sample");
+  }, [locale]);
 
   async function requestMainDoodle() {
     const { note, noteSerial } = useNoteStore.getState();
     const concept = (note?.doodlePrompt || note?.title || "").slice(0, 80);
     if (!concept) return;
-    onToast("AI 正在绘制插图…");
+    onToast(t.editor.doodleDrawing);
     try {
       const result = await generateDoodle(concept);
       // 等待期间用户可能已生成或载入了另一条笔记，此时丢弃结果
@@ -40,9 +41,9 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
       // 等待期间用户可能改选了“不显示插图”或内置主题，不能用结果覆盖新的选择
       if (useNoteStore.getState().settings.doodleMode !== "ai") return;
       useNoteStore.getState().setAiDoodle(result.doodle);
-      onToast("插图已更新");
+      onToast(t.editor.doodleUpdated);
     } catch (error) {
-      onToast(error instanceof ApiRequestError ? error.detail.message : "插图生成失败");
+      onToast(error instanceof ApiRequestError ? errorMessage(t, error.detail) : t.editor.doodleFailed);
     }
   }
 
@@ -50,20 +51,20 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
     <main className="app-main">
       <InputPanel maxChars={config.maxInputChars} />
       {hasNote ? <Workspace pageRef={pageRef} /> : <section className="workspace" />}
-      <aside className="panel side-panel" aria-label="编辑面板">
+      <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
         <div className="tabs" role="tablist">
-          {TABS.map((t) => (
+          {TABS.map((id) => (
             <button
-              key={t.id}
+              key={id}
               type="button"
               role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={tab === t.id}
-              aria-controls={`tabpanel-${t.id}`}
-              className={`tab${tab === t.id ? " is-active" : ""}`}
-              onClick={() => setTab(t.id)}
+              id={`tab-${id}`}
+              aria-selected={tab === id}
+              aria-controls={`tabpanel-${id}`}
+              className={`tab${tab === id ? " is-active" : ""}`}
+              onClick={() => setTab(id)}
             >
-              {t.label}
+              {t.editor.tabs[id]}
             </button>
           ))}
         </div>

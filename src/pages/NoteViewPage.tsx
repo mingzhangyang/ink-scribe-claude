@@ -1,15 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { TEMPLATE_LABELS, isOneOf, TEMPLATES } from "../../shared/options.ts";
+import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.ts";
 import { NotePage } from "../components/note/NotePage.tsx";
 import { byId, PAGE_WIDTH, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
+import { errorMessage, useT } from "../i18n/index.ts";
 import { linkProps, navigate } from "../router.ts";
-import { useNoteStore } from "../state/store.ts";
+import { useNoteStore, type RequestError } from "../state/store.ts";
 
 const noop = () => {};
 
-type State = { kind: "loading" } | { kind: "error"; code: string; message: string } | { kind: "ready"; data: ViewableNote };
+type State = { kind: "loading" } | { kind: "error"; code: string; message?: string } | { kind: "ready"; data: ViewableNote };
 
 /** 已发布笔记的只读查看页：可复制链接、下载图片，或载入编辑器继续修改。 */
 export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: string) => void }) {
@@ -20,6 +21,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   const [pageHeight, setPageHeight] = useState(1188);
   const [exporting, setExporting] = useState(false);
   const loadShared = useNoteStore((s) => s.loadShared);
+  const t = useT();
 
   useEffect(() => {
     let cancelled = false;
@@ -28,8 +30,8 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
       .then((data) => !cancelled && setState({ kind: "ready", data }))
       .catch((error: unknown) => {
         if (cancelled) return;
-        const detail = error instanceof ApiRequestError ? error.detail : { code: "INTERNAL_ERROR", message: "加载失败，请稍后重试。" };
-        setState({ kind: "error", code: detail.code, message: detail.code === "NOT_FOUND" ? "这条笔记不存在或已被删除。" : detail.message });
+        // 文案在渲染时按当前界面语言生成，切换语言后提示也随之切换
+        setState(error instanceof ApiRequestError ? { kind: "error", ...error.detail } : { kind: "error", code: "INTERNAL_ERROR" });
       });
     return () => {
       cancelled = true;
@@ -38,8 +40,8 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
 
   useEffect(() => {
     if (state.kind !== "ready") return;
-    document.title = `${state.data.note.title} · 墨语笔记`;
-  }, [state]);
+    document.title = t.view.documentTitle(state.data.note.title);
+  }, [state, t]);
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -56,7 +58,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   if (state.kind === "loading") {
     return (
       <main className="page-center">
-        <p className="hint">正在加载笔记…</p>
+        <p className="hint">{t.view.loading}</p>
       </main>
     );
   }
@@ -64,9 +66,15 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
     return (
       <main className="page-center">
         <div className="empty-state">
-          <h2>{state.message}</h2>
+          <h2>
+            {state.code === "NOT_FOUND"
+              ? t.view.notFound
+              : state.message
+                ? errorMessage(t, { code: state.code as RequestError["code"], message: state.message })
+                : t.view.loadFailed}
+          </h2>
           <a className="btn btn-secondary" {...linkProps("/gallery")}>
-            去图库看看
+            {t.view.toGallery}
           </a>
         </div>
       </main>
@@ -103,7 +111,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
       });
       downloadBlob(blob, fileNameFor(data.note.title, "png"));
     } catch {
-      onToast("导出失败，请稍后重试");
+      onToast(t.view.exportFailed);
     } finally {
       setExporting(false);
     }
@@ -112,9 +120,9 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(location.href.split("?")[0]);
-      onToast("链接已复制");
+      onToast(t.view.linkCopied);
     } catch {
-      onToast("无法访问剪贴板，请手动复制地址栏中的链接");
+      onToast(t.view.linkFailed);
     }
   }
 
@@ -129,20 +137,20 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
         <div className="view-meta">
           <h2>{data.note.title}</h2>
           <p className="hint">
-            {isOneOf(TEMPLATES, data.summary.template) ? TEMPLATE_LABELS[data.summary.template] : "笔记"}
+            {isOneOf(TEMPLATES, data.summary.template) ? t.options.templates[data.summary.template] : t.view.note}
             {data.note.date ? ` · ${data.note.date}` : ""}
-            {data.summary.visibility === "unlisted" ? " · 仅持有链接可见" : ""}
+            {data.summary.visibility === "unlisted" ? t.view.unlisted : ""}
           </p>
         </div>
         <div className="button-row">
           <button type="button" className="btn btn-small btn-secondary" onClick={() => void copyLink()}>
-            复制链接
+            {t.view.copyLink}
           </button>
           <button type="button" className="btn btn-small btn-secondary" disabled={exporting} onClick={() => void download()}>
-            {exporting ? "正在导出…" : "下载图片"}
+            {exporting ? t.view.exporting : t.view.download}
           </button>
           <button type="button" className="btn btn-small" onClick={openInEditor}>
-            在编辑器中打开
+            {t.view.openInEditor}
           </button>
         </div>
       </div>
