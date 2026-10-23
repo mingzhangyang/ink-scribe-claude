@@ -41,6 +41,8 @@ export type StickerItem = {
   variant?: string;
   /** AI 生成的插图（已校验的受限图元）。 */
   doodle?: DoodleSpec;
+  /** 水平镜像，让箭头、交通工具等朝向另一边；缺省为不翻转。 */
+  flip?: boolean;
 };
 
 export const STICKER_LABELS: Record<StickerType, string> = {
@@ -661,6 +663,7 @@ export function normalizeStickers(input: unknown): StickerItem[] {
       scale: Math.round(num(r.scale, 0.3, 3, 1) * 100) / 100,
     };
     seen.add(item.id);
+    if (r.flip === true) item.flip = true;
     if (type === "custom-doodle") {
       if (typeof r.variant === "string" && isDoodleTheme(r.variant)) item.variant = r.variant;
       const doodle = normalizeDoodleSpec(r.doodle);

@@ -58,7 +58,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       steps: [
         { title: "放入你的内容", body: "点击右上角的“撰写”（手机上在屏幕底部），粘贴文章、读书摘抄、会议记录或零散想法；也可以上传或拖入 TXT、Markdown、HTML、DOCX、PDF 文件，文字在浏览器中提取。" },
         { title: "整理成清晰的结构", body: "选择模板、输出语言与详略，点击“转化为手写笔记”。AI 会整理标题、关键词、分节要点与总结；“不使用 AI，按段落快速排版”则使用现有段落，不调用 AI。" },
-        { title: "修改内容，调整外观", body: "在“内容”中校对正文和重点词，在“样式”中选择版式、纸张、手写字体与墨水。还可以在“贴纸”中按分类添加贴纸、更换颜色与款式，再拖动、旋转或缩放它们。" },
+        { title: "修改内容，调整外观", body: "在“内容”中校对正文和重点词，在“样式”中选择版式、纸张、手写字体与墨水。还可以在“贴纸”中按分类或搜索添加贴纸、更换颜色与款式，再拖动、旋转、缩放或水平翻转它们。" },
         { title: "导出，发给你想分享的人", body: "在“导出”中选择 PNG 或 JPG 和 1x、2x、3x 倍率，下载图片；浏览器支持时也可复制到剪贴板。等待字体与排版就绪，长内容默认会展开为长图。" },
       ],
       notes: [
@@ -142,7 +142,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       steps: [
         { title: "Bring your content", body: "Select “Compose” at the top right (at the bottom of the screen on a phone), then paste an article, reading excerpt, meeting notes, or rough ideas. You can also upload or drop in TXT, Markdown, HTML, DOCX, or PDF files; their text is extracted in your browser." },
         { title: "Give it a clear structure", body: "Choose a template, output language, and detail level, then select “Turn into a handwritten note”. AI organizes the title, cues, sections, and summary. “Quick layout by paragraphs, without AI” uses your existing paragraphs." },
-        { title: "Edit the words and appearance", body: "Use “Content” to check the text and highlights, and “Style” to choose a layout, paper, handwriting font, and ink. Add stickers by category from “Stickers”, change their color or style, then drag, rotate, or resize them." },
+        { title: "Edit the words and appearance", body: "Use “Content” to check the text and highlights, and “Style” to choose a layout, paper, handwriting font, and ink. Add stickers by category or by search from “Stickers”, change their color or style, then drag, rotate, resize, or flip them." },
         { title: "Export and share", body: "In “Export”, choose PNG or JPG and a 1x, 2x, or 3x scale, then download the image. Supported browsers can also copy it to the clipboard. Wait for fonts and layout to finish; long content expands into a long page by default." },
       ],
       notes: [

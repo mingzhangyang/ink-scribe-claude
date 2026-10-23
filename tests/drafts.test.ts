@@ -8,14 +8,14 @@ const document: NoteDocument = {
   input: { text: "原文\n完整保留", template: "general", language: "auto", detail: "standard" },
   note: { title: "", cues: [{ keyword: "", note: "未完成" }], sections: [{ heading: "", content: "", highlights: ["待补正文"], highlightInput: "待补正文； " }], summary: "" },
   settings: { ...DEFAULT_SETTINGS, seed: 1234 },
-  stickers: [{ id: "sticker", type: "star", x: 17, y: 500, rotation: 31, scale: 1.2 }],
+  stickers: [{ id: "sticker", type: "star", x: 17, y: 500, rotation: 31, scale: 1.2, flip: true }],
   aiDoodle: null, source: "local",
 };
 
 beforeEach(() => { vi.stubGlobal("indexedDB", new IDBFactory()); });
 
 describe("local draft storage", () => {
-  it("round-trips unfinished editing fields, input, appearance and sticker geometry", async () => {
+  it("round-trips unfinished editing fields, input, appearance and sticker geometry including flips", async () => {
     const saved = await writeDraft(null, document, true);
     expect((await readDraft())?.document).toEqual(document);
     expect((await readDraft())?.revision).toBe(saved.revision);

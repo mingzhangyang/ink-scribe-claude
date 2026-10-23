@@ -170,7 +170,7 @@ export function StickerLayer({
         return (
           <div
             key={item.id}
-            className={`sticker sticker-${item.type}${selected ? " is-selected" : ""}${interactive ? " is-interactive" : ""}`}
+            className={`sticker sticker-${item.type}${item.flip ? " is-flipped" : ""}${selected ? " is-selected" : ""}${interactive ? " is-interactive" : ""}`}
             style={boxStyle(item)}
             role={interactive ? "button" : undefined}
             aria-label={interactive ? t.stickers.itemLabel(t.options.stickers[item.type]) : undefined}

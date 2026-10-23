@@ -1024,6 +1024,28 @@ input[type="range"] {
   hyphens: auto;
 }
 
+.sticker-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sticker-recent-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sticker-option.is-compact {
+  padding: 3px;
+}
+
+.sticker-option.is-compact .sticker-option-art svg {
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+}
+
 /* 预留一行高度：选中或取消选中贴纸时，下面的插图库不会上下跳动 */
 .sticker-variants {
   display: flex;

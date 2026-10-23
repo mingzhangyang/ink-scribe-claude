@@ -28,12 +28,18 @@ type State = {
   stickerCategory: StickerCategory;
   /** 每种装饰贴纸上次选用的颜色或款式，新添加的同类贴纸沿用它 */
   stickerVariants: Partial<Record<DecorStickerType, string>>;
+  /** 最近添加过的装饰贴纸，最新的在前 */
+  recentStickers: DecorStickerType[];
   setLocale: (locale: Locale) => void;
   setTheme: (theme: ThemePreference) => void;
   dismissLongPageNotice: () => void;
   setStickerCategory: (category: StickerCategory) => void;
   rememberStickerVariant: (type: DecorStickerType, variant: string) => void;
+  rememberRecentSticker: (type: DecorStickerType) => void;
 };
+
+/** 贴纸面板“最近使用”一行最多显示的数量 */
+export const RECENT_STICKER_LIMIT = 6;
 
 /** 只保留仍然存在的贴纸类型与变体，旧版本或手动改过的存储不会让面板选中无效的款式。 */
 function knownStickerVariants(value: unknown): Partial<Record<DecorStickerType, string>> {
@@ -51,11 +57,14 @@ export const usePreferences = create<State>()(
       longPageNoticeDismissed: false,
       stickerCategory: STICKER_CATEGORIES[0],
       stickerVariants: {},
+      recentStickers: [],
       setLocale: (locale) => set({ locale }),
       setTheme: (theme) => set({ theme }),
       dismissLongPageNotice: () => set({ longPageNoticeDismissed: true }),
       setStickerCategory: (stickerCategory) => set({ stickerCategory }),
       rememberStickerVariant: (type, variant) => set((s) => ({ stickerVariants: { ...s.stickerVariants, [type]: variant } })),
+      rememberRecentSticker: (type) =>
+        set((s) => ({ recentStickers: [type, ...s.recentStickers.filter((t) => t !== type)].slice(0, RECENT_STICKER_LIMIT) })),
     }),
     {
       name: PREFERENCES_KEY,
@@ -66,10 +75,11 @@ export const usePreferences = create<State>()(
         longPageNoticeDismissed: state.longPageNoticeDismissed,
         stickerCategory: state.stickerCategory,
         stickerVariants: state.stickerVariants,
+        recentStickers: state.recentStickers,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<
-          Record<"locale" | "theme" | "longPageNoticeDismissed" | "stickerCategory" | "stickerVariants", unknown>
+          Record<"locale" | "theme" | "longPageNoticeDismissed" | "stickerCategory" | "stickerVariants" | "recentStickers", unknown>
         >;
         return {
           ...current,
@@ -80,6 +90,9 @@ export const usePreferences = create<State>()(
             ? (p.stickerCategory as StickerCategory)
             : current.stickerCategory,
           stickerVariants: knownStickerVariants(p.stickerVariants),
+          recentStickers: Array.isArray(p.recentStickers)
+            ? [...new Set(p.recentStickers.filter((t): t is DecorStickerType => typeof t === "string" && isDecorStickerType(t)))].slice(0, RECENT_STICKER_LIMIT)
+            : [],
         };
       },
     },

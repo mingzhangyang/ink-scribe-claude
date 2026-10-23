@@ -188,6 +188,15 @@ describe("normalizeStickers", () => {
     expect(sticker.y).toBe(5000);
   });
 
+  it("keeps a horizontal flip only when it is true", () => {
+    const stickers = normalizeStickers([
+      { id: "a", type: "arrow", x: 1, y: 1, flip: true },
+      { id: "b", type: "arrow", x: 1, y: 1, flip: "yes" },
+      { id: "c", type: "arrow", x: 1, y: 1, flip: false },
+    ]);
+    expect(stickers.map((s) => s.flip)).toEqual([true, undefined, undefined]);
+  });
+
   it("keeps the newer sticker types with their own variants and drops variants of other types", () => {
     const stickers = normalizeStickers([
       { id: "flower", type: "pressed-flower", x: 10, y: 10, variant: "ginkgo" },
@@ -228,6 +237,8 @@ describe("sticker catalog", () => {
     const sticker = { id: "s1", type: "wavy-underline", x: 40, y: 50, rotation: 0, scale: 1 };
     expect(validatePublishedStickers([{ ...sticker, variant: "blue" }]).ok).toBe(true);
     expect(validatePublishedStickers([{ ...sticker, variant: "lavender" }]).ok).toBe(false);
+    expect(validatePublishedStickers([{ ...sticker, flip: true }]).ok).toBe(true);
+    expect(validatePublishedStickers([{ ...sticker, flip: "yes" }]).ok).toBe(false);
   });
 });
 

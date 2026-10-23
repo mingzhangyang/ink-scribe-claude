@@ -6,7 +6,7 @@ import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
 import { verifyFontRetry } from "./font-retry.mjs";
 import { closeInput, fillSource, openInput } from "./input.mjs";
-import { addDecorSticker } from "./stickers.mjs";
+import { addDecorSticker, paletteTile } from "./stickers.mjs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
 const URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173/";
@@ -1734,9 +1734,65 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.getByRole("tab", { name: "贴纸", exact: true }).click();
   const category = (await page.getByRole("radiogroup", { name: "贴纸分类" }).locator("[aria-checked=true]").innerText()).trim();
   // 遍历结束时停在最后一个分类“宇宙”；宇航员的款式依次点过，最后选的是“墨线”
-  await page.getByRole("button", { name: "添加贴纸：宇航员", exact: true }).click();
+  await paletteTile(page, "宇航员").click();
   const variant = (await page.locator(".sticker-variants [aria-checked=true]").innerText()).trim();
   check("G10", "刷新后保留上次的贴纸分类，新贴纸沿用这类贴纸上次选择的款式", category === "宇宙" && variant === "墨线", JSON.stringify({ category, variant }));
+
+  // 搜索：中文名、英文名与款式名都能找到，Esc 清除后回到分类
+  const search = page.getByRole("searchbox", { name: "搜索装饰贴纸" });
+  const found = async (text) => {
+    await search.fill(text);
+    return page.locator(".sticker-palette .sticker-option").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label").replace("添加贴纸：", "")));
+  };
+  const byName = await found("火箭");
+  const byEnglish = await found("Rocket");
+  const byLetters = await found("dna");
+  const byVariant = await found("薄荷");
+  // 按款式名搜到的贴纸直接用那个款式
+  await paletteTile(page, "长尾夹").click();
+  const searchedVariant = (await page.locator(".sticker-variants [aria-checked=true]").innerText()).trim();
+  const none = await found("没有这种贴纸");
+  const emptyHint = await page.getByRole("status").filter({ hasText: "没有匹配的贴纸" }).count();
+  await search.press("Escape");
+  const cleared = (await search.inputValue()) === "" && (await page.getByRole("radiogroup", { name: "贴纸分类" }).count()) === 1;
+  check(
+    "G11",
+    "搜索贴纸：中文名、英文名与款式名都能找到，按款式名搜到的直接用那个款式，无结果时提示，Esc 清除",
+    JSON.stringify(byName) === '["火箭"]' && JSON.stringify(byEnglish) === '["火箭"]' && JSON.stringify(byLetters) === '["DNA 双螺旋"]' &&
+      byVariant.includes("和纸胶带") && byVariant.includes("长尾夹") && searchedVariant === "薄荷" && none.length === 0 && emptyHint === 1 && cleared,
+    JSON.stringify({ byName, byEnglish, byLetters, byVariant, searchedVariant, none, emptyHint, cleared }),
+  );
+
+  // 最近使用：最新添加的在前，最多 6 个，点一下就再添加一张
+  const recent = await page.locator(".sticker-recent-grid .sticker-option").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label").replace("添加贴纸：", "")));
+  const beforeRecent = await page.locator(".sticker").count();
+  await page.locator(".sticker-recent-grid .sticker-option").nth(1).click();
+  const afterRecent = await page.locator(".sticker").count();
+  check(
+    "G12",
+    "最近使用的贴纸按添加顺序显示（最多 6 个），点击即可再次添加",
+    JSON.stringify(recent) === JSON.stringify(["长尾夹", "宇航员", "北斗七星", "黑洞", "螺旋星系", "彗星"]) && afterRecent === beforeRecent + 1,
+    JSON.stringify({ recent, beforeRecent, afterRecent }),
+  );
+
+  // 水平翻转：只镜像贴纸图形，选框不翻转；再点一次恢复
+  const flipButton = page.getByRole("button", { name: "水平翻转", exact: true });
+  await flipButton.click();
+  const flipped = await page.locator(".sticker.is-selected").evaluate((el) => ({
+    cls: el.classList.contains("is-flipped"),
+    art: getComputedStyle(el.firstElementChild).transform,
+    frame: document.querySelector(".sticker-selection").style.transform,
+    box: el.style.transform,
+  }));
+  const pressed = await flipButton.getAttribute("aria-pressed");
+  await flipButton.click();
+  const restored = await page.locator(".sticker.is-selected").evaluate((el) => !el.classList.contains("is-flipped"));
+  check(
+    "G13",
+    "水平翻转只镜像贴纸图形，选框与手柄不翻转，可以恢复",
+    flipped.cls && flipped.art === "matrix(-1, 0, 0, 1, 0, 0)" && flipped.frame === flipped.box && pressed === "true" && restored,
+    JSON.stringify({ ...flipped, pressed, restored }),
+  );
   await context.close();
 }
 

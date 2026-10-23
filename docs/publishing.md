@@ -70,7 +70,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `note` | 是 | 完整 `NoteStructure`：`title`、`cues`、`sections`、`summary`；每个段落包含 `content` 与 `highlights` |
 | `template` | 否 | 整理类型标签，默认 `general`；不会触发生成 |
 | `appearance` | 否 | 版式、纸张、字体、字号、溢出策略等；未传字段使用默认值 |
-| `stickers` | 否 | 符合契约的贴纸数组；每项包含唯一 `id`、`type`、`x`、`y`、`rotation`、`scale`，完整取值见 OpenAPI |
+| `stickers` | 否 | 符合契约的贴纸数组；每项包含唯一 `id`、`type`、`x`、`y`、`rotation`、`scale`，可选 `variant`（颜色或款式）与 `flip`（水平翻转），完整取值见 OpenAPI |
 | `visibility` | 否 | `unlisted`（默认）；`public` 需要密钥，免密钥请求返回 `422 ANONYMOUS_UNLISTED_ONLY` |
 | `Idempotency-Key` 头 | 建议 | 同一键、同一请求重试返回原作品；不同内容不能复用该键 |
 
