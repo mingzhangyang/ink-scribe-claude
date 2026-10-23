@@ -137,6 +137,7 @@ export const en: Messages = {
       strawberry: "Strawberry",
       mango: "Mango",
       watermelon: "Watermelon",
+      grape: "Grapes",
     },
     stickerVariants: {
       tape: { yellow: "Lemon", mint: "Mint", pink: "Sakura", blue: "Mist blue", kraft: "Kraft", dots: "Polka dots", checks: "Gingham", stripes: "Stripes" },
@@ -178,6 +179,7 @@ export const en: Messages = {
       strawberry: { whole: "Whole", half: "Halved" },
       mango: { ripe: "Ripe", green: "Green" },
       watermelon: { slice: "Slice", whole: "Whole" },
+      grape: { purple: "Purple", green: "Green" },
     },
     stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit" },
     fileKinds: { text: "text", html: "web page", docx: "Word", pdf: "PDF" },

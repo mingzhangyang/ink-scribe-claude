@@ -4,7 +4,7 @@ import { builtinDoodle } from "../doodles/library.ts";
 import { hashString } from "../lib/random.ts";
 import { paint, type ArtProps } from "./art/common.tsx";
 import { BinderClip, MaskingTape, Paperclip, PhotoCorner, PushPin, Staple, Tape } from "./art/fasten.tsx";
-import { Apple, Banana, Mango, Orange, Strawberry, Watermelon } from "./art/fruit.tsx";
+import { Apple, Banana, Grape, Mango, Orange, Strawberry, Watermelon } from "./art/fruit.tsx";
 import { Arrow, Bracket, Check, CircleMark, Cross, Exclaim, Question, WavyUnderline } from "./art/marks.tsx";
 import { Face, Heart, PressedFlower, Sparkles, Star } from "./art/mood.tsx";
 import { DogEar, KraftTag, PageFlag, PostageStamp, RibbonBookmark, StickyNote, TicketStub, TornPaper } from "./art/paper.tsx";
@@ -51,6 +51,7 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   strawberry: Strawberry,
   mango: Mango,
   watermelon: Watermelon,
+  grape: Grape,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };

@@ -9,7 +9,7 @@ export const STICKER_TYPES = [
   "arrow", "circle-mark", "wavy-underline", "bracket", "check", "cross", "exclaim", "question",
   "seal", "postmark", "ink-blot", "paw-print",
   "sparkles", "heart", "face", "pressed-flower",
-  "orange", "apple", "banana", "strawberry", "mango", "watermelon",
+  "orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -73,6 +73,7 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   strawberry: "草莓",
   mango: "芒果",
   watermelon: "西瓜",
+  grape: "葡萄",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
@@ -94,7 +95,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   marks: ["arrow", "circle-mark", "wavy-underline", "bracket", "check", "cross", "exclaim", "question"],
   stamps: ["seal", "postmark", "ink-blot", "coffee-stain", "paw-print"],
   mood: ["star", "sparkles", "heart", "face", "pressed-flower"],
-  fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon"],
+  fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape"],
 };
 
 export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
@@ -138,6 +139,7 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   strawberry: { w: 60, h: 70 },
   mango: { w: 84, h: 64 },
   watermelon: { w: 96, h: 72 },
+  grape: { w: 64, h: 72 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -328,6 +330,10 @@ export const STICKER_VARIANTS = {
   watermelon: [
     { id: "slice", label: "瓜片", color: "#EF4444" },
     { id: "whole", label: "整个", color: "#16A34A" },
+  ],
+  grape: [
+    { id: "purple", label: "紫葡萄", color: "#7C3AED" },
+    { id: "green", label: "青提", color: "#A3E635" },
   ],
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 

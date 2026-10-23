@@ -1,6 +1,6 @@
 import { Frame, pen, pt, shade, SHADOW, tint, type ArtProps } from "./common.tsx";
 
-/** 水果：橙子、苹果、香蕉、草莓、芒果、西瓜。变体同时决定形状（整个 / 切开）或品种颜色。 */
+/** 水果：橙子、苹果、香蕉、草莓、芒果、西瓜、葡萄。变体同时决定形状（整个 / 切开）或品种颜色。 */
 
 const LEAF = "#16A34A";
 const STEM = "#78350F";
@@ -195,6 +195,27 @@ export function Watermelon({ color, variant }: ArtProps) {
         [48, 25, 0],
       ].map(([x, y, r]) => (
         <ellipse key={`${x}-${y}`} cx={x} cy={y} rx={1.6} ry={2.7} transform={`rotate(${r} ${x} ${y})`} style={{ fill: "#1C1917" }} />
+      ))}
+    </Frame>
+  );
+}
+
+/** 一串葡萄：自上而下 4、3、2、1 颗，从后往前画，下面的果粒压住上面的。 */
+const GRAPE_ROWS = [4, 3, 2, 1].flatMap((count, row) =>
+  Array.from({ length: count }, (_, i) => ({ x: 32 + (i - (count - 1) / 2) * 12, y: 27 + row * 10.5 })),
+);
+
+export function Grape({ color }: ArtProps) {
+  return (
+    <Frame type="grape">
+      <path d="M32 20 L33 8" style={pen(STEM, 2.4)} />
+      <path d="M33 13 Q24 12 23 6 Q23 2 27 4" style={pen("#65A30D", 1.2)} />
+      <path d="M34 11 Q46 1 58 8 Q49 19 34 11 Z" style={{ fill: LEAF, stroke: shade(LEAF, 75), strokeWidth: 1 }} />
+      {GRAPE_ROWS.map(({ x, y }) => (
+        <g key={`${x}-${y}`}>
+          <circle cx={x} cy={y} r={7.5} style={outline(color)} />
+          <ellipse cx={x - 2.5} cy={y - 2.8} rx={2.2} ry={1.4} transform={`rotate(-30 ${x - 2.5} ${y - 2.8})`} style={{ fill: "rgba(255,255,255,0.55)" }} />
+        </g>
       ))}
     </Frame>
   );
