@@ -1,0 +1,85 @@
+import { create } from "zustand";
+import { readDocument, type NoteDocument } from "../../shared/document.ts";
+import { currentDocument, useNoteStore } from "../state/store.ts";
+import { deleteEntry, getEntry, LibraryConflict, saveEntry, type LibraryEntry, type LibraryLink } from "./storage.ts";
+
+type Status = "idle" | "saving" | "saved" | "error" | "conflict" | "deleted";
+/** `baseline` is the linked entry's content at `baseline.revision`, used to show unsaved changes. */
+type Baseline = { revision: string; text: string } | null;
+export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
+const set = (patch: Partial<{ status: Status; baseline: Baseline }>) => useLibraryStatus.setState(patch);
+let persistRequested = false;
+
+// A link replaced elsewhere (restored draft, shared note) invalidates the previous save result.
+useNoteStore.subscribe((next, previous) => { if (next.libraryLink !== previous.libraryLink) set({ status: "idle" }); });
+
+/** Normalized so that a document and its stored copy compare equal. */
+export function serialize(document: NoteDocument): string {
+  try { return JSON.stringify(readDocument(document)); } catch { return ""; }
+}
+
+/** Whether the editor differs from its linked entry; unknown baselines count as changed. */
+export function isModified(document: NoteDocument, link: LibraryLink, baseline: Baseline): boolean {
+  return baseline?.revision !== link.revision || serialize(document) !== baseline.text;
+}
+
+/** Whether replacing the editor would lose work that is not in the library. */
+export function hasUnsavedWork(): boolean {
+  const { note, source, input, stickers, libraryLink } = useNoteStore.getState();
+  if (libraryLink) return isModified(currentDocument(), libraryLink, useLibraryStatus.getState().baseline);
+  const untouchedSample = source === "sample" && !input.text.trim() && stickers.length === 0;
+  return !!note && !untouchedSample;
+}
+
+/**
+ * After a reload the link comes back with the draft; confirm it still matches the library.
+ * `recheck` also verifies a known baseline, after another tab reported a change.
+ */
+export async function checkLibraryLink(recheck = false) {
+  const link = useNoteStore.getState().libraryLink;
+  const { baseline, status } = useLibraryStatus.getState();
+  if (!link || status === "saving" || (!recheck && baseline?.revision === link.revision)) return;
+  try {
+    const entry = await getEntry(link.id);
+    if (useNoteStore.getState().libraryLink !== link || useLibraryStatus.getState().status === "saving") return;
+    if (!entry) set({ status: "deleted" });
+    else if (entry.revision !== link.revision) set({ status: "conflict" });
+    else if (baseline?.revision !== link.revision) set({ baseline: { revision: entry.revision, text: serialize(entry.document) } });
+  } catch { set({ status: "error" }); }
+}
+
+/** Saves the editor to its linked entry, or to a new entry when unlinked or `asNew`. */
+export async function saveToLibrary({ asNew = false, force = false } = {}) {
+  const state = useNoteStore.getState();
+  if (!state.note || useLibraryStatus.getState().status === "saving") return;
+  const document = currentDocument();
+  const link = asNew ? null : state.libraryLink;
+  set({ status: "saving" });
+  if (!persistRequested) {
+    persistRequested = true;
+    // Best effort: asks the browser not to evict the library under storage pressure.
+    void navigator.storage?.persist?.().catch(() => {});
+  }
+  try {
+    const entry = await saveEntry(link, document, force);
+    // Another note was opened or generated meanwhile; the entry is saved but no longer describes the editor.
+    if (useNoteStore.getState().noteSerial !== state.noteSerial) { set({ status: "idle" }); return; }
+    useNoteStore.getState().setLibraryLink({ id: entry.id, revision: entry.revision });
+    set({ status: "saved", baseline: { revision: entry.revision, text: serialize(document) } });
+  } catch (error) {
+    set({ status: error instanceof LibraryConflict ? (error.deleted ? "deleted" : "conflict") : "error" });
+  }
+}
+
+export function openEntry(entry: LibraryEntry) {
+  useNoteStore.getState().loadDocument(entry.document, { id: entry.id, revision: entry.revision });
+  set({ status: "idle", baseline: { revision: entry.revision, text: serialize(entry.document) } });
+}
+
+export async function removeEntry(id: string) {
+  await deleteEntry(id);
+  if (useNoteStore.getState().libraryLink?.id === id) {
+    useNoteStore.getState().setLibraryLink(null);
+    set({ status: "idle", baseline: null });
+  }
+}

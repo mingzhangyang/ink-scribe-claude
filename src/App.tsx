@@ -4,6 +4,7 @@ import { fetchPublicConfig } from "./api.ts";
 import { useT } from "./i18n/index.ts";
 import { EditorPage } from "./pages/EditorPage.tsx";
 import { GalleryPage } from "./pages/GalleryPage.tsx";
+import { LibraryPage } from "./pages/LibraryPage.tsx";
 import { NoteViewPage } from "./pages/NoteViewPage.tsx";
 import { linkProps, useRoute } from "./router.ts";
 import { resolveTheme, THEMES, usePreferences, type ThemePreference } from "./state/preferences.ts";
@@ -120,6 +121,9 @@ export function App() {
           <a className={`nav-link${route.name === "gallery" ? " is-active" : ""}`} {...linkProps("/gallery")}>
             {t.app.gallery}
           </a>
+          <a className={`nav-link${route.name === "library" ? " is-active" : ""}`} {...linkProps("/library")}>
+            {t.app.library}
+          </a>
           {config.mock ? (
             <span className="badge badge-warn" title={t.app.mockTitle}>
               {t.app.mockBadge}
@@ -131,6 +135,7 @@ export function App() {
 
       {route.name === "editor" ? <EditorPage config={config} onToast={setToast} /> : null}
       {route.name === "gallery" ? <GalleryPage /> : null}
+      {route.name === "library" ? <LibraryPage /> : null}
       {route.name === "note" ? <NoteViewPage id={route.id} onToast={setToast} /> : null}
       {route.name === "not-found" ? (
         <main className="page-center">

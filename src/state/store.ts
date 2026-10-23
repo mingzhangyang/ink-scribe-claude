@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ApiErrorBody, ResponseMeta } from "../../shared/api.ts";
+import type { NoteDocument } from "../../shared/document.ts";
 import type { DoodleSpec } from "../../shared/doodle.ts";
 import type { NoteStructure } from "../../shared/note.ts";
 import type { Detail, Language, Template } from "../../shared/options.ts";
+import type { LibraryLink } from "../library/storage.ts";
 import { newStickerId, type StickerItem, type StickerType } from "../stickers/types.ts";
 import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from "./settings.ts";
 
@@ -31,7 +33,12 @@ type State = {
   aiDoodle: DoodleSpec | null;
   /** 每次生成或载入一条新笔记时递增，用于丢弃针对旧笔记的异步结果（如 AI 插图）。 */
   noteSerial: number;
+  /** 当前编辑内容对应的本机笔记库条目；为空时“保存到笔记库”会新建一条。 */
+  libraryLink: LibraryLink | null;
 
+  setLibraryLink: (link: LibraryLink | null) => void;
+  /** 整体替换编辑内容（恢复草稿、打开笔记库条目），并清除请求状态。 */
+  loadDocument: (document: NoteDocument, link: LibraryLink | null) => void;
   setInput: (patch: Partial<InputState>) => void;
   setSettings: (patch: Partial<Settings>) => void;
   resetSettings: () => void;
@@ -66,7 +73,11 @@ export const useNoteStore = create<State>()(
       selectedStickerId: null,
       aiDoodle: null,
       noteSerial: 0,
+      libraryLink: null,
 
+      setLibraryLink: (link) => set({ libraryLink: link }),
+      loadDocument: (document, link) =>
+        set((s) => ({ ...document, libraryLink: link, meta: null, status: "idle", error: null, selectedStickerId: null, noteSerial: s.noteSerial + 1 })),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
@@ -92,6 +103,7 @@ export const useNoteStore = create<State>()(
           noteSerial: s.noteSerial + 1,
           meta: null,
           source: "shared",
+          libraryLink: null,
           status: "idle",
           error: null,
           selectedStickerId: null,
@@ -155,3 +167,9 @@ export const useNoteStore = create<State>()(
     },
   ),
 );
+
+/** 当前编辑内容中需要保存的部分（不含请求状态与选中状态）。 */
+export function currentDocument(): NoteDocument {
+  const { input, note, settings, stickers, aiDoodle, source } = useNoteStore.getState();
+  return { input, note, settings, stickers, aiDoodle, source };
+}

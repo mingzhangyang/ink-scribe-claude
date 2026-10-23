@@ -20,6 +20,7 @@
 | 插图与贴纸 | 20 个内置手绘插图（受控 SVG 生成器绘制）；和纸胶带、便利贴、回形针、星星、咖啡渍；拖拽、缩放、旋转、删除、层级调整、键盘微调 |
 | AI 插图（可选） | `POST /api/doodle` 只返回受限图元规格（线、箭头、圆、矩形、折线），经校验后由本地生成器绘制，默认关闭 |
 | 本地草稿 | 自动保存原文、笔记、样式、贴纸与插图，刷新后恢复；存储失败可重试，多标签页冲突暂停保存；可删除并关闭自动保存 |
+| 笔记库 | `/library` 页面：在编辑器中“保存到笔记库”可把多条笔记（原文、笔记、样式、贴纸与插图）保存在本机 IndexedDB，不上传；显示是否有未保存到笔记库的修改，可另存为新笔记；笔记库支持搜索、打开继续编辑、删除，以及导出 / 导入 JSON 备份。多标签页同时修改同一条笔记时不会互相覆盖，已删除的笔记不会被旧标签页恢复 |
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
 | 溢出处理 | 自动检测文字超出页面，一键缩小字号、切换为长图，或以“精简”档位重新生成 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
@@ -53,7 +54,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（84 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 对照验收标准逐条断言（90 项，覆盖文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、发布与查看、图库、本机笔记库、界面语言与主题、移动端）。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |
@@ -80,7 +81,7 @@ shared/      前后端共享：NoteStructure / DoodleSpec 契约与规范化、�
 worker/      Worker：路由、配置与模型调用约定、提示词、AI 调用（超时/重试/修复）、限流、日志、
              发布接口与存储（D1）、页面 SEO 信息与站点地图
 migrations/  D1 数据库迁移
-src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体
+src/         React 前端：状态（zustand）、版式、手写渲染、贴纸、导出、字体；本机草稿与笔记库（IndexedDB）
 scripts/     模型评测脚本与评测集、API 密钥管理、品牌资源生成（scripts/brand）
 tests/       Vitest 单元测试
 e2e/         Playwright 浏览器验收测试
