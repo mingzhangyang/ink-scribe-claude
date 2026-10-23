@@ -1740,8 +1740,8 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const blank = drawn.filter((d) => d.shapes === 0 || d.w < 4 || d.h < 4);
   check(
     "G9",
-    "全部 119 种装饰贴纸按分类添加，预览为正方形，所有颜色与款式都能绘制",
-    tiles.length === 119 && new Set(tiles).size === 119 && notSquare.length === 0 && drawn.length === 119 && variantCount > 119 && blank.length === 0 && page.errors.length === 0,
+    "全部 120 种装饰贴纸按分类添加，预览为正方形，所有颜色与款式都能绘制",
+    tiles.length === 120 && new Set(tiles).size === 120 && notSquare.length === 0 && drawn.length === 120 && variantCount > 120 && blank.length === 0 && page.errors.length === 0,
     JSON.stringify({ tiles: tiles.length, notSquare, drawn: drawn.length, variantCount, blank, errors: page.errors }),
   );
   await page.reload({ waitUntil: "networkidle" });

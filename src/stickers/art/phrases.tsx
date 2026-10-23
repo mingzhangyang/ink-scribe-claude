@@ -44,6 +44,18 @@ export function Juan({ color }: ArtProps) {
   );
 }
 
+/** 右上角竖起的大拇指，和字一起裁成一张贴纸。 */
+const THUMBS_UP =
+  "M49.5 9.5 L53.5 9.5 L53.5 18.5 L49.5 18.5 ZM54.5 10 L57 10 L59 3 C60 0.8 63 1.6 62.5 4.5 L62 8.5 L66 8.5 C68 8.5 68.5 10.5 68 11.5 L66 17 C65.5 18 65 18.5 64 18.5 L54.5 18.5 Z";
+
+export function Zan({ color }: ArtProps) {
+  return (
+    <Frame type="zan">
+      <DieCut d={`${PHRASE_PATHS.zan} ${THUMBS_UP}`} color={color} />
+    </Frame>
+  );
+}
+
 export function Tangping({ color }: ArtProps) {
   // 躺下睡着了：右上角的“Zz”
   return (

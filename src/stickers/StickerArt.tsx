@@ -28,7 +28,7 @@ import { Bird, Chili, Detective, Dog, Hedgehog } from "./art/line-art.tsx";
 import { Arrow, Bracket, Check, CircleMark, Cross, Exclaim, Question, WavyUnderline } from "./art/marks.tsx";
 import { Face, Heart, PressedFlower, Sparkles, Star } from "./art/mood.tsx";
 import { DogEar, KraftTag, PageFlag, PostageStamp, RibbonBookmark, StickyNote, TicketStub, TornPaper } from "./art/paper.tsx";
-import { Geili, Hang, Juan, Tainiule, Tangping, Tongyi, Wanmei, Yyds, Zhengnengliang, Zhixingheyi } from "./art/phrases.tsx";
+import { Geili, Hang, Juan, Tainiule, Tangping, Tongyi, Wanmei, Yyds, Zan, Zhengnengliang, Zhixingheyi } from "./art/phrases.tsx";
 import {
   AlphaHelix,
   Antibody,
@@ -156,6 +156,7 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   tangping: Tangping,
   wanmei: Wanmei,
   tainiule: Tainiule,
+  zan: Zan,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };

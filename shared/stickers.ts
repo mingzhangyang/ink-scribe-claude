@@ -23,7 +23,7 @@ export const STICKER_TYPES = [
   "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
   "bird", "hedgehog", "dog", "chili", "detective",
   "hang", "geili", "tongyi", "zhixingheyi",
-  "zhengnengliang", "yyds", "juan", "tangping", "wanmei", "tainiule",
+  "zhengnengliang", "yyds", "juan", "tangping", "wanmei", "tainiule", "zan",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -169,6 +169,7 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   tangping: "躺平",
   wanmei: "完美",
   tainiule: "太牛了",
+  zan: "赞",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
@@ -201,7 +202,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape", "chili"],
   animals: ["bird", "hedgehog", "dog"],
   people: ["detective"],
-  phrases: ["hang", "juan", "geili", "tangping", "zhengnengliang", "tainiule", "yyds", "wanmei", "tongyi", "zhixingheyi"],
+  phrases: ["hang", "juan", "zan", "geili", "tangping", "zhengnengliang", "tainiule", "yyds", "wanmei", "tongyi", "zhixingheyi"],
   formulas: [
     "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
     "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
@@ -346,6 +347,7 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   tangping: { w: 110, h: 66 },
   wanmei: { w: 100, h: 64 },
   tainiule: { w: 140, h: 62 },
+  zan: { w: 72, h: 72 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -681,6 +683,7 @@ export const STICKER_VARIANTS = {
   tangping: SLANG_VARIANTS,
   wanmei: STAMP_VARIANTS,
   tainiule: SLANG_VARIANTS,
+  zan: SLANG_VARIANTS,
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];
