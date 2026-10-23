@@ -3,6 +3,7 @@ import type { PublishedNoteSummary } from "../../shared/api.ts";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchGallery } from "../api.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
+import type { RequestError } from "../state/store.ts";
 import { linkProps } from "../router.ts";
 
 function GalleryCard({ item }: { item: PublishedNoteSummary }) {
@@ -35,7 +36,8 @@ export function GalleryPage() {
   const [items, setItems] = useState<PublishedNoteSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "idle" | "error">("loading");
-  const [error, setError] = useState("");
+  // 保存错误详情而不是译文，切换界面语言后提示随之切换
+  const [error, setError] = useState<RequestError | null>(null);
   // 每次请求递增；只有最新一次请求的结果会写入状态，避免切换筛选后旧请求覆盖或追加到新结果
   const generation = useRef(0);
 
@@ -54,7 +56,7 @@ export function GalleryPage() {
       setStatus("idle");
     } catch (e) {
       if (current !== generation.current) return;
-      setError(e instanceof ApiRequestError ? errorMessage(t, e.detail) : t.gallery.loadFailed);
+      setError(e instanceof ApiRequestError ? e.detail : null);
       setStatus("error");
     }
   }
@@ -96,7 +98,7 @@ export function GalleryPage() {
 
       {status === "error" ? (
         <div className="alert alert-error" role="alert">
-          <span>{error}</span>
+          <span>{error ? errorMessage(t, error) : t.gallery.loadFailed}</span>
           <button type="button" className="btn btn-small" onClick={() => void load(items.length === 0)}>
             {t.gallery.retry}
           </button>

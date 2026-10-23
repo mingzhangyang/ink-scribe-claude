@@ -13,7 +13,9 @@ import {
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 
-type Status = { kind: "idle" } | { kind: "working"; label: string } | { kind: "done"; message: string } | { kind: "error"; message: string };
+// 只保存状态与参数，文案在渲染时按当前界面语言生成
+type Task = "download" | "copy";
+type Status = { kind: "idle" } | { kind: "working"; task: Task } | { kind: "done"; task: Task; reducedScale?: number } | { kind: "error"; task: Task };
 
 export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | null> }) {
   const note = useNoteStore((s) => s.note);
@@ -45,28 +47,25 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
   }
 
   async function handleDownload() {
-    setStatus({ kind: "working", label: t.export.rendering });
+    setStatus({ kind: "working", task: "download" });
     try {
       const { blob, scale: used } = await render(format);
       downloadBlob(blob, fileNameFor(note!.title, format));
-      setStatus({
-        kind: "done",
-        message: used < scale ? t.export.downloadedReduced(used.toFixed(2)) : t.export.downloaded,
-      });
+      setStatus({ kind: "done", task: "download", ...(used < scale ? { reducedScale: used } : {}) });
     } catch {
-      setStatus({ kind: "error", message: t.export.failed });
+      setStatus({ kind: "error", task: "download" });
     }
   }
 
   function handleCopy() {
     if (!clipboard.supported) return;
-    setStatus({ kind: "working", label: t.export.copying });
-    const fail = () => setStatus({ kind: "error", message: t.export.copyFailed });
+    setStatus({ kind: "working", task: "copy" });
+    const fail = () => setStatus({ kind: "error", task: "copy" });
     // ClipboardItem 必须在点击事件中同步创建，图片内容以 Promise 形式提供
     const blob = render("png").then((r) => r.blob);
     try {
       copyToClipboard(blob)
-        .then(() => setStatus({ kind: "done", message: t.export.copied }))
+        .then(() => setStatus({ kind: "done", task: "copy" }))
         .catch(fail);
     } catch {
       blob.catch(() => undefined);
@@ -116,9 +115,17 @@ export function ExportPanel({ pageRef }: { pageRef: RefObject<HTMLDivElement | n
       {!clipboard.supported ? <p className="hint">{t.export.copyUnsupported(clipboard.reason)}</p> : null}
 
       <div className="export-status" aria-live="polite">
-        {status.kind === "working" ? <p className="hint">{status.label}</p> : null}
-        {status.kind === "done" ? <p className="hint is-ok">{status.message}</p> : null}
-        {status.kind === "error" ? <p className="hint is-error">{status.message}</p> : null}
+        {status.kind === "working" ? <p className="hint">{status.task === "copy" ? t.export.copying : t.export.rendering}</p> : null}
+        {status.kind === "done" ? (
+          <p className="hint is-ok">
+            {status.task === "copy"
+              ? t.export.copied
+              : status.reducedScale !== undefined
+                ? t.export.downloadedReduced(status.reducedScale.toFixed(2))
+                : t.export.downloaded}
+          </p>
+        ) : null}
+        {status.kind === "error" ? <p className="hint is-error">{status.task === "copy" ? t.export.copyFailed : t.export.failed}</p> : null}
       </div>
       <p className="hint">{t.export.local}</p>
     </div>

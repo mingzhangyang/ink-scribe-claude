@@ -1,4 +1,4 @@
-import { getMessages } from "../i18n/index.ts";
+import type { Messages } from "../i18n/index.ts";
 import { decodeTextBytes, docxXmlToText, joinPdfTextItems, normalizeExtractedText } from "./decode.ts";
 
 /**
@@ -21,7 +21,16 @@ export type ExtractResult = {
   pagesRead?: number;
 };
 
-export class FileImportError extends Error {}
+export type ImportErrorKey = keyof Messages["importErrors"];
+
+/** 导入失败的原因。界面按 key 翻译，切换界面语言后提示也随之切换。 */
+export class FileImportError extends Error {
+  readonly key: ImportErrorKey;
+  constructor(key: ImportErrorKey) {
+    super(key);
+    this.key = key;
+  }
+}
 
 export function detectKind(file: { name: string; type: string }): FileKind | null {
   const name = file.name.toLowerCase();
@@ -94,10 +103,10 @@ async function docxToText(bytes: Uint8Array): Promise<string> {
   try {
     xml = readZipEntry(bytes, "word/document.xml", MAX_DOCX_XML_BYTES);
   } catch (error) {
-    if (error instanceof ZipEntryTooLargeError) throw new FileImportError(getMessages().importErrors.docxTooLarge);
-    throw new FileImportError(getMessages().importErrors.docxUnreadable);
+    if (error instanceof ZipEntryTooLargeError) throw new FileImportError("docxTooLarge");
+    throw new FileImportError("docxUnreadable");
   }
-  if (!xml) throw new FileImportError(getMessages().importErrors.docxEmpty);
+  if (!xml) throw new FileImportError("docxEmpty");
   return docxXmlToText(strFromU8(xml));
 }
 
@@ -117,7 +126,7 @@ async function pdfToText(bytes: Uint8Array): Promise<{ text: string; pages: numb
     }).promise;
   } catch (error) {
     const name = (error as { name?: string })?.name;
-    throw new FileImportError(name === "PasswordException" ? getMessages().importErrors.pdfEncrypted : getMessages().importErrors.pdfUnreadable);
+    throw new FileImportError(name === "PasswordException" ? "pdfEncrypted" : "pdfUnreadable");
   }
   try {
     const pages: string[] = [];
@@ -136,8 +145,8 @@ async function pdfToText(bytes: Uint8Array): Promise<{ text: string; pages: numb
 
 export async function extractTextFromFile(file: File): Promise<ExtractResult> {
   const kind = detectKind(file);
-  if (!kind) throw new FileImportError(getMessages().importErrors.unsupported);
-  if (file.size > MAX_FILE_BYTES) throw new FileImportError(getMessages().importErrors.tooLarge);
+  if (!kind) throw new FileImportError("unsupported");
+  if (file.size > MAX_FILE_BYTES) throw new FileImportError("tooLarge");
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   let result: ExtractResult;
@@ -158,9 +167,7 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
     }
   }
   if (!result.text.trim()) {
-    throw new FileImportError(
-      kind === "pdf" ? getMessages().importErrors.pdfNoText : getMessages().importErrors.noText,
-    );
+    throw new FileImportError(kind === "pdf" ? "pdfNoText" : "noText");
   }
   return result;
 }

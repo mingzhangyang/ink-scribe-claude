@@ -654,6 +654,38 @@ if (process.env.E2E_API_KEY) {
   await p10.goto(URL, { waitUntil: "networkidle" });
   check("T7", "系统为深色时默认使用深色主题", (await p10.evaluate(() => document.documentElement.dataset.theme)) === "dark");
   await c10.close();
+
+  // 第一次生成失败后切换语言：错误提示与重试按钮保留，并换成新语言；已显示的导入提示也随语言切换
+  const { page: p11, context: c11 } = await newPage();
+  await p11.route("**/api/structure", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "AI_UNAVAILABLE", message: "AI 服务繁忙，请稍后重试。", requestId: "t10" } }),
+    }),
+  );
+  await p11.goto(URL, { waitUntil: "networkidle" });
+  await p11.selectOption(".sample-picker select", "zh-meeting");
+  await p11.click(".input-panel .btn-primary");
+  await p11.waitForSelector(".alert-error");
+  await p11.locator('input[type="file"]').setInputFiles({ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") });
+  await p11.waitForSelector(".upload-row + div .hint.is-error");
+  await p11.click(".pref-lang");
+  const afterSwitch = await p11.evaluate(() => ({
+    alert: document.querySelector(".alert-error strong")?.textContent ?? "",
+    retry: document.querySelector(".alert-error .btn")?.textContent ?? "",
+    title: document.querySelector(".note-title")?.textContent ?? "",
+    importHint: document.querySelector(".upload-row + div .hint.is-error")?.textContent ?? "",
+  }));
+  check(
+    "T10",
+    "生成失败后切换界面语言，错误提示与重试按钮保留并换成新语言",
+    afterSwitch.alert.includes("AI service") && afterSwitch.retry === "Retry" && afterSwitch.title.includes("深度工作"),
+    JSON.stringify(afterSwitch),
+  );
+  check("T11", "已显示的导入提示随界面语言切换", afterSwitch.importHint.includes("isn't supported"), afterSwitch.importHint);
+  check("T12", "失败与切换流程无脚本错误", p11.errors.length === 0, p11.errors.join("; "));
+  await c11.close();
 }
 
 // ---------- Q. 移动端 ----------

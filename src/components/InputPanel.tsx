@@ -2,7 +2,7 @@ import { DETAILS, LANGUAGES, TEMPLATES, type Detail, type Language } from "../..
 import { useRef, useState, type DragEvent } from "react";
 import { charLength } from "../../shared/text.ts";
 import { useT } from "../i18n/index.ts";
-import { ACCEPTED_EXTENSIONS, extractTextFromFile, FileImportError } from "../import/extractText.ts";
+import { ACCEPTED_EXTENSIONS, extractTextFromFile, FileImportError, type ExtractResult, type ImportErrorKey } from "../import/extractText.ts";
 import { SAMPLE_TEXTS } from "../samples.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { usePreferences } from "../state/preferences.ts";
@@ -20,7 +20,10 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
   const loading = status === "loading";
   const fileInput = useRef<HTMLInputElement>(null);
   const [importState, setImportState] = useState<
-    { kind: "idle" } | { kind: "busy"; name: string } | { kind: "done"; message: string } | { kind: "error"; message: string }
+    | { kind: "idle" }
+    | { kind: "busy"; name: string }
+    | { kind: "done"; name: string; result: Omit<ExtractResult, "text">; chars: number }
+    | { kind: "error"; name: string; key?: ImportErrorKey }
   >({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
   // 连续导入多个文件时，只采用最后一次导入的结果（较早的大文件可能更晚解析完）
@@ -32,20 +35,26 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
     try {
       const result = await extractTextFromFile(file);
       if (current !== importGeneration.current) return;
-      setInput({ text: result.text });
-      const pages = !result.pages
-        ? ""
-        : result.pagesRead !== undefined && result.pagesRead < result.pages
-          ? t.input.importPagesPartial(result.pages, result.pagesRead)
-          : t.input.importPages(result.pages);
-      setImportState({
-        kind: "done",
-        message: t.input.importDone(file.name, t.options.fileKinds[result.kind], pages, charLength(result.text).toLocaleString()),
-      });
+      const { text, ...meta } = result;
+      setInput({ text });
+      setImportState({ kind: "done", name: file.name, result: meta, chars: charLength(text) });
     } catch (error) {
       if (current !== importGeneration.current) return;
-      setImportState({ kind: "error", message: error instanceof FileImportError ? error.message : t.input.importFailed(file.name) });
+      setImportState({ kind: "error", name: file.name, ...(error instanceof FileImportError ? { key: error.key } : {}) });
     }
+  }
+
+  // 提示在渲染时按当前界面语言生成，切换语言后随之切换
+  function importMessage(): string | null {
+    if (importState.kind === "error") return importState.key ? t.importErrors[importState.key] : t.input.importFailed(importState.name);
+    if (importState.kind !== "done") return null;
+    const { result, chars, name } = importState;
+    const pages = !result.pages
+      ? ""
+      : result.pagesRead !== undefined && result.pagesRead < result.pages
+        ? t.input.importPagesPartial(result.pages, result.pagesRead)
+        : t.input.importPages(result.pages);
+    return t.input.importDone(name, t.options.fileKinds[result.kind], pages, chars.toLocaleString());
   }
 
   function onDrop(event: DragEvent) {
@@ -123,8 +132,8 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
         />
       </div>
       <div aria-live="polite">
-        {importState.kind === "done" ? <p className="hint is-ok">{importState.message}</p> : null}
-        {importState.kind === "error" ? <p className="hint is-error">{importState.message}</p> : null}
+        {importState.kind === "done" ? <p className="hint is-ok">{importMessage()}</p> : null}
+        {importState.kind === "error" ? <p className="hint is-error">{importMessage()}</p> : null}
       </div>
 
       <fieldset className="field">

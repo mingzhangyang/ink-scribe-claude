@@ -4,7 +4,7 @@ import { DOODLE_THEMES } from "../../shared/themes.ts";
 import { ApiRequestError, generateDoodle } from "../api.ts";
 import { builtinDoodle } from "../doodles/library.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
-import { useNoteStore } from "../state/store.ts";
+import { useNoteStore, type RequestError } from "../state/store.ts";
 import { STICKER_VARIANTS, type StickerType } from "../stickers/types.ts";
 import { DoodleArt } from "./note/DoodleArt.tsx";
 
@@ -25,7 +25,7 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
   const t = useT();
 
   const [concept, setConcept] = useState("");
-  const [aiState, setAiState] = useState<{ status: "idle" | "loading" | "error"; message?: string; spec?: DoodleSpec }>({ status: "idle" });
+  const [aiState, setAiState] = useState<{ status: "idle" | "loading" | "error"; error?: RequestError; spec?: DoodleSpec }>({ status: "idle" });
 
   async function requestDoodle() {
     const prompt = (concept || note?.doodlePrompt || note?.title || "").trim();
@@ -35,7 +35,7 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
       const result = await generateDoodle(prompt.slice(0, 80));
       setAiState({ status: "idle", spec: result.doodle });
     } catch (error) {
-      setAiState({ status: "error", message: error instanceof ApiRequestError ? errorMessage(t, error.detail) : t.stickers.aiFailed });
+      setAiState({ status: "error", ...(error instanceof ApiRequestError ? { error: error.detail } : {}) });
     }
   }
 
@@ -99,7 +99,7 @@ export function StickerPanel({ doodleEnabled }: { doodleEnabled: boolean }) {
               {aiState.status === "loading" ? t.stickers.aiDrawing : t.stickers.aiGenerate}
             </button>
           </div>
-          {aiState.status === "error" ? <p className="hint is-error">{aiState.message}</p> : null}
+          {aiState.status === "error" ? <p className="hint is-error">{aiState.error ? errorMessage(t, aiState.error) : t.stickers.aiFailed}</p> : null}
           {aiState.spec ? (
             <div className="ai-doodle-preview">
               <DoodleArt spec={aiState.spec} seed={settings.seed} naturalness={settings.naturalness} />
