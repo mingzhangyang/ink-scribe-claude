@@ -17,6 +17,10 @@ export const STICKER_TYPES = [
   "greek-alpha", "greek-beta", "greek-gamma", "greek-delta", "greek-epsilon", "greek-theta",
   "greek-lambda", "greek-mu", "greek-pi", "greek-sigma", "greek-phi", "greek-omega",
   "greek-capital-delta", "greek-capital-sigma", "greek-capital-omega",
+  "car", "train", "bullet-train", "ship", "sailboat",
+  "airplane", "rocket", "starship", "satellite",
+  "sun", "earth", "moon", "saturn", "jupiter",
+  "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -126,10 +130,29 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   "greek-capital-delta": "Δ 大写德尔塔",
   "greek-capital-sigma": "Σ 大写西格玛",
   "greek-capital-omega": "Ω 大写欧米伽",
+  car: "汽车",
+  train: "火车",
+  "bullet-train": "高铁",
+  ship: "轮船",
+  sailboat: "帆船",
+  airplane: "飞机",
+  rocket: "火箭",
+  starship: "星舰",
+  satellite: "卫星",
+  sun: "太阳",
+  earth: "地球",
+  moon: "月亮",
+  saturn: "土星",
+  jupiter: "木星",
+  comet: "彗星",
+  galaxy: "螺旋星系",
+  "black-hole": "黑洞",
+  "big-dipper": "北斗七星",
+  astronaut: "宇航员",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "greek", "science"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "greek", "science", "vehicles", "space"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -142,6 +165,8 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   formulas: "公式",
   greek: "希腊字母",
   science: "科学图示",
+  vehicles: "交通工具",
+  space: "宇宙",
 };
 
 export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStickerType[]> = {
@@ -163,6 +188,14 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   science: [
     "benzene", "water-molecule", "glucose-ring", "dna", "alpha-helix", "antibody", "trna",
     "atom", "magnet", "lens", "circuit", "beaker", "flask", "microscope",
+  ],
+  vehicles: [
+    "car", "train", "bullet-train", "ship", "sailboat",
+    "airplane", "rocket", "starship", "satellite",
+  ],
+  space: [
+    "sun", "earth", "moon", "saturn", "jupiter",
+    "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
   ],
 };
 
@@ -253,6 +286,25 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   "greek-capital-delta": { w: 56, h: 56 },
   "greek-capital-sigma": { w: 56, h: 56 },
   "greek-capital-omega": { w: 56, h: 56 },
+  car: { w: 112, h: 60 },
+  train: { w: 120, h: 72 },
+  "bullet-train": { w: 140, h: 56 },
+  ship: { w: 130, h: 80 },
+  sailboat: { w: 96, h: 96 },
+  airplane: { w: 130, h: 70 },
+  rocket: { w: 64, h: 110 },
+  starship: { w: 56, h: 140 },
+  satellite: { w: 110, h: 80 },
+  sun: { w: 88, h: 88 },
+  earth: { w: 84, h: 84 },
+  moon: { w: 80, h: 80 },
+  saturn: { w: 120, h: 72 },
+  jupiter: { w: 84, h: 84 },
+  comet: { w: 120, h: 72 },
+  galaxy: { w: 100, h: 100 },
+  "black-hole": { w: 110, h: 80 },
+  "big-dipper": { w: 120, h: 52 },
+  astronaut: { w: 80, h: 100 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -274,7 +326,7 @@ const INK_VARIANTS = {
 /** 公式与希腊字母：和标注符号一样用笔的颜色。 */
 const PEN_VARIANTS = [INK_VARIANTS.ink, INK_VARIANTS.red, INK_VARIANTS.blue] as const;
 
-/** 科学图示：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
+/** 科学图示与宇宙：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
 const scienceVariants = <C extends string>(color: C) =>
   [
     { id: "color", label: "彩色", color },
@@ -503,6 +555,59 @@ export const STICKER_VARIANTS = {
   "greek-capital-delta": PEN_VARIANTS,
   "greek-capital-sigma": PEN_VARIANTS,
   "greek-capital-omega": PEN_VARIANTS,
+  car: [
+    { id: "red", label: "红", color: "#EF4444" },
+    { id: "blue", label: "蓝", color: "#3B82F6" },
+    { id: "yellow", label: "黄", color: "#FACC15" },
+  ],
+  train: [
+    { id: "green", label: "绿", color: "#16A34A" },
+    { id: "red", label: "红", color: "#DC2626" },
+  ],
+  "bullet-train": [
+    { id: "blue", label: "蓝色涂装", color: "#2563EB" },
+    { id: "red", label: "红色涂装", color: "#DC2626" },
+  ],
+  ship: [
+    { id: "red", label: "红色船身", color: "#DC2626" },
+    { id: "navy", label: "藏青船身", color: "#1E3A8A" },
+  ],
+  sailboat: [
+    { id: "white", label: "白帆", color: "#F8FAFC" },
+    { id: "red", label: "红帆", color: "#EF4444" },
+  ],
+  airplane: [
+    { id: "blue", label: "蓝色尾翼", color: "#2563EB" },
+    { id: "red", label: "红色尾翼", color: "#DC2626" },
+  ],
+  rocket: [
+    { id: "red", label: "红", color: "#EF4444" },
+    { id: "blue", label: "蓝", color: "#2563EB" },
+  ],
+  starship: [
+    { id: "flight", label: "点火", color: "#F97316" },
+    { id: "parked", label: "静置", color: "#CBD5E1" },
+  ],
+  satellite: [
+    { id: "gold", label: "金色", color: "#EAB308" },
+    { id: "silver", label: "银色", color: "#CBD5E1" },
+  ],
+  sun: scienceVariants("#FACC15"),
+  earth: scienceVariants("#3B82F6"),
+  moon: [
+    { id: "crescent", label: "弯月", color: "#FDE68A" },
+    { id: "full", label: "满月", color: "#E5E7EB" },
+  ],
+  saturn: scienceVariants("#F59E0B"),
+  jupiter: scienceVariants("#D97706"),
+  comet: scienceVariants("#93C5FD"),
+  galaxy: scienceVariants("#8B5CF6"),
+  "black-hole": scienceVariants("#F97316"),
+  "big-dipper": [
+    { id: "gold", label: "金色", color: "#FACC15" },
+    { id: "ink", label: "墨线", color: "ink" },
+  ],
+  astronaut: scienceVariants("#94A3B8"),
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];

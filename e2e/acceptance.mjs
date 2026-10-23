@@ -1726,17 +1726,17 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const blank = drawn.filter((d) => d.shapes === 0 || d.w < 4 || d.h < 4);
   check(
     "G9",
-    "全部 85 种装饰贴纸按分类添加，预览为正方形，所有颜色与款式都能绘制",
-    tiles.length === 85 && new Set(tiles).size === 85 && notSquare.length === 0 && drawn.length === 85 && variantCount > 85 && blank.length === 0 && page.errors.length === 0,
+    "全部 104 种装饰贴纸按分类添加，预览为正方形，所有颜色与款式都能绘制",
+    tiles.length === 104 && new Set(tiles).size === 104 && notSquare.length === 0 && drawn.length === 104 && variantCount > 104 && blank.length === 0 && page.errors.length === 0,
     JSON.stringify({ tiles: tiles.length, notSquare, drawn: drawn.length, variantCount, blank, errors: page.errors }),
   );
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "贴纸", exact: true }).click();
   const category = (await page.getByRole("radiogroup", { name: "贴纸分类" }).locator("[aria-checked=true]").innerText()).trim();
-  // 遍历结束时停在最后一个分类“科学图示”；显微镜的款式依次点过，最后选的是“墨线”
-  await page.getByRole("button", { name: "添加贴纸：显微镜", exact: true }).click();
+  // 遍历结束时停在最后一个分类“宇宙”；宇航员的款式依次点过，最后选的是“墨线”
+  await page.getByRole("button", { name: "添加贴纸：宇航员", exact: true }).click();
   const variant = (await page.locator(".sticker-variants [aria-checked=true]").innerText()).trim();
-  check("G10", "刷新后保留上次的贴纸分类，新贴纸沿用这类贴纸上次选择的款式", category === "科学图示" && variant === "墨线", JSON.stringify({ category, variant }));
+  check("G10", "刷新后保留上次的贴纸分类，新贴纸沿用这类贴纸上次选择的款式", category === "宇宙" && variant === "墨线", JSON.stringify({ category, variant }));
   await context.close();
 }
 

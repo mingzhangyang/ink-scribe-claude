@@ -26,6 +26,33 @@ export const pen = (color: string, width: number): CSSProperties => ({
   strokeLinejoin: "round",
 });
 
+export const INK = "var(--ink)";
+export const PAPER = "var(--paper)";
+
+/** “彩色 / 墨线”两种款式的贴纸（科学图示、宇宙）：墨线款不上色，只用墨水色勾线。 */
+export const isInk = (variant: ArtProps["variant"]) => variant.id === "ink";
+
+/** 填色的形状：彩色款同色系描边，墨线款纸色填充加墨线，前面的形状会遮住后面的线。 */
+export function solid(ink: boolean, color: string, width = 1.4): CSSProperties {
+  return ink
+    ? { fill: PAPER, stroke: INK, strokeWidth: width + 0.4, strokeLinejoin: "round" }
+    : { fill: color, stroke: shade(color, 70), strokeWidth: width, strokeLinejoin: "round" };
+}
+
+export const line = (ink: boolean, color: string, width: number) => pen(ink ? INK : color, width);
+
+/** 粗线条（DNA 骨架、抗体链、显微镜镜筒）：墨线款画成空心的双线。 */
+export function Band({ d, ink, color, width }: { d: string; ink: boolean; color: string; width: number }) {
+  return ink ? (
+    <>
+      <path d={d} style={pen(INK, width)} />
+      <path d={d} style={pen(PAPER, width - 3.2)} />
+    </>
+  ) : (
+    <path d={d} style={pen(color, width)} />
+  );
+}
+
 /** 投影：同一形状向右下偏移后铺一层浅灰。 */
 export const SHADOW: CSSProperties = { fill: "rgba(0, 0, 0, 0.13)" };
 

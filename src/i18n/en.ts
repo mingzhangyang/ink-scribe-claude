@@ -1,6 +1,6 @@
 import type { Messages } from "./zh.ts";
 
-/** Pen colors shared by the formula stickers, and the two styles of the science diagrams. */
+/** Pen colors shared by the formula stickers, and the two styles of the science and space stickers. */
 const PEN = { ink: "Ink", red: "Red pen", blue: "Blue pen" };
 const DIAGRAM = { color: "Color", ink: "Ink line" };
 
@@ -187,6 +187,25 @@ export const en: Messages = {
       "greek-capital-delta": "Δ capital delta",
       "greek-capital-sigma": "Σ capital sigma",
       "greek-capital-omega": "Ω capital omega",
+      car: "Car",
+      train: "Train",
+      "bullet-train": "High-speed train",
+      ship: "Ship",
+      sailboat: "Sailboat",
+      airplane: "Airplane",
+      rocket: "Rocket",
+      starship: "Starship",
+      satellite: "Satellite",
+      sun: "Sun",
+      earth: "Earth",
+      moon: "Moon",
+      saturn: "Saturn",
+      jupiter: "Jupiter",
+      comet: "Comet",
+      galaxy: "Spiral galaxy",
+      "black-hole": "Black hole",
+      "big-dipper": "Big Dipper",
+      astronaut: "Astronaut",
     },
     stickerVariants: {
       tape: { yellow: "Lemon", mint: "Mint", pink: "Sakura", blue: "Mist blue", kraft: "Kraft", dots: "Polka dots", checks: "Gingham", stripes: "Stripes" },
@@ -274,8 +293,27 @@ export const en: Messages = {
       "greek-capital-delta": PEN,
       "greek-capital-sigma": PEN,
       "greek-capital-omega": PEN,
+      car: { red: "Red", blue: "Blue", yellow: "Yellow" },
+      train: { green: "Green", red: "Red" },
+      "bullet-train": { blue: "Blue stripe", red: "Red stripe" },
+      ship: { red: "Red hull", navy: "Navy hull" },
+      sailboat: { white: "White sails", red: "Red sails" },
+      airplane: { blue: "Blue tail", red: "Red tail" },
+      rocket: { red: "Red", blue: "Blue" },
+      starship: { flight: "Engines lit", parked: "Standing" },
+      satellite: { gold: "Gold", silver: "Silver" },
+      sun: DIAGRAM,
+      earth: DIAGRAM,
+      moon: { crescent: "Crescent", full: "Full moon" },
+      saturn: DIAGRAM,
+      jupiter: DIAGRAM,
+      comet: DIAGRAM,
+      galaxy: DIAGRAM,
+      "black-hole": DIAGRAM,
+      "big-dipper": { gold: "Gold", ink: "Ink line" },
+      astronaut: DIAGRAM,
     },
-    stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit", formulas: "Formulas", greek: "Greek letters", science: "Science" },
+    stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit", formulas: "Formulas", greek: "Greek letters", science: "Science", vehicles: "Vehicles", space: "Space" },
     fileKinds: { text: "text", html: "web page", docx: "Word", pdf: "PDF" },
   },
 

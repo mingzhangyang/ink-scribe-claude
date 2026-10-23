@@ -43,7 +43,9 @@ import {
   TRna,
   WaterMolecule,
 } from "./art/science.tsx";
+import { Astronaut, BigDipper, BlackHole, Comet, Earth, Galaxy, Jupiter, Moon, Saturn, Sun } from "./art/space.tsx";
 import { CoffeeStain, InkBlot, PawPrint, Postmark, Seal } from "./art/stamps.tsx";
+import { Airplane, BulletTrain, Car, Rocket, Sailboat, Satellite, Ship, Starship, Train } from "./art/vehicles.tsx";
 import { isDoodleTheme, STICKER_SIZES, stickerVariant, type DecorStickerType, type StickerItem } from "./types.ts";
 
 const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
@@ -118,6 +120,25 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   flask: Flask,
   microscope: Microscope,
   ...GREEK_ART,
+  car: Car,
+  train: Train,
+  "bullet-train": BulletTrain,
+  ship: Ship,
+  sailboat: Sailboat,
+  airplane: Airplane,
+  rocket: Rocket,
+  starship: Starship,
+  satellite: Satellite,
+  sun: Sun,
+  earth: Earth,
+  moon: Moon,
+  saturn: Saturn,
+  jupiter: Jupiter,
+  comet: Comet,
+  galaxy: Galaxy,
+  "black-hole": BlackHole,
+  "big-dipper": BigDipper,
+  astronaut: Astronaut,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };

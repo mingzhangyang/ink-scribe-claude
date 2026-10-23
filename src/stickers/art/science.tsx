@@ -1,37 +1,10 @@
-import type { CSSProperties } from "react";
-import { Frame, pen, pt, shade, tint, type ArtProps } from "./common.tsx";
+import { Band, Frame, INK, isInk, line, PAPER, pen, pt, solid, tint, type ArtProps } from "./common.tsx";
 import { Handwriting } from "./handwriting.tsx";
 
 /**
  * 科学图示：化学结构式、生物大分子、物理示意与实验器材。
  * 彩色款上色；墨线款用纸色填充、墨水色勾线，像手绘的线稿，前面的形状会遮住后面的线。
  */
-
-const INK = "var(--ink)";
-const PAPER = "var(--paper)";
-
-const isInk = (variant: ArtProps["variant"]) => variant.id === "ink";
-
-/** 填色的形状：彩色款同色系描边，墨线款纸色填充加墨线。 */
-function solid(ink: boolean, color: string, width = 1.4): CSSProperties {
-  return ink
-    ? { fill: PAPER, stroke: INK, strokeWidth: width + 0.4, strokeLinejoin: "round" }
-    : { fill: color, stroke: shade(color, 70), strokeWidth: width, strokeLinejoin: "round" };
-}
-
-const line = (ink: boolean, color: string, width: number) => pen(ink ? INK : color, width);
-
-/** 粗线条（DNA 骨架、抗体链、显微镜镜筒）：墨线款画成空心的双线。 */
-function Band({ d, ink, color, width }: { d: string; ink: boolean; color: string; width: number }) {
-  return ink ? (
-    <>
-      <path d={d} style={pen(INK, width)} />
-      <path d={d} style={pen(PAPER, width - 3.2)} />
-    </>
-  ) : (
-    <path d={d} style={pen(color, width)} />
-  );
-}
 
 export function Benzene({ variant }: ArtProps) {
   const ink = isInk(variant);
