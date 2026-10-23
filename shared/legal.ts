@@ -74,26 +74,24 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "published-notes",
           title: "在线发布与可见范围",
           paragraphs: [
-            "通过发布 API 发布时，服务器会保存整理后的 note、外观设置、贴纸与插图数据，以及标题、摘要、语言、分类、可见性、发布时间和发布者标识等元数据，以提供查看、图库与管理功能。发布者标识是发布密钥标识；免密钥发布时是客户端哈希，见下一节。发布步骤本身不调用 AI。",
+            "通过发布 API 发布时，服务器会保存整理后的 note、外观设置、贴纸与插图数据，以及标题、摘要、语言、分类、可见性和发布时间等元数据，以提供查看与删除功能；用于发布限额和删除的客户端哈希见下一节。发布步骤本身不调用 AI。",
             "发布接口不接收独立的原文 text 字段，不另外保存原始文件或原文副本；你主动放进 note 的原文摘录、姓名或其他个人信息，仍会作为笔记内容保存和展示。",
           ],
           items: [
-            "unlisted 是默认可见性，也是免密钥发布唯一可用的可见性：作品不列入公开图库，但任何持有链接的人都能匿名读取。它不是需要登录的私有文档。",
-            "public 作品会展示在公开图库，并可能通过页面正文、站点地图等被搜索引擎或其他访问者发现、收录和转发。",
-            "预检不会保存笔记或占用幂等键，但仍会进行限流和请求元数据记录；使用密钥时还会认证。仅在本机保存草稿或导出图片不会创建在线发布记录。",
+            "通过 API 发布的作品都是 unlisted：不列入公开图库，也不会被搜索引擎收录，但任何持有链接的人都能匿名读取。它不是需要登录的私有文档。",
+            "预检不会保存笔记或占用幂等键，但仍会进行限流和请求元数据记录。仅在本机保存草稿、笔记库或导出图片不会创建在线发布记录。",
           ],
         },
         {
           id: "technical-data",
-          title: "运行数据、密钥与防滥用",
+          title: "运行数据与防滥用",
           paragraphs: [
-            "为了诊断故障、管理资源和防止滥用，应用记录请求标识、路径、状态与错误码、模型、耗时、输入字数、token 用量和重试次数等元数据。应用定义的日志字段不包含原文、模型输出正文或 Authorization 密钥。",
-            "AI 接口和免密钥发布会使用客户端 IP 信息限流，使用密钥的 API 调用按密钥标识限流。Cloudflare 的网络、安全和请求日志也可能处理 IP 地址及其他技术请求信息。",
+            "为了诊断故障、管理资源和防止滥用，应用记录请求标识、路径、状态与错误码、模型、耗时、输入字数、token 用量和重试次数等元数据。应用定义的日志字段不包含原文或模型输出正文。",
+            "AI 接口和发布接口会使用客户端 IP 信息限流。Cloudflare 的网络、安全和请求日志也可能处理 IP 地址及其他技术请求信息。",
           ],
           items: [
-            "发布密钥的数据库记录包含密钥哈希、标识、用途名称、创建时间、最近使用时间和吊销状态；密钥明文不保存在该数据库记录中。",
-            "免密钥发布时，服务器随笔记保存由客户端 IP 计算出的单向哈希，用于 24 小时发布次数上限，并区分不同发布者的幂等键。数据库不保存 IP 明文，但该哈希仍可能与特定 IP 关联。同时保存发布时返回的 manageToken 的哈希，用于授权删除；manageToken 明文不保存。",
-            "提供 Idempotency-Key 时，服务器保存该键、请求内容的哈希、关联的密钥或客户端哈希与笔记标识、处理状态和时间，以避免重试产生重复作品。请不要把敏感正文或其他秘密放进幂等键。",
+            "发布笔记时，服务器随笔记保存由客户端 IP 计算出的单向哈希，用于 24 小时发布次数上限，并区分不同发布者的幂等键。数据库不保存 IP 明文，但该哈希仍可能与特定 IP 关联。同时保存发布时返回的 manageToken 的哈希，用于授权删除；manageToken 明文不保存。",
+            "提供 Idempotency-Key 时，服务器保存该键、请求内容的哈希、客户端哈希、笔记标识、处理状态和时间，以避免重试产生重复作品。请不要把敏感正文或其他秘密放进幂等键。",
             "这些技术与管理数据用于提供服务，不用于向你展示个性化广告。当前应用未集成第三方广告或跨站营销追踪脚本；基础设施提供商仍可能处理运行服务所需的数据。",
           ],
         },
@@ -116,8 +114,8 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "保存、删除与撤回分享",
           paragraphs: [
             "草稿、笔记库和偏好等本地数据由当前浏览器保存，直到你通过应用或浏览器清除它们，或浏览器不再保留它们。已发布笔记不会随你关闭页面而自动删除，当前发布功能也没有统一的自动到期删除期限。日志、平台备份和缓存的保留方式取决于相关平台与部署配置。",
-            "已发布作品可由持有对应密钥或 manageToken 的 API 客户端删除，或联系维护者协助处理。删除笔记后，为防止延迟重试重新创建作品，系统仍可保留幂等关联与必要管理记录；这些关联与管理记录目前没有自动到期清除期限。吊销密钥会阻止继续使用该密钥，但不会自动删除已经发布的作品。",
-            "从 public 改为 unlisted 只是取消公开列表展示，原链接仍可访问。删除或调整可见性无法召回他人已下载、截图、转发或由第三方缓存的副本。",
+            "已发布作品可使用发布时返回的 manageToken 通过 API 删除，或联系维护者协助处理。删除笔记后，为防止延迟重试重新创建作品，系统仍可保留幂等关联与必要管理记录；这些关联与管理记录目前没有自动到期清除期限。",
+            "删除作品无法召回他人已下载、截图、转发或由第三方缓存的副本。",
           ],
         },
         {
@@ -125,7 +123,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "联系、请求与政策更新",
           paragraphs: [
             `如有隐私疑问，或希望查询、纠正、删除与自己有关的数据，请发送邮件至 ${CONTACT_EMAIL}。处理时可能需要核实你的身份或对相关作品的权限。`,
-            "一般问题和建议也可以在 Discord 社区或项目 GitHub 反馈入口提出。这两个都是公开渠道，并非私密表单：不要在其中粘贴原文、API 密钥、manageToken、个人敏感信息或未公开笔记的链接，涉及这些内容的请求请通过邮件联系。",
+            "一般问题和建议也可以在 Discord 社区或项目 GitHub 反馈入口提出。这两个都是公开渠道，并非私密表单：不要在其中粘贴原文、manageToken、个人敏感信息或未公开笔记的链接，涉及这些内容的请求请通过邮件联系。",
             "功能或数据处理方式变化时，本政策可能更新，并在页面标注新的更新日期。你在适用法律下享有的权利不因本说明受到限制。",
           ],
           links: [
@@ -161,7 +159,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           paragraphs: [
             "你对所提交内容享有的权利不会因使用本服务而转让给项目维护者。你应拥有输入、编辑、处理和分享这些内容所需的权利与许可，并尊重他人的著作权、隐私和其他合法权益。",
             "为了交付你请求的功能，你允许维护者及必要的服务提供商在该目的所需范围内处理、复制、存储、展示和分发内容。例如，AI 整理需要处理输入文字，在线发布需要保存笔记并向具有相应访问方式的人展示。本许可限于提供、运行和维护你所选择的服务。",
-            "public 作品会公开展示并可被索引；unlisted 作品可由任何持有链接的人读取。选择可见性、发送链接或导出分享前，请确认你有权按该范围披露内容。公开展示不代表他人自动取得你的著作权。",
+            "通过 API 发布的作品为 unlisted，任何持有链接的人都能读取。发送链接或分享导出的图片前，请确认你有权向对方披露这些内容。他人能够查看你的作品，不代表其取得了你的著作权。",
           ],
         },
         {
@@ -176,10 +174,10 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "agent-access",
           title: "AI agent 与自动发布",
           paragraphs: [
-            "任何能够遵循接口契约的 agent 或程序都可以接入，免密钥发布的作品仅以 unlisted 方式分享。自动化调用者应在用户授权范围内行动，确认发布内容及可见范围，并遵守站点的请求大小、速率、每日发布次数和资源限制。",
+            "任何能够遵循接口契约的 agent 或程序都可以接入，发布的作品仅以 unlisted 方式分享。自动化调用者应在用户授权范围内行动，确认发布内容及可见范围，并遵守站点的请求大小、速率、每日发布次数和资源限制。",
           ],
           items: [
-            "把发布返回的 manageToken 交给用户妥善保管，不要把它或其他访问凭据放进公开页面、代码仓库、共享笔记或 issue。凭据泄露时，及时删除相关作品或联系维护者处理。",
+            "把发布返回的 manageToken 交给用户妥善保管，不要把它放进公开页面、代码仓库、共享笔记或 issue。manageToken 泄露时，及时删除相关作品或联系维护者处理。",
             "发布应提交准备好的结构化 note；可先预检并修正错误。对同一次发布的网络重试，应使用原幂等键和相同请求体，避免重复发布。",
             "不得绕过访问控制、试图获取未经授权的数据、通过更换网络地址等方式逃避限流和发布次数上限，或以自动化方式干扰服务。能够调用接口不意味着可以代替用户决定分享其内容。",
           ],
@@ -206,7 +204,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "删除、限制访问与服务调整",
           paragraphs: [
             "维护者可以为维护服务、安全、防止滥用、处理侵权投诉或遵守适用法律，对内容或 API 访问进行调查、限制、移除或停用，并可调整或停止部分功能。这些处理应在适用法律允许的范围内进行。",
-            "你可使用 manageToken 等相应凭据通过 API 删除自己管理的作品，或联系维护者寻求帮助。吊销密钥不会自动撤下已发布的作品；删除或改变可见性也不能消除已经被他人取得的副本。具体数据处理方式见隐私政策。",
+            "你可使用发布时返回的 manageToken 通过 API 删除自己的作品，或联系维护者寻求帮助。删除作品不能消除已经被他人取得的副本。具体数据处理方式见隐私政策。",
             "功能和条款可能随着维护迭代而调整，本页会标明更新日期。使用新的功能或发布方式前，请重新查看相关说明。",
           ],
           links: [{ href: "/privacy#retention-deletion", label: "了解保存与删除方式" }],
@@ -215,7 +213,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "问题与反馈",
           paragraphs: [
-            `如对使用条款、内容权利或访问限制有疑问，请发送邮件至 ${CONTACT_EMAIL}；删除请求、侵权投诉等敏感事项也请通过邮件联系。一般反馈可以在 Discord 社区或项目 GitHub 反馈入口提出，它们是公开渠道，不要在其中提供原文、API 密钥、manageToken、个人敏感信息或未公开链接。`,
+            `如对使用条款、内容权利或访问限制有疑问，请发送邮件至 ${CONTACT_EMAIL}；删除请求、侵权投诉等敏感事项也请通过邮件联系。一般反馈可以在 Discord 社区或项目 GitHub 反馈入口提出，它们是公开渠道，不要在其中提供原文、manageToken、个人敏感信息或未公开链接。`,
           ],
           links: [
             { href: CONTACT_MAILTO, label: `发送邮件（${CONTACT_EMAIL}）` },
@@ -272,26 +270,24 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "published-notes",
           title: "Publishing and visibility",
           paragraphs: [
-            "Publishing through the API saves the prepared note, appearance settings, stickers, and illustration data on the server. It also saves metadata such as title, summary, language, category, visibility, publication time, and a publisher identifier to support viewing, the gallery, and management. The publisher identifier is the publishing key's identifier, or a client hash for publishing without a key, as described in the next section. The publishing step itself makes no AI call.",
+            "Publishing through the API saves the prepared note, appearance settings, stickers, and illustration data on the server. It also saves metadata such as title, summary, language, category, visibility, and publication time to support viewing and deletion. The client hash used for publishing limits and deletion is described in the next section. The publishing step itself makes no AI call.",
             "The publishing endpoint does not accept a separate source-text field named text or save an additional original file or source-text copy. Any source excerpts, names, or other personal information you choose to include in note are still saved and displayed as part of the note.",
           ],
           items: [
-            "unlisted is the default, and the only visibility available when publishing without a key: the note is kept out of the public gallery, but anyone with its link can read it without signing in. It is not a private document protected by an account.",
-            "public notes appear in the gallery and may be discovered, indexed, or shared through page content, sitemaps, search engines, and other visitors.",
-            "Validation does not save a note or reserve an idempotency key, but rate limiting and request metadata logging still occur, as does authentication when a key is used. Saving a local draft or exporting an image does not create a published record.",
+            "Every note published through the API is unlisted: it stays out of the public gallery and search engines, but anyone with its link can read it without signing in. It is not a private document protected by an account.",
+            "Validation does not save a note or reserve an idempotency key, but rate limiting and request metadata logging still occur. Saving a local draft or library note, or exporting an image, does not create a published record.",
           ],
         },
         {
           id: "technical-data",
-          title: "Operational data, keys, and abuse prevention",
+          title: "Operational data and abuse prevention",
           paragraphs: [
-            "To diagnose problems, manage resources, and prevent abuse, the application records metadata such as request identifiers, paths, status and error codes, models, duration, input length, token usage, and retry counts. Its defined logging fields do not contain source text, model response bodies, or Authorization keys.",
-            "AI endpoints and publishing without a key use client IP information for rate limiting, and API operations with a key use a key identifier. Cloudflare's network, security, and request logging services may also process IP addresses and other technical request information.",
+            "To diagnose problems, manage resources, and prevent abuse, the application records metadata such as request identifiers, paths, status and error codes, models, duration, input length, token usage, and retry counts. Its defined logging fields do not contain source text or model response bodies.",
+            "AI and publishing endpoints use client IP information for rate limiting. Cloudflare's network, security, and request logging services may also process IP addresses and other technical request information.",
           ],
           items: [
-            "A publishing key's database record contains a key hash, identifier, purpose name, creation time, last-use time, and revocation state. That record does not store the plaintext key.",
-            "When you publish without a key, the server stores a one-way hash computed from the client IP address with the note. It enforces the 24-hour publishing limit and keeps different publishers' idempotency keys apart. The database does not store the plaintext IP address, but the hash may still be linked to a specific IP address. The server also stores a hash of the returned manageToken to authorize deletion; the plaintext manageToken is not stored.",
-            "If you provide an Idempotency-Key, the server stores that key, a hash of the request content, the associated key identifier or client hash, the note identifier, processing state, and timestamps to prevent duplicate notes after retries. Do not put sensitive content or other secrets in an idempotency key.",
+            "When a note is published, the server stores a one-way hash computed from the client IP address with the note. It enforces the 24-hour publishing limit and keeps different publishers' idempotency keys apart. The database does not store the plaintext IP address, but the hash may still be linked to a specific IP address. The server also stores a hash of the returned manageToken to authorize deletion; the plaintext manageToken is not stored.",
+            "If you provide an Idempotency-Key, the server stores that key, a hash of the request content, the client hash, the note identifier, processing state, and timestamps to prevent duplicate notes after retries. Do not put sensitive content or other secrets in an idempotency key.",
             "This operational and management data is used to provide the service, not to show personalized advertising. The current application has no third-party advertising or cross-site marketing tracking scripts integrated. Infrastructure providers may still process the data needed to run their services.",
           ],
         },
@@ -314,8 +310,8 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "Retention, deletion, and withdrawing a share",
           paragraphs: [
             "Local data such as drafts, the library, and preferences stays in the current browser until you remove it through the application or browser, or the browser stops retaining it. Published notes do not disappear when you close a page, and the current publishing feature has no universal automatic expiry. Retention of logs, platform backups, and caches depends on the relevant platform and deployment settings.",
-            "Published notes can be deleted by an API client with the corresponding key or manageToken, or you can ask the maintainers for help. After a note is deleted, idempotency associations and necessary management records may remain to prevent delayed retries from recreating it. The current application does not automatically expire these association or management records. Revoking a key prevents further use of that key but does not automatically delete notes already published with it.",
-            "Changing public to unlisted only removes public listing; the existing link remains accessible. Deletion or visibility changes cannot recall copies others have downloaded, captured, shared, or cached outside the service.",
+            "Published notes can be deleted through the API with the manageToken returned at publication, or you can ask the maintainers for help. After a note is deleted, idempotency associations and necessary management records may remain to prevent delayed retries from recreating it. The current application does not automatically expire these association or management records.",
+            "Deleting a note cannot recall copies others have downloaded, captured, shared, or cached outside the service.",
           ],
         },
         {
@@ -323,7 +319,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "Contact, requests, and policy updates",
           paragraphs: [
             `For privacy questions, or to ask about accessing, correcting, or deleting data relating to you, email ${CONTACT_EMAIL}. Your identity or authority over the relevant note may need to be verified.`,
-            "General questions and suggestions are also welcome in the Discord community or on the project's GitHub feedback page. Both are public channels, not private forms: do not paste source text, API keys, manageTokens, sensitive personal information, or unlisted note links there, and use email for requests that involve them.",
+            "General questions and suggestions are also welcome in the Discord community or on the project's GitHub feedback page. Both are public channels, not private forms: do not paste source text, manageTokens, sensitive personal information, or unlisted note links there, and use email for requests that involve them.",
             "This policy may change as features or data practices change, with a new update date shown on this page. This notice does not limit rights you have under applicable law.",
           ],
           links: [
@@ -359,7 +355,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           paragraphs: [
             "Using this service does not transfer your existing rights in submitted content to the maintainers. You should have the rights and permissions needed to submit, edit, process, and share that content, and respect other people's copyright, privacy, and other legal rights.",
             "To deliver the features you request, you permit the maintainers and necessary service providers to process, copy, store, display, and distribute content to the extent needed for that purpose. For example, AI organization processes input text, and publishing saves a note and shows it to people who can access it. This permission is limited to providing, operating, and maintaining the services you choose.",
-            "public notes are openly displayed and may be indexed. Anyone with an unlisted note's link can read it. Before choosing visibility, sending a link, or sharing an export, make sure you are authorized to disclose the content to that audience. Public display does not automatically transfer your copyright to others.",
+            "Notes published through the API are unlisted, so anyone with the link can read them. Before sending a link or sharing an exported image, make sure you are authorized to disclose the content to those people. Others being able to view your note does not give them your copyright.",
           ],
         },
         {
@@ -374,10 +370,10 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "agent-access",
           title: "AI agents and automated publishing",
           paragraphs: [
-            "Any agent or program that follows the API contract can connect. Notes published without a key are shared only as unlisted. Automated clients should act within the user's authorization, confirm the content and its intended audience, and respect request-size, rate, daily publishing, and resource limits.",
+            "Any agent or program that follows the API contract can connect. Published notes are shared only as unlisted. Automated clients should act within the user's authorization, confirm the content and its intended audience, and respect request-size, rate, daily publishing, and resource limits.",
           ],
           items: [
-            "Give the manageToken returned by publishing to the user to keep safe. Do not put it or other access credentials in public pages, code repositories, shared notes, or issues. If a credential is exposed, delete the affected notes or contact the maintainers.",
+            "Give the manageToken returned by publishing to the user to keep safe. Do not put it in public pages, code repositories, shared notes, or issues. If a manageToken is exposed, delete the affected notes or contact the maintainers.",
             "Publish a prepared structured note. Validate it and correct errors first when appropriate. Network retries for the same publication should keep the original idempotency key and request body to avoid duplicates.",
             "Do not bypass access controls, obtain data without authorization, evade rate or daily publishing limits (for example, by changing network addresses), or use automation to disrupt the service. Being able to call the API does not authorize you to share a user's content on their behalf.",
           ],
@@ -404,7 +400,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "Removal, access limits, and service changes",
           paragraphs: [
             "Maintainers may investigate, restrict, remove, or disable content or API access to maintain the service, protect security, prevent abuse, address rights complaints, or comply with applicable law. They may also change or discontinue features. Such actions remain subject to applicable law.",
-            "You may delete notes you manage through the API with the corresponding credential, such as a manageToken, or contact maintainers for help. Revoking a key does not automatically take down notes already published. Deleting a note or changing its visibility cannot remove copies already obtained by others. The privacy policy explains the associated data handling.",
+            "You may delete your notes through the API with the manageToken returned at publication, or contact the maintainers for help. Deleting a note cannot remove copies already obtained by others. The privacy policy explains the associated data handling.",
             "Features and terms may change as the service is maintained. This page identifies its update date. Review the relevant information before using new features or publishing methods.",
           ],
           links: [{ href: "/privacy#retention-deletion", label: "Learn about retention and deletion" }],
@@ -413,7 +409,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "contact",
           title: "Questions and feedback",
           paragraphs: [
-            `For questions about these terms, content rights, or access restrictions, email ${CONTACT_EMAIL}; please use email for deletion requests, rights complaints, and other sensitive matters too. General feedback is welcome in the Discord community or on the project's GitHub feedback page. Those are public channels, so do not put source text, API keys, manageTokens, sensitive personal information, or unlisted links there.`,
+            `For questions about these terms, content rights, or access restrictions, email ${CONTACT_EMAIL}; please use email for deletion requests, rights complaints, and other sensitive matters too. General feedback is welcome in the Discord community or on the project's GitHub feedback page. Those are public channels, so do not put source text, manageTokens, sensitive personal information, or unlisted links there.`,
           ],
           links: [
             { href: CONTACT_MAILTO, label: `Email us (${CONTACT_EMAIL})` },
