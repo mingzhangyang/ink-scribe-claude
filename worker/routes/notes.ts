@@ -13,6 +13,7 @@ import {
   claimPublish,
   releasePublish,
   type PublishClaim,
+  type NoteRow,
   getNoteRow,
   insertNote,
   listNotes,
@@ -87,12 +88,15 @@ function ownedRowOr404<T>(row: T | null): T {
   return row;
 }
 
-async function published(ctx: RouteContext, id: string, apiKeyId?: string): Promise<PublishedNote> {
-  const row = ownedRowOr404(await getNoteRow(db(ctx), id));
+function publishRow(ctx: RouteContext, row: NoteRow, apiKeyId?: string): PublishedNote {
   if (apiKeyId && row.api_key_id !== apiKeyId) throw new AppError(404, "NOT_FOUND", "笔记不存在。");
   const note = toPublished(row, ctx.origin);
   if (!note) throw new AppError(500, "INTERNAL_ERROR", "笔记数据已损坏。");
   return note;
+}
+
+async function published(ctx: RouteContext, id: string, apiKeyId?: string): Promise<PublishedNote> {
+  return publishRow(ctx, ownedRowOr404(await getNoteRow(db(ctx), id)), apiKeyId);
 }
 
 // ---------- POST /api/v1/notes ----------
@@ -120,10 +124,11 @@ export async function handleCreateNote(ctx: RouteContext): Promise<Response> {
       if (existing.state === "pending") {
         throw new AppError(409, "IDEMPOTENCY_CONFLICT", "该请求正在处理中，请使用相同的键稍后重试。", { retryAfterSeconds: 2 });
       }
-      if (!await getNoteRow(database, existing.note_id)) {
+      const row = await getNoteRow(database, existing.note_id);
+      if (!row) {
         throw new AppError(410, "NOT_FOUND", "该请求对应的笔记已删除，不能重放。新建笔记请使用新的 Idempotency-Key。");
       }
-      const note = await published(ctx, existing.note_id, apiKey.id);
+      const note = publishRow(ctx, row, apiKey.id);
       return jsonResponse({ ...note, meta: { requestId: ctx.requestId, replayed: true } }, 200, { "Idempotent-Replayed": "true" });
     }
     claim = reservation.claim;

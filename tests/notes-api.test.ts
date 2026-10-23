@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../worker/env.ts";
 import { resetMemoryRateLimit } from "../worker/rate-limit.ts";
 import { handleApi } from "../worker/router.ts";
+import * as noteStore from "../worker/store.ts";
 import { claimPublish, insertNote, releasePublish } from "../worker/store.ts";
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { createTestD1 } from "./helpers/d1.ts";
@@ -184,6 +185,23 @@ describe("POST /api/v1/notes", () => {
     const replay = await call(request("POST", "/api/v1/notes", options));
     expect(replay.response.status).toBe(410);
     expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("uses one replay snapshot when deletion races the read", async () => {
+    const options = { body: { note: aiNote }, headers: { "Idempotency-Key": "delete-race" } };
+    const created = await call(request("POST", "/api/v1/notes", options));
+    const original = noteStore.getNoteRow;
+    const spy = vi.spyOn(noteStore, "getNoteRow").mockImplementation(async (db, id) => {
+      const row = await original(db, id);
+      await db.prepare("DELETE FROM notes WHERE id = ?").bind(id).run();
+      return row;
+    });
+    const replay = await call(request("POST", "/api/v1/notes", options));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(replay.response.status).toBe(200);
+    expect(replay.body!.id).toBe(created.body!.id);
+    spy.mockRestore();
+    expect((await call(request("POST", "/api/v1/notes", options))).response.status).toBe(410);
   });
 
   it("rolls back failed commits and allows a same-key retry", async () => {
