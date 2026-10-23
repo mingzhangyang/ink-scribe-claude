@@ -1,16 +1,30 @@
 import { DETAILS, LANGUAGES, TEMPLATES, type Detail, type Language } from "../../shared/options.ts";
-import { useRef, useState, type DragEvent } from "react";
+import { useId, useRef, useState, type DragEvent } from "react";
 import { charLength } from "../../shared/text.ts";
 import { useT } from "../i18n/index.ts";
 import { ACCEPTED_EXTENSIONS, extractTextFromFile, FileImportError, type ExtractResult, type ImportErrorKey } from "../import/extractText.ts";
 import { SAMPLE_TEXTS } from "../samples.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { usePreferences } from "../state/preferences.ts";
-import { DraftBar } from "./DraftBar.tsx";
-import { LibraryBar } from "./LibraryBar.tsx";
 import { useNoteStore } from "../state/store.ts";
 
-export function InputPanel({ maxChars }: { maxChars: number }) {
+/** 打开原文弹窗的按钮：宽屏位于画布工具栏，窄屏（CSS）固定在屏幕底部。 */
+export function InputTrigger({ onOpen }: { onOpen: () => void }) {
+  const text = useNoteStore((s) => s.input.text);
+  // 还在看示例笔记、尚未输入原文时提示从这里开始
+  const attention = useNoteStore((s) => s.source === "sample") && text.trim().length === 0;
+  const t = useT();
+  const length = charLength(text);
+  return (
+    <button type="button" className={`btn btn-small btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
+      <span aria-hidden="true">✍️</span> {t.input.open}
+      {length > 0 ? <span className="input-trigger-count">{t.input.chars(length.toLocaleString())}</span> : null}
+    </button>
+  );
+}
+
+/** 原文弹窗的内容。生成后调用 onSubmitted，由页面关闭弹窗并展示画布。 */
+export function InputPanel({ maxChars, onClose, onSubmitted }: { maxChars: number; onClose: () => void; onSubmitted: () => void }) {
   const input = useNoteStore((s) => s.input);
   const status = useNoteStore((s) => s.status);
   const setInput = useNoteStore((s) => s.setInput);
@@ -28,6 +42,9 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
     | { kind: "error"; name: string; key?: ImportErrorKey }
   >({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
+  // 窄屏下模板、语言与详略默认收起，只显示摘要
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const optionsId = useId();
   // 连续导入多个文件时，只采用最后一次导入的结果（较早的大文件可能更晚解析完）
   const importGeneration = useRef(0);
 
@@ -59,6 +76,11 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
     return t.input.importDone(name, t.options.fileKinds[result.kind], pages, chars.toLocaleString());
   }
 
+  function submit(run: () => void) {
+    run();
+    onSubmitted();
+  }
+
   function onDrop(event: DragEvent) {
     event.preventDefault();
     setDragging(false);
@@ -67,8 +89,9 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
   }
 
   return (
-    <section className="panel input-panel" aria-labelledby="input-title">
-      <div className="panel-head">
+    <section className="input-panel" aria-labelledby="input-title">
+      <header className="sheet-head">
+        <span className="sheet-handle" aria-hidden="true" />
         <h2 id="input-title">{t.input.title}</h2>
         <label className="sample-picker">
           <span className="sr-only">{t.input.samplePicker}</span>
@@ -89,120 +112,145 @@ export function InputPanel({ maxChars }: { maxChars: number }) {
             ))}
           </select>
         </label>
-      </div>
-
-      <DraftBar />
-      <LibraryBar />
-
-      <div
-        className={`textarea-wrap${dragging ? " is-dragging" : ""}`}
-        onDragOver={(e) => {
-          if (!e.dataTransfer.types.includes("Files")) return;
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-      >
-        <textarea
-          className="source-text"
-          value={input.text}
-          onChange={(e) => setInput({ text: e.target.value })}
-          placeholder={t.input.placeholder}
-          aria-label={t.input.textareaLabel}
-          spellCheck={false}
-        />
-        <div className={`char-count${tooLong ? " is-over" : ""}`} aria-live="polite">
-          {length.toLocaleString()} / {maxChars.toLocaleString()}
-        </div>
-        {dragging ? <div className="drop-hint">{t.input.dropHint}</div> : null}
-      </div>
-
-      <div className="upload-row">
-        <button type="button" className="btn btn-small btn-secondary" disabled={importState.kind === "busy" || loading} onClick={() => fileInput.current?.click()}>
-          {importState.kind === "busy" ? t.input.uploading : t.input.upload}
+        <button type="button" className="icon-btn sheet-close" onClick={onClose} aria-label={t.input.close}>
+          ×
         </button>
-        <span className="hint">{t.input.uploadHint}</span>
-        <input
-          ref={fileInput}
-          type="file"
-          hidden
-          accept={ACCEPTED_EXTENSIONS.join(",")}
-          aria-label={t.input.upload}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void importFile(file);
-          }}
-        />
-      </div>
-      <div aria-live="polite">
-        {importState.kind === "done" ? <p className="hint is-ok">{importMessage()}</p> : null}
-        {importState.kind === "error" ? <p className="hint is-error">{importMessage()}</p> : null}
-      </div>
+      </header>
 
-      <fieldset className="field">
-        <legend>{t.input.template}</legend>
-        <div className="chip-group" role="radiogroup" aria-label={t.input.template}>
-          {TEMPLATES.map((template) => (
-            <button
-              key={template}
-              type="button"
-              role="radio"
-              aria-checked={input.template === template}
-              className={`chip${input.template === template ? " is-active" : ""}`}
-              onClick={() => setInput({ template })}
-            >
-              {t.options.templates[template]}
+      <div className="sheet-body input-body">
+        <div className="input-main">
+          <div
+            className={`textarea-wrap${dragging ? " is-dragging" : ""}`}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes("Files")) return;
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+          >
+            <textarea
+              className="source-text"
+              value={input.text}
+              onChange={(e) => setInput({ text: e.target.value })}
+              placeholder={t.input.placeholder}
+              aria-label={t.input.textareaLabel}
+              spellCheck={false}
+              data-autofocus
+            />
+            <div className={`char-count${tooLong ? " is-over" : ""}`} aria-live="polite">
+              {length.toLocaleString()} / {maxChars.toLocaleString()}
+            </div>
+            {dragging ? <div className="drop-hint">{t.input.dropHint}</div> : null}
+          </div>
+
+          <div className="upload-row">
+            <button type="button" className="btn btn-small btn-secondary" disabled={importState.kind === "busy" || loading} onClick={() => fileInput.current?.click()}>
+              {importState.kind === "busy" ? t.input.uploading : t.input.upload}
             </button>
-          ))}
+            <span className="hint">{t.input.uploadHint}</span>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              accept={ACCEPTED_EXTENSIONS.join(",")}
+              aria-label={t.input.upload}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void importFile(file);
+              }}
+            />
+          </div>
+          <div aria-live="polite">
+            {importState.kind === "done" ? <p className="hint is-ok">{importMessage()}</p> : null}
+            {importState.kind === "error" ? <p className="hint is-error">{importMessage()}</p> : null}
+          </div>
         </div>
-      </fieldset>
 
-      <div className="field-row">
-        <label className="field">
-          <span>{t.input.outputLanguage}</span>
-          <select value={input.language} onChange={(e) => setInput({ language: e.target.value as Language })}>
-            {LANGUAGES.map((l) => (
-              <option key={l} value={l}>
-                {t.options.languages[l]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>{t.input.detail}</span>
-          <select value={input.detail} onChange={(e) => setInput({ detail: e.target.value as Detail })}>
-            {DETAILS.map((d) => (
-              <option key={d} value={d}>
-                {t.options.details[d]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="input-options">
+          <button
+            type="button"
+            className="options-toggle"
+            aria-expanded={optionsOpen}
+            aria-controls={optionsId}
+            onClick={() => setOptionsOpen((open) => !open)}
+          >
+            <span>{t.input.options}</span>
+            <span className="options-summary">
+              {t.options.templates[input.template]} · {t.options.languages[input.language]} · {t.options.details[input.detail]}
+            </span>
+          </button>
+          <div id={optionsId} className={`options-fields${optionsOpen ? " is-open" : ""}`}>
+            <fieldset className="field">
+              <legend>{t.input.template}</legend>
+              <div className="chip-group" role="radiogroup" aria-label={t.input.template}>
+                {TEMPLATES.map((template) => (
+                  <button
+                    key={template}
+                    type="button"
+                    role="radio"
+                    aria-checked={input.template === template}
+                    className={`chip${input.template === template ? " is-active" : ""}`}
+                    onClick={() => setInput({ template })}
+                  >
+                    {t.options.templates[template]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="field-row">
+              <label className="field">
+                <span>{t.input.outputLanguage}</span>
+                <select value={input.language} onChange={(e) => setInput({ language: e.target.value as Language })}>
+                  {LANGUAGES.map((l) => (
+                    <option key={l} value={l}>
+                      {t.options.languages[l]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.input.detail}</span>
+                <select value={input.detail} onChange={(e) => setInput({ detail: e.target.value as Detail })}>
+                  {DETAILS.map((d) => (
+                    <option key={d} value={d}>
+                      {t.options.details[d]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+          <p className="hint">{t.input.privacy}</p>
+        </div>
       </div>
 
-      {loading ? (
-        <button type="button" className="btn btn-secondary btn-block" onClick={cancelGeneration}>
-          {t.input.cancel}
-        </button>
-      ) : (
-        <button type="button" className="btn btn-primary btn-block" disabled={empty || tooLong} onClick={() => void generateNote()}>
-          <span aria-hidden="true">✒️</span> {t.input.generate}
-        </button>
-      )}
-      {tooLong ? (
-        <p className="hint is-error">
-          {t.input.tooLong(maxChars.toLocaleString())}{" "}
-          <button type="button" className="btn btn-link btn-inline" onClick={() => setInput({ text: Array.from(input.text).slice(0, maxChars).join("") })}>
-            {t.input.truncate(maxChars.toLocaleString())}
+      <footer className="sheet-foot">
+        {tooLong ? (
+          <p className="hint is-error">
+            {t.input.tooLong(maxChars.toLocaleString())}{" "}
+            <button type="button" className="btn btn-link btn-inline" onClick={() => setInput({ text: Array.from(input.text).slice(0, maxChars).join("") })}>
+              {t.input.truncate(maxChars.toLocaleString())}
+            </button>
+          </p>
+        ) : null}
+        <div className="sheet-actions">
+          <button type="button" className="btn btn-link" disabled={empty || loading} onClick={() => submit(generateLocally)}>
+            {t.input.local}
           </button>
-        </p>
-      ) : null}
-      <button type="button" className="btn btn-link" disabled={empty || loading} onClick={generateLocally}>
-        {t.input.local}
-      </button>
-      <p className="hint">{t.input.privacy}</p>
+          {loading ? (
+            <button type="button" className="btn btn-secondary" onClick={cancelGeneration}>
+              {t.input.cancel}
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary" disabled={empty || tooLong} onClick={() => submit(() => void generateNote())}>
+              <span aria-hidden="true">✒️</span> {t.input.generate}
+            </button>
+          )}
+        </div>
+      </footer>
     </section>
   );
 }

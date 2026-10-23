@@ -10,7 +10,7 @@
 
 | 模块 | 说明 |
 | --- | --- |
-| 输入 | 中英文文本，模板：通用整理 / 读书摘抄 / 会议纪要 / 课程总结 / 思想碎片；输出语言（跟随原文 / 中文 / English）；详略（精简 / 标准 / 详细） |
+| 输入 | 点击“编辑原文”在弹窗中输入（宽屏按钮位于画布上方；手机上按钮固定在屏幕底部，以底部抽屉展开），生成后自动收起，画布占据主区域；中英文文本，模板：通用整理 / 读书摘抄 / 会议纪要 / 课程总结 / 思想碎片；输出语言（跟随原文 / 中文 / English）；详略（精简 / 标准 / 详细） |
 | 上传文件 | 支持 TXT / Markdown（自动识别 UTF-8、UTF-16、GBK 编码）、HTML（去除脚本与导航）、Word .docx、文字型 PDF；点击上传或拖入文本框。文件在浏览器本地解析，只有提取出的文字会用于整理；文字超出上限时可一键截取。扫描件 / 图片 PDF 与旧版 .doc 暂不支持，会给出明确提示 |
 | AI 整理 | `POST /api/structure` 返回经过校验的 `NoteStructure`（标题、线索、段落、重点词、总结、插图建议） |
 | 版式 | 混合康奈尔手账（默认）、经典康奈尔、自由手账、简约手札 |
@@ -56,7 +56,7 @@ npm run dev
 | `npm run deploy` | 构建并通过 `wrangler deploy` 发布 |
 | `npm run typecheck` | TypeScript 项目引用全量类型检查 |
 | `npm test` | Vitest 单元测试（契约校验、Worker API、AI 输出解析、排版工具等） |
-| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 验证文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、agent 预检与发布、四种版式长内容、图库、使用说明、政策页面、导航菜单、界面语言与主题、移动端。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
+| `npm run test:e2e` | 浏览器验收测试：以 mock 模式构建并在本地 workerd 预览，用 Playwright 验证文件上传、生成、样式、贴纸、导出、剪贴板、注入防护、错误提示、agent 预检与发布、四种版式长内容、图库、使用说明、政策页面、导航菜单、界面语言与主题、原文弹窗与移动端底部抽屉。会覆盖 `dist/`，部署前请重新 `npm run build`；首次运行需 `npx playwright install chromium`，或用 `PLAYWRIGHT_CHROMIUM_PATH` 指定本机 Chromium |
 | `npm run db:migrate` / `npm run db:migrate:remote` | 应用 D1 迁移（本地 / 线上） |
 | `npm run keys -- create --name … [--remote]` | 发放 API 密钥（另有 `list`、`revoke`），见 [docs/publishing.md](docs/publishing.md) |
 | `npm run eval:models` | 对候选 Workers AI 模型做质量 / 延迟 / 成本评测，见 [docs/model-evaluation.md](docs/model-evaluation.md) |

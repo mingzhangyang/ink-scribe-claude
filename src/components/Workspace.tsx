@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { PAGE_WIDTH } from "../config/appearance.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
-import { generateLocally, generateNote } from "../state/actions.ts";
+import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
+import { InputTrigger } from "./InputPanel.tsx";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
 import { NoteFitStatus } from "./note/NoteFitStatus.tsx";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
-export function Workspace({ pageRef, fit, onFitChange }: {
+export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
   pageRef: RefObject<HTMLDivElement | null>;
   fit: NoteFitState | null;
   onFitChange: (fit: NoteFitState) => void;
+  onEditInput: () => void;
 }) {
   const note = useNoteStore((s) => s.note);
   const settings = useNoteStore((s) => s.settings);
@@ -85,6 +87,7 @@ export function Workspace({ pageRef, fit, onFitChange }: {
   return (
     <section className="workspace" aria-label={t.workspace.label}>
       <div className="workspace-toolbar">
+        <InputTrigger onOpen={onEditInput} />
         <div className="workspace-status">
           {source === "sample" ? <span className="badge">{t.workspace.sample}</span> : null}
           {source === "local" ? <span className="badge badge-muted">{t.workspace.local}</span> : null}
@@ -124,6 +127,9 @@ export function Workspace({ pageRef, fit, onFitChange }: {
             </button>
             <button type="button" className="btn btn-small btn-secondary" onClick={generateLocally}>
               {t.workspace.localFallback}
+            </button>
+            <button type="button" className="btn btn-small btn-secondary" onClick={onEditInput}>
+              {t.workspace.editInput}
             </button>
             <button type="button" className="icon-btn" onClick={clearError} aria-label={t.workspace.dismiss}>
               ×
@@ -173,6 +179,9 @@ export function Workspace({ pageRef, fit, onFitChange }: {
                   ✍️
                 </span>
                 <span>{t.workspace.loading}</span>
+                <button type="button" className="btn btn-small btn-secondary" onClick={cancelGeneration}>
+                  {t.input.cancel}
+                </button>
               </div>
             </div>
           ) : null}

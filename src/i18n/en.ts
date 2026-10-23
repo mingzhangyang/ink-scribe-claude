@@ -112,6 +112,10 @@ export const en: Messages = {
 
   input: {
     title: "Source text",
+    open: "Edit source text",
+    chars: (count) => `${count} chars`,
+    close: "Close",
+    options: "Options",
     samplePicker: "Insert sample text",
     samplePlaceholder: "Try a sample…",
     placeholder:
@@ -173,6 +177,7 @@ export const en: Messages = {
     requestId: (id) => ` · request ${id}`,
     retry: "Retry",
     localFallback: "Quick local layout",
+    editInput: "Edit source text",
     dismiss: "Dismiss",
     overflow: "The content doesn't fit on the page, so some text is cut off.",
     autoFit: "Shrink text to fit",

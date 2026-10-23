@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fillSource } from "./input.mjs";
 
 const READY = '.note-page[data-render-status="ready"]';
 const FONT_ERROR = '.note-fit-status[data-fit-status="font-error"]';
@@ -72,7 +73,7 @@ export async function verifyFontRetry({ newPage, check, url, outputDir, mode }) 
     await page.goto(url, { waitUntil: "networkidle" });
     if (editor) {
       await page.locator(READY).waitFor({ timeout: TIMEOUT });
-      await page.locator(".source-text").fill(`字体重试后应保留的输入：${marker}`);
+      await fillSource(page, `字体重试后应保留的输入：${marker}`);
       await page.getByRole("tab", { name: "贴纸", exact: true }).click();
       await page.getByTitle("和纸胶带 · 薄荷", { exact: true }).click();
       await page.getByRole("tab", { name: "样式", exact: true }).click();

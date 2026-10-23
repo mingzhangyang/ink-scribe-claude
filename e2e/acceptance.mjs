@@ -5,6 +5,7 @@ import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
 import { verifyFontRetry } from "./font-retry.mjs";
+import { closeInput, fillSource, openInput } from "./input.mjs";
 
 const SP = process.env.E2E_OUTPUT_DIR ?? "e2e-results";
 const URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173/";
@@ -129,6 +130,7 @@ const contractOk =
   typeof n.summary === "string";
 check("C1", "/api/structure 返回符合 NoteStructure 契约的结果", contractOk, `status ${apiResult.status}`);
 
+await openInput(page);
 await page.selectOption(".sample-picker select", "zh-reading");
 await page.getByRole("button", { name: /转化为手写笔记/ }).click();
 await page.waitForSelector(".badge-ai");
@@ -148,6 +150,7 @@ const fontInfo = await page.evaluate((t) => ({
 check("E1", "切换中英文字体，中文字体分片在生产构建中按需加载", fontInfo.stack.startsWith('Caveat, "Ma Shan Zheng"') && fontInfo.zhLoaded, JSON.stringify(fontInfo));
 await verifyFontRetry({ newPage, check, url: URL, outputDir: SP, mode: "editor" });
 
+await openInput(page);
 await page.selectOption(".sample-picker select", "en-lecture");
 await page.getByRole("button", { name: /转化为手写笔记/ }).click();
 await page.waitForFunction(() => [...document.querySelectorAll(".region-label")].some((e) => e.textContent.includes("Cues")));
@@ -483,6 +486,7 @@ await context.close();
       }),
     }),
   );
+  await openInput(p3);
   await p3.locator(".source-text").fill("任意文本");
   await p3.getByRole("button", { name: /转化为手写笔记/ }).click();
   await p3.waitForSelector(".badge-ai");
@@ -499,6 +503,7 @@ await context.close();
   await p3.route("**/api/structure", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ note: { title: "残缺结构" }, meta: { requestId: "t2", model: "m", latencyMs: 1, attempts: 1, warnings: [] } }) }),
   );
+  await openInput(p3);
   await p3.getByRole("button", { name: /转化为手写笔记/ }).click();
   await p3.waitForTimeout(800);
   const survived = await p3.evaluate(() => ({ page: document.querySelectorAll(".note-page").length, alert: document.querySelector(".alert-error")?.textContent ?? "" }));
@@ -508,6 +513,7 @@ await context.close();
   await p3.route("**/api/structure", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ note: { title: "t", cues: "abc", sections: [{ content: "c", highlights: "x" }], summary: 5 }, meta: { requestId: "t3", model: "m", latencyMs: 1, attempts: 1, warnings: [] } }) }),
   );
+  await openInput(p3);
   await p3.getByRole("button", { name: /转化为手写笔记/ }).click();
   await p3.waitForTimeout(800);
   const typed = await p3.evaluate(() => document.querySelectorAll(".note-page").length);
@@ -558,7 +564,7 @@ await context.close();
 {
   const { page: p4, context: c4 } = await newPage();
   await p4.goto(URL, { waitUntil: "networkidle" });
-  await p4.locator(".source-text").fill("任意文本");
+  await fillSource(p4, "任意文本");
   const cases = [
     ["AI_TIMEOUT", 504, "AI 处理超时，请缩短文本或稍后重试。", "精简"],
     ["RATE_LIMITED", 429, "请求过于频繁，请稍后再试。", "一分钟"],
@@ -566,6 +572,7 @@ await context.close();
   ];
   for (const [code, status, message, hintWord] of cases) {
     await p4.route("**/api/structure", (route) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ error: { code, message, requestId: "r1" } }) }));
+    await openInput(p4);
     await p4.getByRole("button", { name: /转化为手写笔记/ }).click();
     await p4.waitForSelector(".alert-error");
     const text = await p4.locator(".alert-error").innerText();
@@ -573,6 +580,7 @@ await context.close();
     await p4.unroute("**/api/structure");
   }
   await p4.route("**/api/structure", (route) => route.abort("internetdisconnected"));
+  await openInput(p4);
   await p4.getByRole("button", { name: /转化为手写笔记/ }).click();
   await p4.waitForSelector(".alert-error");
   check("N-NETWORK", "网络错误有可理解的提示", (await p4.locator(".alert-error").innerText()).includes("网络"));
@@ -583,6 +591,7 @@ await context.close();
 {
   const { page: pf, context: cf } = await newPage();
   await pf.goto(URL, { waitUntil: "networkidle" });
+  await openInput(pf);
   await pf.selectOption(".sample-picker select", "zh-reading");
   await pf.getByRole("button", { name: /转化为手写笔记/ }).click();
   await pf.waitForSelector(".badge-ai");
@@ -648,6 +657,7 @@ await context.close();
     { name: "notes-gbk.txt", mimeType: "text/plain", buffer: gbk, expect: ["中文笔记"], label: "GBK 编码 TXT" },
     { name: "page.html", mimeType: "text/html", buffer: html, expect: ["网页标题", "正文第一段", "- 要点", "- 段落项", "if ready:\n    run()", "Item\tPrice", "Tea\t10"], label: "HTML（去除脚本与导航）" },
   ];
+  await openInput(p6);
   for (const file of files) {
     await p6.locator('input[type="file"]').setInputFiles({ name: file.name, mimeType: file.mimeType, buffer: file.buffer });
     await p6.waitForSelector(".input-panel .hint.is-ok, .input-panel .hint.is-error", { timeout: 30000 });
@@ -665,6 +675,7 @@ await context.close();
     { name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x"), expect: "暂不支持" },
     { name: "broken.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: Buffer.from("not a zip"), expect: ".docx" },
   ];
+  await openInput(p6);
   for (const file of errorCases) {
     await p6.locator('input[type="file"]').setInputFiles({ name: file.name, mimeType: file.mimeType, buffer: file.buffer });
     await p6.waitForFunction((n) => document.querySelector(".input-panel .hint.is-error")?.textContent?.length > 0 || false, file.name, { timeout: 30000 }).catch(() => {});
@@ -772,7 +783,7 @@ if (process.env.E2E_API_KEY) {
   await card.click();
   await p7.waitForURL(note.url);
   await p7.getByRole("button", { name: "在编辑器中打开" }).click();
-  await p7.waitForSelector(".input-panel");
+  await p7.waitForSelector(".input-trigger");
   const editor = await p7.evaluate(() => ({
     badge: document.querySelector(".workspace-status")?.textContent ?? "",
     stickers: document.querySelectorAll(".sticker").length,
@@ -952,7 +963,7 @@ if (process.env.E2E_API_KEY) {
   await guide.goto(URL, { waitUntil: "networkidle" });
   const source = "菜单导航之后，这段尚在编辑的原文必须保留。";
   const title = "菜单往返保留的标题";
-  await guide.locator(".source-text").fill(source);
+  await fillSource(guide, source);
   await guide.getByRole("tab", { name: "内容", exact: true }).click();
   await guide.locator(".content-editor input").first().fill(title);
   await openAppMenu(guide);
@@ -1034,7 +1045,7 @@ if (process.env.E2E_API_KEY) {
   check("U9", "点击菜单外部可收起菜单", await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false");
   await openAppMenu(guide);
   await guide.locator('.app-nav a[href="/"]').click();
-  await guide.locator(".source-text").waitFor();
+  await guide.locator(".input-trigger").waitFor();
   check(
     "U10",
     "菜单往返说明页后原文和已编辑的笔记保持不变",
@@ -1216,6 +1227,7 @@ if (process.env.E2E_API_KEY) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
+  await openInput(p9);
   await p9.selectOption(".sample-picker select", "en-lecture");
   await p9.click(".input-panel .btn-primary");
   await p9.waitForSelector(".loading-overlay");
@@ -1256,11 +1268,14 @@ if (process.env.E2E_API_KEY) {
     }),
   );
   await p11.goto(URL, { waitUntil: "networkidle" });
+  await openInput(p11);
   await p11.selectOption(".sample-picker select", "zh-meeting");
   await p11.click(".input-panel .btn-primary");
   await p11.waitForSelector(".alert-error");
+  await openInput(p11);
   await p11.locator('input[type="file"]').setInputFiles({ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") });
   await p11.waitForSelector(".upload-row + div .hint.is-error");
+  await closeInput(p11);
   await setAppPreference(p11, "locale", "en");
   const afterSwitch = await p11.evaluate(() => ({
     alert: document.querySelector(".alert-error strong")?.textContent ?? "",
@@ -1288,11 +1303,101 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await c5.close();
 }
 
+// ---------- I. 原文弹窗与移动端底部抽屉 ----------
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const sheet = page.locator(".input-sheet");
+  const isOpen = () => sheet.evaluate((dialog) => dialog.open);
+  const triggerFocused = () => page.locator(".input-trigger").evaluate((element) => element === document.activeElement);
+  check("IS1", "原文默认收起，画布占据主区域", !(await isOpen()) && await page.locator(".input-trigger").isVisible());
+
+  await openInput(page);
+  check("IS2", "打开原文弹窗后聚焦输入框", await page.locator(".source-text").evaluate((element) => element === document.activeElement));
+  await page.keyboard.press("Escape");
+  await sheet.waitFor({ state: "hidden" });
+  check("IS3", "Esc 关闭弹窗并将焦点归还入口按钮", !(await isOpen()) && await triggerFocused());
+
+  await openInput(page);
+  await page.locator(".source-text").fill("在输入框里拖选文字，松手落在遮罩上");
+  const box = await page.locator(".source-text").boundingBox();
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(20, 500, { steps: 5 });
+  await page.mouse.up();
+  const keptOpen = await isOpen();
+  await page.mouse.click(20, 500);
+  await sheet.waitFor({ state: "hidden" });
+  check("IS4", "点击遮罩关闭弹窗，从输入框拖选到遮罩时不关闭", keptOpen && !(await isOpen()));
+
+  await page.route("**/api/structure", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // 取消生成后请求已被页面中止，继续请求会失败
+    await route.continue().catch(() => {});
+  });
+  await openInput(page);
+  await page.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await page.waitForSelector(".loading-overlay");
+  await sheet.waitFor({ state: "hidden" });
+  await page.locator(".loading-card").getByRole("button", { name: "取消生成" }).click();
+  await page.waitForSelector(".loading-overlay", { state: "detached" });
+  check("IS5", "生成时关闭弹窗，可在画布上取消生成", await page.locator(".alert-error").count() === 0 && await page.locator(".source-text").inputValue() === "在输入框里拖选文字，松手落在遮罩上");
+  await page.unroute("**/api/structure");
+
+  await page.route("**/api/structure", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "AI_UNAVAILABLE", message: "AI 服务繁忙，请稍后重试。", requestId: "i6" } }) }),
+  );
+  await openInput(page);
+  await page.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await page.locator(".alert-error").getByRole("button", { name: "修改原文" }).click();
+  await sheet.waitFor({ state: "visible" });
+  check("IS6", "生成失败后可从错误提示重新打开原文", await isOpen());
+  await closeInput(page);
+  await page.unroute("**/api/structure");
+  check("IS7", "草稿与笔记库状态在弹窗关闭时仍可见", await page.locator(".side-panel [data-draft-status]").isVisible() && await page.locator(".side-panel [data-library-status]").isVisible());
+  check("IS8", "原文弹窗流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
+{
+  const viewport = { width: 390, height: 844 };
+  const { page, context } = await newPage({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const trigger = await page.locator(".input-trigger").boundingBox();
+  check("IS9", "移动端“编辑原文”按钮固定在屏幕底部", trigger && viewport.height - (trigger.y + trigger.height) <= 24 && trigger.y > viewport.height / 2, JSON.stringify(trigger));
+  await page.locator(".input-trigger").tap();
+  await page.locator(".input-sheet").waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+  const sheetBox = await page.locator(".input-sheet").boundingBox();
+  const mobile = await page.evaluate(() => ({
+    fontSize: parseFloat(getComputedStyle(document.querySelector(".source-text")).fontSize),
+    textareaFocused: document.activeElement === document.querySelector(".source-text"),
+    optionsHidden: getComputedStyle(document.querySelector(".options-fields")).display === "none",
+    overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  check(
+    "IS10",
+    "移动端原文显示为贴底的抽屉，不自动弹出键盘，输入框字号不触发 iOS 缩放",
+    Math.abs(sheetBox.y + sheetBox.height - viewport.height) <= 1 && sheetBox.width === viewport.width && sheetBox.y > 0 &&
+      mobile.fontSize >= 16 && !mobile.textareaFocused && mobile.overflowX <= 0,
+    JSON.stringify({ sheetBox, ...mobile }),
+  );
+  await page.locator(".options-toggle").tap();
+  check("IS11", "移动端生成选项默认收起，可展开", mobile.optionsHidden && await page.getByRole("radio", { name: "读书摘抄" }).isVisible());
+  await page.selectOption(".sample-picker select", "zh-reading");
+  await page.getByRole("button", { name: /转化为手写笔记/ }).tap();
+  await page.waitForSelector(".badge-ai");
+  // mock 接口可能在关闭动画结束前就返回，等动画结束后再检查
+  const closed = await page.locator(".input-sheet").waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
+  check("IS12", "移动端生成后收起抽屉并显示新笔记", closed && page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
 // ---------- D. 本地草稿 ----------
 {
   const { page, context } = await newPage();
   await page.goto(URL, { waitUntil: "networkidle" });
-  await page.locator(".source-text").fill("草稿原文：刷新后必须保留。");
+  await fillSource(page, "草稿原文：刷新后必须保留。");
   await page.locator('[data-draft-status="saved"]').waitFor();
   await page.getByRole("tab", { name: "内容", exact: true }).click();
   const titleInput = page.locator(".content-editor input").first();
@@ -1312,9 +1417,9 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
 
   const other = await context.newPage();
   await other.goto(URL, { waitUntil: "networkidle" });
-  await page.locator(".source-text").fill("第一标签页的新内容");
+  await fillSource(page, "第一标签页的新内容");
   await page.locator('[data-draft-status="saved"]').waitFor();
-  await other.locator(".source-text").fill("第二标签页未保存内容");
+  await fillSource(other, "第二标签页未保存内容");
   await other.locator('[data-draft-status="conflict"]').waitFor();
   check("DR3", "多标签页冲突暂停保存并保留当前编辑", await other.locator(".source-text").inputValue() === "第二标签页未保存内容");
   page.on("dialog", (dialog) => dialog.accept());
@@ -1323,7 +1428,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.reload({ waitUntil: "networkidle" });
   check("DR4", "删除后刷新不恢复旧内容，不留存模式持续生效", await page.locator(".source-text").inputValue() === "" && await page.locator('[data-draft-status="disabled"]').count() === 1);
   await page.getByRole("button", { name: "启用本机自动保存", exact: true }).click();
-  await page.locator(".source-text").fill("重新启用后的内容");
+  await fillSource(page, "重新启用后的内容");
   await page.locator('[data-draft-status="saved"]').waitFor();
   await page.reload({ waitUntil: "networkidle" });
   check("DR5", "可重新启用自动保存", await page.locator(".source-text").inputValue() === "重新启用后的内容");
@@ -1334,7 +1439,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
 {
   const { page, context } = await newPage();
   await page.goto(URL, { waitUntil: "networkidle" });
-  await page.locator(".source-text").fill("已有输入的示例笔记");
+  await fillSource(page, "已有输入的示例笔记");
   await page.locator('[data-draft-status="saved"]').waitFor();
   await setAppPreference(page, "locale", "en");
   await page.locator('[data-draft-status="saved"]').waitFor();

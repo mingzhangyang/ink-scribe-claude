@@ -68,6 +68,10 @@ export const zh = {
 
   input: {
     title: "原文",
+    open: "编辑原文",
+    chars: (count: string) => `${count} 字`,
+    close: "关闭",
+    options: "生成选项",
     samplePicker: "填入示例文本",
     samplePlaceholder: "填入示例…",
     placeholder: "粘贴文章、读书摘抄、会议记录或零散想法……\n\nAI 会提炼标题、线索、重点和总结，排成一页手写笔记。",
@@ -127,6 +131,7 @@ export const zh = {
     requestId: (id: string) => ` · 请求 ${id}`,
     retry: "重试",
     localFallback: "本地快速排版",
+    editInput: "修改原文",
     dismiss: "关闭提示",
     overflow: "内容超出了页面，部分文字被裁切。",
     autoFit: "自动缩小字号",

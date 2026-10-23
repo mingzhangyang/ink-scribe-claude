@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { PublicConfig } from "../../shared/api.ts";
 import { ApiRequestError, generateDoodle } from "../api.ts";
 import { ContentEditor } from "../components/ContentEditor.tsx";
+import { DraftBar } from "../components/DraftBar.tsx";
 import { ExportPanel } from "../components/ExportPanel.tsx";
-import { InputPanel } from "../components/InputPanel.tsx";
+import { InputPanel, InputTrigger } from "../components/InputPanel.tsx";
+import { LibraryBar } from "../components/LibraryBar.tsx";
+import { Sheet } from "../components/Sheet.tsx";
 import { StickerPanel } from "../components/StickerPanel.tsx";
 import { StylePanel } from "../components/StylePanel.tsx";
 import { Workspace } from "../components/Workspace.tsx";
@@ -20,6 +23,7 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
   const pageRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TabId>("style");
   const [fit, setFit] = useState<NoteFitState | null>(null);
+  const [inputOpen, setInputOpen] = useState(false);
   const hasNote = useNoteStore((s) => s.note !== null);
   const locale = usePreferences((s) => s.locale);
   const t = useT();
@@ -56,11 +60,29 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
     }
   }
 
+  const openInput = () => setInputOpen(true);
+  const closeInput = () => setInputOpen(false);
+
+  function onSubmitted() {
+    closeInput();
+    // 窄屏上画布可能已滚出视野：滚回画布，让用户看到生成进度
+    pageRef.current?.closest(".workspace")?.scrollIntoView({ block: "nearest" });
+  }
+
   return (
     <main className="app-main">
-      <InputPanel maxChars={config.maxInputChars} />
-      {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} /> : <section className="workspace" />}
+      {hasNote ? (
+        <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} onEditInput={openInput} />
+      ) : (
+        <section className="workspace">
+          <div className="workspace-toolbar">
+            <InputTrigger onOpen={openInput} />
+          </div>
+        </section>
+      )}
       <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
+        <DraftBar />
+        <LibraryBar />
         <div className="tabs" role="tablist">
           {TABS.map((id) => (
             <button
@@ -84,6 +106,9 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
           {tab === "export" ? <ExportPanel pageRef={pageRef} fit={fit} /> : null}
         </div>
       </aside>
+      <Sheet open={inputOpen} onClose={closeInput} labelledBy="input-title" className="input-sheet">
+        <InputPanel maxChars={config.maxInputChars} onClose={closeInput} onSubmitted={onSubmitted} />
+      </Sheet>
     </main>
   );
 }
