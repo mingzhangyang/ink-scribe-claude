@@ -32,7 +32,7 @@ export type RouteContext = {
   params: Record<string, string>;
   /** 生成分享链接使用的站点地址（PUBLIC_BASE_URL 或请求来源）。 */
   origin: string;
-  /** 通过 Bearer 认证的 API 密钥（仅 access 为 "key" 的路由）。 */
+  /** 通过 Bearer 认证的 API 密钥；agent 路由上未带 Authorization 的请求为匿名调用，此项为空。 */
   apiKey?: ApiKeyRecord;
 };
 
@@ -42,8 +42,11 @@ type Route = {
   /** 用于日志与指标的模板路径（不含实际 ID）。 */
   name: string;
   pattern: RegExp;
-  /** public：公开读取；ai：网页调用模型（来源校验 + 按 IP 限流）；key：需要 API 密钥（按密钥限流）。 */
-  access: "public" | "ai" | "key";
+  /**
+   * public：公开读取；ai：网页调用模型（来源校验 + 按 IP 限流）；
+   * agent：可选 API 密钥。带 Authorization 时必须是有效密钥并按密钥限流，否则按 IP 限流，需要密钥的操作由处理函数拒绝。
+   */
+  access: "public" | "ai" | "agent";
   methods: Partial<Record<Method, (ctx: RouteContext) => Promise<Response>>>;
 };
 
@@ -78,12 +81,12 @@ const ROUTES: Route[] = [
         jsonResponse({ ...openApiSpec(), servers: [{ url: origin }] }, 200, { "Cache-Control": "public, max-age=300" }),
     },
   },
-  { name: "/api/v1/notes", pattern: /^\/api\/v1\/notes$/, access: "key", methods: { POST: handleCreateNote, GET: handleListNotes } },
-  { name: "/api/v1/notes/validate", pattern: /^\/api\/v1\/notes\/validate$/, access: "key", methods: { POST: handleValidateNote } },
+  { name: "/api/v1/notes", pattern: /^\/api\/v1\/notes$/, access: "agent", methods: { POST: handleCreateNote, GET: handleListNotes } },
+  { name: "/api/v1/notes/validate", pattern: /^\/api\/v1\/notes\/validate$/, access: "agent", methods: { POST: handleValidateNote } },
   {
     name: "/api/v1/notes/:id",
     pattern: new RegExp(`^/api/v1/notes/${ID}$`),
-    access: "key",
+    access: "agent",
     methods: { GET: handleGetNoteV1, PATCH: handlePatchNote, DELETE: handleDeleteNote },
   },
 ];
@@ -148,10 +151,15 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
     if (route.access === "ai") {
       assertAllowedOrigin(request, config.allowedOrigins);
       await enforceRateLimit(env, request, url.pathname, config.rateLimitPerMinute);
-    } else if (route.access === "key") {
-      apiKey = await authenticate(env, request);
-      await enforceRateLimit(env, request, "/api/v1", config.apiRateLimitPerMinute, apiKey.id);
-      waitUntil(touchApiKey(env.DB!, apiKey.id, startedAt).catch(() => undefined));
+    } else if (route.access === "agent") {
+      if (request.headers.has("Authorization")) {
+        apiKey = await authenticate(env, request);
+        await enforceRateLimit(env, request, "/api/v1", config.apiRateLimitPerMinute, apiKey.id);
+        waitUntil(touchApiKey(env.DB!, apiKey.id, startedAt).catch(() => undefined));
+      } else {
+        log.anonymous = true;
+        await enforceRateLimit(env, request, "/api/v1:anonymous", config.apiRateLimitPerMinute);
+      }
     }
     response = await handler({ request, env, config, requestId, startedAt, log, waitUntil, params, origin, apiKey });
   } catch (error) {

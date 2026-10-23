@@ -65,7 +65,10 @@
     // 分享链接使用的站点地址；留空则使用请求的域名。本地开发与 mock 构建中会被清空
     "PUBLIC_BASE_URL": "https://scribe.orangely.xyz",
     "DEFAULT_TIMEZONE": "Asia/Shanghai",
-    "API_RATE_LIMIT_PER_MINUTE": "30"
+    "API_RATE_LIMIT_PER_MINUTE": "30",
+    // 不带密钥的 agent 发布：24 小时内全站与每个 IP 的上限，任一为 0 即关闭匿名发布。
+    "ANON_PUBLISH_DAILY_LIMIT": "500",
+    "ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT": "20"
   },
 
   // Worker Previews（Workers Builds 为非生产分支执行 `wrangler preview`）。预览不继承上面的绑定与变量，需要在这里单独声明：
@@ -101,7 +104,9 @@
       "ALLOWED_ORIGINS": "",
       "PUBLIC_BASE_URL": "",
       "DEFAULT_TIMEZONE": "Asia/Shanghai",
-      "API_RATE_LIMIT_PER_MINUTE": "30"
+      "API_RATE_LIMIT_PER_MINUTE": "30",
+      "ANON_PUBLISH_DAILY_LIMIT": "500",
+      "ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT": "20"
     }
   }
 }

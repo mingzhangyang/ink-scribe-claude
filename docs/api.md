@@ -125,9 +125,9 @@
 | --- | --- | --- |
 | 400 | `INVALID_REQUEST` | 生成请求字段无效，或其他接口的参数格式错误 |
 | 400 | `INVALID_JSON` | 请求体不是合法 JSON |
-| 401 | `UNAUTHORIZED` | 发布接口缺少 API 密钥，或密钥无效 / 已吊销（带 `WWW-Authenticate: Bearer`） |
+| 401 | `UNAUTHORIZED` | 提供的 API 密钥无效 / 已吊销，需要密钥的操作缺少密钥，或删除免密钥作品时缺少 `X-Manage-Token`（带 `WWW-Authenticate: Bearer`） |
 | 403 | `FORBIDDEN_ORIGIN` | 浏览器跨站调用（`Origin` 不是本站且不在 `ALLOWED_ORIGINS` 中） |
-| 403 | `FEATURE_DISABLED` | `/api/doodle` 未启用 |
+| 403 | `FEATURE_DISABLED` | `/api/doodle` 未启用，或站点关闭了免密钥发布 |
 | 404 | `NOT_FOUND` | 接口不存在 |
 | 405 | `METHOD_NOT_ALLOWED` | 方法错误（带 `Allow` 头） |
 | 413 | `PAYLOAD_TOO_LARGE` | 请求体超过 `MAX_BODY_BYTES` |
