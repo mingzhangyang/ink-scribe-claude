@@ -93,7 +93,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       curlDescription: "先在环境中设置 INKSCRIBE_API_KEY 和 INKSCRIBE_IDEMPOTENCY_KEY。新作品使用新的幂等键；重试同一作品时保留原键。下面的命令会先预检，只有预检成功才会发布。",
       rulesTitle: "让结果保持完整",
       rules: [
-        { title: "直接提交可排版的文字", body: `标题不超过 ${NOTE_LIMITS.title} 字，最多 ${NOTE_LIMITS.maxSections} 个段落、每段 ${NOTE_LIMITS.content} 字。使用已去除首尾空白的纯文本，重点短语必须出现在所属段落实际显示的文字中；不要把列表标记包含进重点词。完整约束以 OpenAPI 为准，无效或超限内容会被拒绝，不会静默截断。` },
+        { title: "直接提交可排版的文字", body: `标题不超过 ${NOTE_LIMITS.title} 字，最多 ${NOTE_LIMITS.maxSections} 个段落、每段 ${NOTE_LIMITS.content} 字。使用已去除首尾空白的纯文本，重点短语必须出现在所属段落实际显示的文字中，不包含列表标记。重叠时前面的重点词优先，每个短语都须至少有一次不与前项重叠的匹配。完整约束以 OpenAPI 为准，无效或超限内容会被拒绝，不会静默截断。` },
         { title: "预检不等于排版完成", body: "validation.layout: not_checked 表示服务端没有测量字体与页面。appearance.overflow 默认 expand，固定页面放不下时展开为长图；设为 error 时仍溢出会阻止导出。需要固定尺寸效果时，打开查看页确认排版。" },
         { title: "重试保留同一份请求", body: "请求处理中可能返回 409 和 Retry-After；保留原键、原 JSON 字段顺序，稍后重试。完成后返回原链接（200）；修改内容必须使用新键。作品被删除后，原请求重放返回 410，不会重新创建。" },
         { title: "分享范围由用户决定", body: "unlisted 不出现在图库中，但任何持有链接的人都能读取，并非登录后才能查看的私有文档。发布记录不另外保存原文副本；主动保留在 note 中的原文摘录仍会保存和展示。" },
@@ -174,7 +174,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
       curlDescription: "First set INKSCRIBE_API_KEY and INKSCRIBE_IDEMPOTENCY_KEY in your environment. Use a new idempotency key for a new note, and keep it when retrying the same note. These commands validate first and publish only if validation succeeds.",
       rulesTitle: "Keep the result complete",
       rules: [
-        { title: "Submit text ready for layout", body: `Titles allow ${NOTE_LIMITS.title} characters, with at most ${NOTE_LIMITS.maxSections} sections and ${NOTE_LIMITS.content} characters per section. Use trimmed plain text. Highlights must occur in the corresponding section's visible text; do not include list markers in highlight phrases. Read OpenAPI for every constraint. Invalid or excessive content is rejected, never silently truncated.` },
+        { title: "Submit text ready for layout", body: `Titles allow ${NOTE_LIMITS.title} characters, with at most ${NOTE_LIMITS.maxSections} sections and ${NOTE_LIMITS.content} characters per section. Use trimmed plain text. Highlights must occur in the corresponding section's visible text without list markers. Earlier highlights take precedence on overlaps, so each phrase needs at least one non-overlapping occurrence. Read OpenAPI for every constraint. Invalid or excessive content is rejected, never silently truncated.` },
         { title: "Validation is not a layout measurement", body: "validation.layout: not_checked means the server has not measured fonts or page geometry. appearance.overflow defaults to expand, which changes an overflowing fixed page to a long page. error blocks image export if the fixed page still overflows. Open the view page when a specific page size matters." },
         { title: "Keep retries identical", body: "A request in progress may return 409 and Retry-After. Keep the original key and JSON field order, then retry later. Completed requests replay the original link with 200. Changed content needs a new key. Replaying a deleted publication returns 410 and does not recreate it." },
         { title: "Let the user choose who can see it", body: "unlisted stays out of the gallery, but anyone with the link can read it; it is not a private document behind a sign-in screen. Publishing does not store a separate source-text copy. Excerpts you include in note are still stored and displayed." },

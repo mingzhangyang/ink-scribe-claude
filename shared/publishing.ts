@@ -1,5 +1,5 @@
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS } from "./appearance.ts";
-import { parseContentLines } from "./content.ts";
+import { parseContentLines, splitHighlights } from "./content.ts";
 import { DOODLE_FILLS, DOODLE_LIMITS, DOODLE_STROKES, type DoodleSpec } from "./doodle.ts";
 import { NOTE_LIMITS, type NoteStructure } from "./note.ts";
 import { STYLES, TEMPLATES, type Template } from "./options.ts";
@@ -99,7 +99,7 @@ const noteSchema = object({
       heading: plainText(NOTE_LIMITS.heading, 1),
       content: plainText(NOTE_LIMITS.content, 1, true),
       highlights: { type: "array", maxItems: NOTE_LIMITS.maxHighlights, items: plainText(NOTE_LIMITS.highlight, 1),
-        description: "Distinct phrases that occur in a single content line after list markers are removed (Unicode case-insensitive)." },
+        description: "Distinct phrases that each retain at least one non-overlapping match within a rendered content line after list markers are removed (Unicode case-insensitive). Earlier highlights take precedence over later overlapping matches." },
     }, ["content", "highlights"]) },
   summary: plainText(NOTE_LIMITS.summary, 0, true),
   doodlePrompt: plainText(NOTE_LIMITS.doodlePrompt, 1),
@@ -277,6 +277,8 @@ function checkDoodle(doodle: DoodleSpec, path: string, issues: ValidationIssue[]
 function checkNote(note: NoteStructure, path: string, issues: ValidationIssue[]): void {
   note.sections.forEach((section, index) => {
     const lines = parseContentLines(section.content).flatMap((line) => line.kind === "gap" ? [] : [line.text]);
+    const renderedHighlights = new Set(lines.flatMap((line) => splitHighlights(line, section.highlights)
+      .flatMap((run) => run.highlight === null ? [] : [run.highlight])));
     const seen = new Set<string>();
     section.highlights.forEach((highlight, highlightIndex) => {
       const p = `${path}.sections[${index}].highlights[${highlightIndex}]`;
@@ -285,7 +287,10 @@ function checkNote(note: NoteStructure, path: string, issues: ValidationIssue[])
       const actual = lines.map((line) => line.match(pattern)?.[0]).find((match) => match !== undefined);
       if (!actual) issue(issues, p, "HIGHLIGHT_NOT_FOUND", "The phrase must occur within a rendered content line, without a list marker.");
       else if (seen.has(actual)) issue(issues, p, "DUPLICATE_HIGHLIGHT", "Each highlight must identify a distinct phrase.");
-      else seen.add(actual);
+      else {
+        seen.add(actual);
+        if (!renderedHighlights.has(highlightIndex)) issue(issues, p, "HIGHLIGHT_SHADOWED", "Every matching occurrence overlaps an earlier highlight. Remove or revise this phrase so at least one non-overlapping occurrence remains.");
+      }
     });
   });
   if (note.doodleSpec) checkDoodle(note.doodleSpec, `${path}.doodleSpec`, issues);

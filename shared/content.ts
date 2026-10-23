@@ -29,3 +29,31 @@ export function parseContentLines(content: string): ContentLine[] {
   while (lines.length > 0 && lines[lines.length - 1].kind === "gap") lines.pop();
   return lines;
 }
+
+export type TextRun = { text: string; highlight: number | null };
+
+/** Earlier phrases keep overlapping matches; later phrases only add non-overlapping ones. */
+export function splitHighlights(text: string, highlights: string[]): TextRun[] {
+  const ranges: Array<{ start: number; end: number; index: number }> = [];
+  highlights.forEach((phrase, index) => {
+    if (!phrase) return;
+    // Match the original text: lowercasing can change its length and invalidate offsets (e.g. “İ”).
+    const pattern = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+    for (const match of text.matchAll(pattern)) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (!ranges.some((r) => start < r.end && end > r.start)) ranges.push({ start, end, index });
+    }
+  });
+  ranges.sort((a, b) => a.start - b.start);
+
+  const runs: TextRun[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start > cursor) runs.push({ text: text.slice(cursor, range.start), highlight: null });
+    runs.push({ text: text.slice(range.start, range.end), highlight: range.index });
+    cursor = range.end;
+  }
+  if (cursor < text.length) runs.push({ text: text.slice(cursor), highlight: null });
+  return runs;
+}

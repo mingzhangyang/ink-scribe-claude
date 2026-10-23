@@ -130,6 +130,45 @@ describe("strict agent publication contract", () => {
     expect(issues(input)).toContainEqual(expect.objectContaining({ path: "note.sections[0].highlights[1]", code: "DUPLICATE_HIGHLIGHT" }));
   });
 
+  it.each([
+    { content: "Alpha beta gamma.", highlights: ["Alpha beta", "beta gamma"] },
+    { content: "Alpha beta gamma.", highlights: ["Alpha beta", "beta"] },
+    { content: "Alpha beta gamma. Alpha beta gamma.", highlights: ["Alpha beta", "beta gamma"] },
+  ])("rejects a highlight when every occurrence is suppressed by earlier matches: %j", (section) => {
+    const input = request();
+    input.note.sections = [section];
+    const before = structuredClone(input);
+    const found = issues(input);
+    expect(found).toEqual([expect.objectContaining({ path: "note.sections[0].highlights[1]", code: "HIGHLIGHT_SHADOWED" })]);
+    expect(JSON.stringify(found)).not.toContain(section.highlights[1]);
+    expect(input).toEqual(before);
+  });
+
+  it.each([
+    "Alpha beta gamma. Later beta gamma.",
+    "Alpha beta gamma.\n- beta gamma.",
+  ])("accepts an overlapping phrase with another non-overlapping rendered occurrence: %j", (content) => {
+    const input = request();
+    input.note.sections = [{ content, highlights: ["Alpha beta", "beta gamma"] }];
+    expect(validatePublishRequest(input)).toEqual({ ok: true, value: input });
+    const lines = parseContentLines(content).flatMap((line) => line.kind === "gap" ? [] : [line.text]);
+    const rendered = lines.map((line) => splitHighlights(line, input.note.sections[0].highlights));
+    expect(rendered.flat().filter((run) => run.highlight !== null)).toEqual([
+      { text: "Alpha beta", highlight: 0 },
+      { text: "beta gamma", highlight: 1 },
+    ]);
+    expect(rendered.map((runs) => runs.map((run) => run.text).join(""))).toEqual(lines);
+  });
+
+  it("reports missing and duplicate highlights before overlap diagnostics", () => {
+    const input = request();
+    input.note.sections = [{ content: "Alpha beta gamma.", highlights: ["Alpha beta", "ALPHA BETA", "missing phrase"] }];
+    expect(issues(input).map(({ path, code }) => ({ path, code }))).toEqual([
+      { path: "note.sections[0].highlights[1]", code: "DUPLICATE_HIGHLIGHT" },
+      { path: "note.sections[0].highlights[2]", code: "HIGHLIGHT_NOT_FOUND" },
+    ]);
+  });
+
   it.each(["- Finish", "* Finish", "• Finish", "· Finish", "1. Finish", "2) Finish", "3、Finish"])("rejects highlights that include removed list markers: %j", (highlight) => {
     const input = request();
     input.note.sections = [{ content: `${highlight} review`, highlights: [highlight] }];

@@ -78,9 +78,11 @@ curl -X POST https://notes.example.com/api/v1/notes \
 
 ## 严格校验与发布前预检
 
-创建、预检和 OpenAPI 共享 [`shared/publishing.ts`](../shared/publishing.ts) 中的发布契约。缺少字段、未知字段、错误类型、超长正文、超量段落、无效外观或图元，以及不出现在所属正文中的重点词，都会返回 `422 VALIDATION_FAILED`，不会以删减后的结果发布。
+创建、预检和 OpenAPI 共享 [`shared/publishing.ts`](../shared/publishing.ts) 中的发布契约。缺少字段、未知字段、错误类型、超长正文、超量段落、无效外观或图元，以及不出现在所属可见正文中或因重叠而无法显示的重点词，都会返回 `422 VALIDATION_FAILED`，不会以删减后的结果发布。
 
 `note` 中的文本应直接适合排版：不要带需要剥离的 HTML、Markdown 强调/代码标记、控制字符或首尾空白。`summary` 与线索的 `note` 必须提供，但允许空字符串；`title`、段落 `content`、线索 `keyword` 不得为空。
+
+重点词使用与浏览器相同的 Unicode 大小写匹配及重叠处理规则：先移除列表标记，逐行匹配，数组中先出现的重点词优先。每一项都必须至少保留一次不与前项重叠的完整匹配。例如，正文 `Alpha beta gamma.` 与重点词 `["Alpha beta", "beta gamma"]` 会拒绝第二项；如果正文另有一次未重叠的 `beta gamma`，则可通过校验。
 
 错误包含可供 agent 修正的字段路径与错误码，消息不回显用户正文。例如，重点词错误的 `issues[].path` 会定位到 `note.sections[0].highlights[0]`。每项包含 `path`、`code`、`message`；调用方应使用 `error.code: "VALIDATION_FAILED"` 与 `issues` 处理错误，不要匹配整句文案。
 
