@@ -1446,6 +1446,27 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.waitForTimeout(300);
   const snapped = await sheet.evaluate((dialog) => ({ open: dialog.open, transform: dialog.style.transform, top: dialog.getBoundingClientRect().top }));
   check("IS15", "轻拉抽屉后松手弹回原位", dragged === "translateY(32px)" && snapped.open && snapped.transform === "" && Math.abs(snapped.top - box.y) <= 1, JSON.stringify({ dragged, snapped }));
+
+  // IS24：短距离快速滑动后停住再松手，最后一次移动的速度应当过期
+  await page.mouse.move(x, box.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(x, box.y + 40);
+  const pausedDrag = await sheet.evaluate((dialog) => dialog.style.transform);
+  await page.waitForTimeout(650);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const pausedRelease = await sheet.evaluate((dialog) => ({
+    open: dialog.open,
+    transform: dialog.style.transform,
+    top: dialog.getBoundingClientRect().top,
+  }));
+  check(
+    "IS24",
+    "短距离下拉后停顿再松手不会以过期速度关闭抽屉",
+    pausedDrag === "translateY(32px)" && pausedRelease.open && pausedRelease.transform === "" && Math.abs(pausedRelease.top - box.y) <= 1,
+    JSON.stringify({ pausedDrag, pausedRelease }),
+  );
+
   await page.mouse.move(x, box.y + 8);
   await page.mouse.down();
   for (let step = 1; step <= 6; step++) {
@@ -1455,6 +1476,32 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.mouse.up();
   const dismissed = await sheet.waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
   check("IS16", "下拉超过四分之一高度关闭抽屉", dismissed && await sheet.evaluate((dialog) => dialog.style.transform) === "" && page.errors.length === 0, page.errors.join("; "));
+
+  // IS25：背景遮罩的动画结束事件不应抢在底部抽屉的退场动画之前关闭 dialog
+  await page.locator(".input-trigger").tap();
+  await sheet.waitFor({ state: "visible" });
+  const backdropIgnored = await sheet.evaluate(async (dialog) => {
+    const closingStarted = new Promise((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (!dialog.hasAttribute("data-closing")) return;
+        observer.disconnect();
+        clearTimeout(timeout);
+        resolve(true);
+      });
+      observer.observe(dialog, { attributes: true, attributeFilter: ["data-closing"] });
+      const timeout = setTimeout(() => {
+        observer.disconnect();
+        resolve(false);
+      }, 500);
+    });
+    dialog.querySelector(".sheet-close").click();
+    if (!(await closingStarted)) return false;
+    const event = new AnimationEvent("animationend", { bubbles: true, animationName: "sheet-fade-out", pseudoElement: "::backdrop" });
+    dialog.dispatchEvent(event);
+    return event.pseudoElement === "::backdrop" && dialog.open && dialog.hasAttribute("data-closing");
+  });
+  check("IS25", "遮罩动画结束不能提前打断底部抽屉关闭动画", backdropIgnored);
+  await sheet.waitFor({ state: "hidden" });
   await context.close();
 }
 
@@ -1495,17 +1542,19 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   check("IS18", "弹窗打开时，拖到弹窗任意位置的文件由弹窗接收", pageOverlay === 0 && await page.locator(".drop-overlay").count() === 0);
 
   const source = page.locator(".source-text");
+  const isApple = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.userAgent));
+  const accelerator = isApple ? "Meta+Enter" : "Control+Enter";
   await source.fill("");
-  await source.press("Control+Enter");
+  await source.press(accelerator);
   const emptyStays = await sheet.evaluate((dialog) => dialog.open);
   await source.fill("快捷键生成：间隔重复与主动回忆。");
-  await source.press("Control+Enter");
+  await source.press(accelerator);
   await page.waitForSelector(".badge-ai");
   const closed = await sheet.waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
   check(
     "IS19",
-    "Ctrl + Enter 生成并收起弹窗，原文为空时不生成",
-    emptyStays && closed && (await page.locator(".shortcut-hint").textContent()) === "Ctrl + Enter 生成",
+    "平台对应快捷键生成并收起弹窗，原文为空时不生成",
+    emptyStays && closed && (await page.locator(".shortcut-hint").textContent()) === (isApple ? "⌘" : "Ctrl") + " + Enter 生成",
   );
   check("IS20", "拖入文件与快捷键流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
   await context.close();

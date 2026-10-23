@@ -9,6 +9,8 @@ const KEYBOARD_MIN_PX = 80;
 // 下滑超过抽屉高度的这个比例，或以较快速度（px/ms）下滑时关闭；否则弹回
 const DISMISS_RATIO = 0.25;
 const DISMISS_VELOCITY = 0.5;
+// 松手时只使用最近的速度样本：短距离拖动后停顿，不应被当成甩动
+const FLING_SAMPLE_MAX_AGE_MS = 120;
 
 type Drag = { id: number; startY: number; lastY: number; lastTime: number; velocity: number };
 
@@ -62,7 +64,8 @@ export function Sheet({ open, onClose, labelledBy, className, children }: {
       return;
     }
     const onEnd = (event: AnimationEvent) => {
-      if (event.target === dialog) finish();
+      // ::backdrop 的 animationend 也以 dialog 为 target，不能提前中断抽屉自身的退场动画
+      if (event.target === dialog && !event.pseudoElement) finish();
     };
     const timer = setTimeout(finish, CLOSE_FALLBACK_MS);
     dialog.addEventListener("animationend", onEnd);
@@ -129,8 +132,10 @@ export function Sheet({ open, onClose, labelledBy, className, children }: {
     const dialog = event.currentTarget;
     delete dialog.dataset.dragging;
     const offset = Math.max(0, event.clientY - state.startY);
+    const sampleAge = event.timeStamp - state.lastTime;
+    const recentVelocity = sampleAge >= 0 && sampleAge <= FLING_SAMPLE_MAX_AGE_MS ? state.velocity : 0;
     const dismiss = event.type === "pointerup" &&
-      (offset > dialog.offsetHeight * DISMISS_RATIO || (state.velocity > DISMISS_VELOCITY && offset > 24));
+      (offset > dialog.offsetHeight * DISMISS_RATIO || (recentVelocity > DISMISS_VELOCITY && offset > 24));
     if (dismiss) onClose();
     else dialog.style.removeProperty("transform"); // 由 CSS 过渡弹回原位
   }
