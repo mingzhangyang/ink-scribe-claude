@@ -68,7 +68,7 @@ export const zh = {
 
   input: {
     title: "原文",
-    open: "编辑原文",
+    open: "撰写",
     chars: (count: string) => `${count} 字`,
     close: "关闭",
     options: "生成选项",

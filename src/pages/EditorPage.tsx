@@ -94,7 +94,7 @@ export function EditorPage({ config, headerActions, onToast }: {
         setPageDrop(true);
       }}
     >
-      {/* 宽屏上“编辑原文”位于顶栏菜单左侧，窄屏上固定在屏幕底部 */}
+      {/* 宽屏上“撰写”位于顶栏菜单左侧，窄屏上固定在屏幕底部 */}
       {headerActions ? createPortal(<InputTrigger onOpen={openInput} />, headerActions) : null}
       {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} onEditInput={openInput} /> : <section className="workspace" />}
       <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
