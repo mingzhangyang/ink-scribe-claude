@@ -32,7 +32,7 @@
     {
       "binding": "DB",
       "database_name": "ink-scribe",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9f2e36fe-cb99-441c-a352-1277b773d942",
       "migrations_dir": "migrations"
     }
   ],
