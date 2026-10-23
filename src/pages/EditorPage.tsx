@@ -23,10 +23,16 @@ export function EditorPage({ config, onToast }: { config: PublicConfig; onToast:
   const t = useT();
 
   useEffect(() => {
-    // 首次打开时展示与界面语言一致的示例笔记；切换语言时，未经修改的示例笔记跟着切换
-    const { note, setResult } = useNoteStore.getState();
+    // 首次打开时展示与界面语言一致的示例笔记；切换语言时，未经修改的示例笔记跟着切换。
+    // 替换会递增 noteSerial 并清除 AI 插图：正在生成笔记时会丢弃生成结果，正在生成或已有 AI 插图时会丢掉插图，这些情况下保留原示例
+    const { note, status, aiDoodle, settings, setResult } = useNoteStore.getState();
     const sample = locale === "en" ? SAMPLE_NOTE_EN : SAMPLE_NOTE;
-    if (!note || (note !== sample && (note === SAMPLE_NOTE || note === SAMPLE_NOTE_EN))) setResult(sample, null, "sample");
+    if (!note) {
+      setResult(sample, null, "sample");
+      return;
+    }
+    const untouchedSample = note !== sample && (note === SAMPLE_NOTE || note === SAMPLE_NOTE_EN);
+    if (untouchedSample && status !== "loading" && !aiDoodle && settings.doodleMode !== "ai") setResult(sample, null, "sample");
   }, [locale]);
 
   async function requestMainDoodle() {

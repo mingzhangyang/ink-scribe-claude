@@ -620,6 +620,33 @@ if (process.env.E2E_API_KEY) {
   await p9.reload({ waitUntil: "networkidle" });
   const reloaded = await state();
   check("T5", "语言与主题偏好在刷新后保留", reloaded.lang === "zh-CN" && reloaded.theme === "dark", JSON.stringify(reloaded));
+  // 第一次生成仍在进行时（画布上还是示例笔记）切换语言，不能把生成结果当作过期结果丢掉
+  await p9.route("**/api/structure", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await p9.selectOption(".sample-picker select", "en-lecture");
+  await p9.click(".input-panel .btn-primary");
+  await p9.waitForSelector(".loading-overlay");
+  await p9.click(".pref-lang");
+  await p9.waitForSelector(".loading-overlay", { state: "detached", timeout: 20_000 });
+  const midSwitch = await p9.evaluate(() => ({
+    title: document.querySelector(".note-title")?.textContent ?? "",
+    ai: document.querySelectorAll(".badge-ai").length,
+    alert: document.querySelector(".alert-error")?.textContent ?? "",
+  }));
+  check(
+    "T8",
+    "生成过程中切换界面语言不会丢弃生成结果",
+    midSwitch.ai === 1 && !midSwitch.alert && !midSwitch.title.includes("深度工作") && midSwitch.title !== "How Memory Works: Spaced Repetition",
+    JSON.stringify(midSwitch),
+  );
+  await p9.unroute("**/api/structure");
+  const layerLang = await p9.evaluate(() => ({
+    layer: document.querySelector(".sticker-layer")?.getAttribute("lang"),
+    ui: document.documentElement.lang,
+  }));
+  check("T9", "画布中的贴纸操作提示按界面语言标注", layerLang.layer === layerLang.ui, JSON.stringify(layerLang));
   check("T6", "切换语言与主题时无脚本错误", p9.errors.length === 0, p9.errors.join("; "));
   await c9.close();
 

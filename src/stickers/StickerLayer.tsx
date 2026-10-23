@@ -163,7 +163,8 @@ export function StickerLayer({
   const t = useT();
 
   return (
-    <div className="sticker-layer" aria-label={t.stickers.layer}>
+    // 贴纸层位于按笔记语言标注的画布中，但其中的操作提示是界面文案，按界面语言标注
+    <div className="sticker-layer" lang={t.htmlLang} aria-label={t.stickers.layer}>
       {stickers.map((item) => {
         const selected = item.id === selectedItem?.id;
         return (
