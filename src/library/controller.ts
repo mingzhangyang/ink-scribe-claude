@@ -14,8 +14,9 @@ type SampleParts = Pick<NoteDocument, "input" | "note" | "settings" | "stickers"
 let sample: SampleParts | null = null;
 
 useNoteStore.subscribe((next, previous) => {
-  // A link replaced elsewhere (restored draft, shared note) invalidates the previous save result.
-  if (next.libraryLink !== previous.libraryLink) set({ status: "idle" });
+  // Another document or link (restored draft, shared note) invalidates the previous save result, including one
+  // still in flight: that save ignores its outcome, so leaving "saving" here would block every later save.
+  if (next.libraryLink !== previous.libraryLink || next.documentSerial !== previous.documentSerial) set({ status: "idle" });
   if (next.noteSerial !== previous.noteSerial) {
     // Only a freshly generated sample counts; a restored draft may hold edits made on top of one.
     const { input, note, settings, stickers, aiDoodle } = next;

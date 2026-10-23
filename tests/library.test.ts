@@ -193,4 +193,17 @@ describe("library in the editor", () => {
     expect(c.store.getState().libraryLink).toEqual({ id: other.id, revision: other.revision });
     expect(c.hasUnsavedWork()).toBe(false);
   });
+
+  it("can save a replacement document while an unlinked save is still in flight", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    const pending = c.saveToLibrary();
+    c.store.getState().loadDocument(edited("替换的文档"), null);
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    await pending;
+    expect(c.store.getState().libraryLink).toBeNull();
+    await c.saveToLibrary();
+    expect(c.useLibraryStatus.getState().status).toBe("saved");
+    expect((await getEntry(c.store.getState().libraryLink!.id))?.title).toBe("替换的文档");
+  });
 });
