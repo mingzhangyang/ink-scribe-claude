@@ -84,16 +84,49 @@ export function Tainiule({ color }: ArtProps) {
   );
 }
 
+const CROWN = "M0 14 L2 3 L8 9 L12 0 L16 9 L22 3 L24 14 Z";
+
+/** 金色小皇冠，带一圈白边；transform 决定它在贴纸上的位置。 */
+function Crown({ transform }: { transform: string }) {
+  return (
+    <g transform={transform}>
+      <path d={CROWN} style={{ fill: "#FACC15", stroke: "#FFFFFF", strokeWidth: 4, strokeLinejoin: "round", paintOrder: "stroke" }} />
+      <path d={CROWN} style={{ fill: "none", stroke: "#CA8A04", strokeWidth: 1, strokeLinejoin: "round" }} />
+    </g>
+  );
+}
+
 export function Yyds({ color }: ArtProps) {
   // YYDS（永远的神）：头顶一顶金色小皇冠
   return (
     <Frame type="yyds">
       <DieCut d={PHRASE_PATHS.yyds} color={color} />
-      <path
-        d="M48 17 L50 6 L56 12 L60 3 L64 12 L70 6 L72 17 Z"
-        style={{ fill: "#FACC15", stroke: "#FFFFFF", strokeWidth: 4, strokeLinejoin: "round", paintOrder: "stroke" }}
-      />
-      <path d="M48 17 L50 6 L56 12 L60 3 L64 12 L70 6 L72 17 Z" style={{ fill: "none", stroke: "#CA8A04", strokeWidth: 1, strokeLinejoin: "round" }} />
+      <Crown transform="translate(48 3)" />
+    </Frame>
+  );
+}
+
+export function Wang({ color }: ArtProps) {
+  // “王”戴着一顶略歪的皇冠
+  return (
+    <Frame type="wang">
+      <DieCut d={PHRASE_PATHS.wang} color={color} />
+      <Crown transform="translate(20 2) rotate(-8 12 14)" />
+    </Frame>
+  );
+}
+
+/** 字母 Y 用粗笔画画成，方头方角，和站酷快乐体的贴纸字一样厚实。 */
+const LETTER_Y = "M15 14 L32 37 L49 14 M32 37 L32 60";
+
+export function LetterY({ color }: ArtProps) {
+  const stroke = (paint: string, width: number) => ({ fill: "none", stroke: paint, strokeWidth: width, strokeLinecap: "square", strokeLinejoin: "miter" }) as const;
+  return (
+    <Frame type="letter-y">
+      <path d={LETTER_Y} transform="translate(1.5 2)" style={stroke("rgba(0,0,0,0.15)", 18)} />
+      <path d={LETTER_Y} style={stroke("#FFFFFF", 18)} />
+      <path d={LETTER_Y} style={stroke(color, 11)} />
+      <path d="M55 30 L61 27 M56 39 L62 40" style={pen(color, 2.4)} />
     </Frame>
   );
 }

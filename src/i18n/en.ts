@@ -223,6 +223,8 @@ export const en: Messages = {
       wanmei: "完美 · perfect stamp",
       tainiule: "太牛了 · amazing",
       zan: "赞 · like",
+      "letter-y": "Y",
+      wang: "王 · king",
     },
     stickerVariants: {
       tape: { yellow: "Lemon", mint: "Mint", pink: "Sakura", blue: "Mist blue", kraft: "Kraft", dots: "Polka dots", checks: "Gingham", stripes: "Stripes" },
@@ -345,6 +347,8 @@ export const en: Messages = {
       wanmei: { red: "Vermilion", blue: "Blue" },
       tainiule: { red: "Red", orange: "Orange", purple: "Purple", ink: "Ink" },
       zan: { red: "Red", orange: "Orange", purple: "Purple", ink: "Ink" },
+      "letter-y": { red: "Red", orange: "Orange", purple: "Purple", ink: "Ink" },
+      wang: { red: "Red", orange: "Orange", purple: "Purple", ink: "Ink" },
     },
     stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit & veg", animals: "Animals", people: "People", phrases: "Buzzwords", formulas: "Formulas", greek: "Greek letters", science: "Science", vehicles: "Vehicles", space: "Space" },
     fileKinds: { text: "text", html: "web page", docx: "Word", pdf: "PDF" },
