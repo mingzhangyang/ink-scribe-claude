@@ -1601,6 +1601,57 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await context.close();
 }
 
+// 桌面画布放大后，生成状态卡片必须保持在水平可见的画布区域内
+{
+  const { page, context } = await newPage({ viewport: { width: 1000, height: 800 } });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  for (let i = 0; i < 20; i++) await page.getByRole("button", { name: "放大" }).click();
+  // 让生成请求保持挂起，留足时间检查水平滚动两端的真实可见性
+  let pendingRequest;
+  await page.route("**/api/structure", (route) => { pendingRequest = route; });
+  await openInput(page);
+  await page.selectOption(".sample-picker select", "zh-reading");
+  await page.getByRole("button", { name: /转化为手写笔记/ }).click();
+  await page.locator(".input-sheet").waitFor({ state: "hidden" });
+  await page.locator(".loading-card").waitFor();
+
+  const positions = [];
+  for (const fraction of [0, 0.5, 1]) {
+    await page.locator(".viewport").evaluate((viewport, f) => {
+      viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) * f;
+    }, fraction);
+    positions.push(await page.evaluate(() => {
+      const viewport = document.querySelector(".viewport");
+      const visible = viewport.getBoundingClientRect();
+      const card = document.querySelector(".loading-card").getBoundingClientRect();
+      const cancel = document.querySelector(".loading-card button").getBoundingClientRect();
+      return {
+        scrollLeft: viewport.scrollLeft,
+        scrollableWidth: viewport.scrollWidth - viewport.clientWidth,
+        canvas: { left: visible.left, right: visible.right },
+        card: { left: card.left, right: card.right },
+        cancel: { left: cancel.left, right: cancel.right },
+      };
+    }));
+  }
+  const inside = positions.every(({ canvas, card, cancel }) =>
+    card.left >= canvas.left - 1 && card.right <= canvas.right + 1 &&
+    cancel.left >= canvas.left - 1 && cancel.right <= canvas.right + 1,
+  );
+  const actuallyOverflowed = positions[0].scrollableWidth > 400 && positions[2].scrollLeft > 400;
+  await page.locator(".loading-card").getByRole("button", { name: "取消生成" }).click();
+  await page.locator(".loading-overlay").waitFor({ state: "detached" });
+  check(
+    "IS26",
+    "桌面端 1000px 视口、160% 缩放，横向滚动时加载卡片和取消按钮始终可见且可取消",
+    actuallyOverflowed && inside && page.errors.length === 0,
+    JSON.stringify({ positions, errors: page.errors }),
+  );
+  await pendingRequest?.abort().catch(() => {});
+  await page.unroute("**/api/structure");
+  await context.close();
+}
+
 // 弹窗内的按键不能触发背后画布的贴纸快捷键，Esc 仍能关闭弹窗
 {
   const { page, context } = await newPage();

@@ -592,6 +592,9 @@ input[type="range"] {
   position: sticky;
   top: 24px;
   bottom: 24px;
+  /* 画布放大后页面可比滚动视口宽：左右也须吸附，保证取消按钮在可见区域 */
+  left: 24px;
+  right: 24px;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
