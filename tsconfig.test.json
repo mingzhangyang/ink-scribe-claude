@@ -3,7 +3,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "target": "ES2022",
     "lib": [
-      "ES2023"
+      "ES2023", "DOM", "DOM.Iterable"
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",

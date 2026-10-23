@@ -315,6 +315,23 @@ export const en: Messages = {
     more: "Load more",
   },
 
+  draft: {
+    label: "Local draft",
+    ready: "Edits save automatically on this device, without uploading.",
+    saving: "Saving on this device…",
+    saved: "Draft saved on this device.",
+    restored: "Local draft restored. Continue editing.",
+    disabled: "No-save mode: refreshing will discard your current work.",
+    error: "Could not save or restore the draft. You can keep editing; retry or export an image first.",
+    conflict: "Another tab changed or deleted the draft. Saving paused; your current edits are unchanged.",
+    retry: "Retry saving",
+    restore: "Restore latest draft",
+    restoreConfirm: "Replace your current edits with the latest local draft? Export anything you want to keep first.",
+    forget: "Delete draft and stop saving",
+    forgetConfirm: "Delete the local draft and stop autosaving? Current edits stay on screen but will be lost on refresh.",
+    enable: "Enable local autosave",
+  },
+
   view: {
     documentTitle: (title) => `${title} · InkScribe`,
     loading: "Loading note…",

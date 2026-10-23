@@ -269,6 +269,23 @@ export const zh = {
     more: "加载更多",
   },
 
+  draft: {
+    label: "本地草稿",
+    ready: "编辑内容将自动保存在本机，不会上传。",
+    saving: "正在保存到本机…",
+    saved: "草稿已保存在本机。",
+    restored: "已恢复本机草稿，可继续编辑。",
+    disabled: "不留存模式：当前内容不会保存，刷新后将丢失。",
+    error: "草稿保存或恢复失败。当前编辑仍可用；请重试或先导出图片。",
+    conflict: "另一标签页已修改或删除草稿。已暂停保存，当前编辑未被覆盖。",
+    retry: "重试保存",
+    restore: "恢复最新草稿",
+    restoreConfirm: "恢复本机最新草稿将替换当前编辑。请先导出需要保留的内容。继续吗？",
+    forget: "删除草稿并停止保存",
+    forgetConfirm: "删除本机草稿并停止自动保存？当前编辑会保留在页面中，刷新后丢失。",
+    enable: "启用本机自动保存",
+  },
+
   view: {
     documentTitle: (title: string) => `${title} · 墨语笔记`,
     loading: "正在加载笔记…",

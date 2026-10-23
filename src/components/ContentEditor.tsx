@@ -113,11 +113,10 @@ export function ContentEditor() {
               />
               <input
                 type="text"
-                defaultValue={section.highlights.join("；")}
-                key={`${i}-${section.highlights.join("|")}`}
+                value={section.highlightInput ?? section.highlights.join("；")}
                 placeholder={t.content.highlights}
                 aria-label={t.content.highlightsLabel(i + 1)}
-                onBlur={(e) => patchSection(i, { highlights: splitHighlights(e.target.value) })}
+                onChange={(e) => patchSection(i, { highlightInput: e.target.value, highlights: splitHighlights(e.target.value) })}
               />
               {missing.length > 0 ? <p className="hint is-warn">{t.content.missing(missing)}</p> : null}
             </div>
