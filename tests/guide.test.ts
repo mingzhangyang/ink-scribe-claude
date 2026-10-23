@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { GUIDE_CONTENT, getGuideExamples, type GuideLocale } from "../shared/guide.ts";
-import { en } from "../src/i18n/en.ts";
-import { zh } from "../src/i18n/zh.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 
 const ORIGIN = "https://ink.example";
@@ -49,11 +47,15 @@ ${example.curl}
 describe("guide wording matches the live interface", () => {
   it.each(["zh", "en"] as const)("keeps %s button names and InkScribe branding aligned", (locale) => {
     const guide = GUIDE_CONTENT[locale];
-    const t = locale === "zh" ? zh : en;
     const copy = [...guide.users.steps, ...guide.users.notes, ...guide.faq.items].map((part) => part.body).join("\n");
     expect(guide.title).toContain(locale === "zh" ? "墨语笔记" : "InkScribe");
     expect(guide.eyebrow).toContain("InkScribe");
-    for (const label of [t.input.upload, t.input.generate, t.input.local, t.editor.tabs.content, t.library.saveNew, t.export.download]) {
+    // These are the exact visible controls from the bilingual editor and Library menus.
+    // Keep this contract here rather than importing browser-only i18n into the worker test project.
+    const labels = locale === "zh"
+      ? ["上传文件", "转化为手写笔记", "不使用 AI，按段落快速排版", "内容", "保存到笔记库", "下载图片"]
+      : ["Upload file", "Turn into a handwritten note", "Quick layout by paragraphs, without AI", "Content", "Save to library", "Download image"];
+    for (const label of labels) {
       expect(copy).toContain(`“${label}”`);
     }
     expect(guide.users.action.label).toBe(locale === "zh" ? "打开编辑器" : "Open editor");
