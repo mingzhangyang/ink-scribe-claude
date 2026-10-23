@@ -102,7 +102,7 @@ export const OPENAPI_SPEC = {
         summary: "创建手写笔记并返回分享链接",
         security: [{ bearer: [] }],
         parameters: [
-          { name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", maxLength: 100 }, description: "相同的键与请求体重试时返回同一条笔记" },
+          { name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", maxLength: 100 }, description: "相同键与请求体完成后重放；处理中返回 409 + Retry-After；删除后返回 410，不重新创建" },
         ],
         requestBody: {
           required: true,
@@ -132,6 +132,7 @@ export const OPENAPI_SPEC = {
           "400": errorResponse,
           "401": errorResponse,
           "409": errorResponse,
+          "410": { ...errorResponse, description: "对应笔记已删除；新建请使用新幂等键" },
           "413": errorResponse,
           "429": errorResponse,
           "502": errorResponse,

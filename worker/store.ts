@@ -74,12 +74,13 @@ function noteSummaryText(note: NoteStructure): string {
   return chars.length > 140 ? `${chars.slice(0, 139).join("")}…` : chars.join("");
 }
 
-export async function insertNote(db: D1Database, input: NewNote): Promise<void> {
-  await db
+function noteInsert(db: D1Database, input: NewNote, claim?: PublishClaim): D1PreparedStatement {
+  return db
     .prepare(
       `INSERT INTO notes (id, api_key_id, visibility, title, summary, language, template, layout, note_json, settings_json,
         stickers_json, doodle_json, image_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       ${claim ? "WHERE EXISTS (SELECT 1 FROM idempotency_keys WHERE api_key_id = ? AND idempotency_key = ? AND owner_token = ? AND state = 'pending')" : ""}`,
     )
     .bind(
       input.id,
@@ -98,8 +99,24 @@ export async function insertNote(db: D1Database, input: NewNote): Promise<void> 
       "disabled",
       input.now,
       input.now,
-    )
-    .run();
+      ...(claim ? [claim.apiKeyId, claim.key, claim.token] : []),
+    );
+}
+
+/** A batch commits the note and its completed request together; stale owners insert nothing. */
+export async function insertNote(db: D1Database, input: NewNote, claim?: PublishClaim): Promise<boolean> {
+  if (!claim) {
+    await noteInsert(db, input).run();
+    return true;
+  }
+  const results = await db.batch([
+    noteInsert(db, input, claim),
+    db.prepare(`UPDATE idempotency_keys SET state = 'completed', owner_token = NULL, lease_until = 0
+      WHERE api_key_id = ? AND idempotency_key = ? AND owner_token = ? AND state = 'pending'
+      AND EXISTS (SELECT 1 FROM notes WHERE id = ?)`)
+      .bind(claim.apiKeyId, claim.key, claim.token, input.id),
+  ]);
+  return results[0].meta.changes === 1;
 }
 
 export async function getNoteRow(db: D1Database, id: string): Promise<NoteRow | null> {
@@ -117,10 +134,8 @@ export async function updateVisibility(db: D1Database, id: string, apiKeyId: str
 export async function deleteNote(db: D1Database, id: string, apiKeyId: string): Promise<NoteRow | null> {
   const row = await db.prepare("SELECT * FROM notes WHERE id = ? AND api_key_id = ?").bind(id, apiKeyId).first<NoteRow>();
   if (!row) return null;
-  await db.batch([
-    db.prepare("DELETE FROM notes WHERE id = ?").bind(id),
-    db.prepare("DELETE FROM idempotency_keys WHERE note_id = ?").bind(id),
-  ]);
+  // Keep the completed request as a tombstone: delayed retries must not recreate deleted notes.
+  await db.prepare("DELETE FROM notes WHERE id = ? AND api_key_id = ?").bind(id, apiKeyId).run();
   return row;
 }
 
@@ -189,19 +204,34 @@ export async function listPublicNoteDates(db: D1Database, limit: number): Promis
 
 // ---------- 幂等 ----------
 
-export async function findIdempotent(db: D1Database, apiKeyId: string, key: string): Promise<{ noteId: string; requestHash: string } | null> {
-  const row = await db
-    .prepare("SELECT note_id, request_hash FROM idempotency_keys WHERE api_key_id = ? AND idempotency_key = ?")
-    .bind(apiKeyId, key)
-    .first<{ note_id: string; request_hash: string }>();
-  return row ? { noteId: row.note_id, requestHash: row.request_hash } : null;
+export type PublishClaim = { apiKeyId: string; key: string; token: string; noteId: string };
+export type PublishRequest = { note_id: string; request_hash: string; state: "pending" | "completed"; lease_until: number };
+
+/** Atomic reservation, with a fenced lease so a terminated Worker cannot strand a key. */
+export async function claimPublish(db: D1Database, apiKeyId: string, key: string, hash: string, now: number): Promise<
+  { claim: PublishClaim } | { existing: PublishRequest }
+> {
+  const claim = { apiKeyId, key, token: crypto.randomUUID(), noteId: newNoteId() };
+  const result = await db.prepare(`INSERT INTO idempotency_keys
+    (api_key_id, idempotency_key, request_hash, note_id, created_at, state, owner_token, lease_until)
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+    ON CONFLICT(api_key_id, idempotency_key) DO UPDATE SET
+      owner_token = excluded.owner_token, lease_until = excluded.lease_until, note_id = excluded.note_id
+    WHERE idempotency_keys.state = 'pending' AND idempotency_keys.lease_until <= ?
+      AND idempotency_keys.request_hash = excluded.request_hash`)
+    .bind(apiKeyId, key, hash, claim.noteId, now, claim.token, now + 120_000, now).run();
+  if (result.meta.changes === 1) return { claim };
+  const existing = await db.prepare(`SELECT note_id, request_hash, state, lease_until FROM idempotency_keys
+    WHERE api_key_id = ? AND idempotency_key = ?`).bind(apiKeyId, key).first<PublishRequest>();
+  if (!existing) throw new Error("Publish reservation disappeared");
+  return { existing };
 }
 
-export async function saveIdempotent(db: D1Database, apiKeyId: string, key: string, requestHash: string, noteId: string, now: number): Promise<void> {
-  await db
-    .prepare("INSERT OR IGNORE INTO idempotency_keys (api_key_id, idempotency_key, request_hash, note_id, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(apiKeyId, key, requestHash, noteId, now)
-    .run();
+/** Retain the hash, but allow immediate retry after a known failure. Never release a newer owner. */
+export async function releasePublish(db: D1Database, claim: PublishClaim): Promise<void> {
+  await db.prepare(`UPDATE idempotency_keys SET lease_until = 0, owner_token = NULL
+    WHERE api_key_id = ? AND idempotency_key = ? AND owner_token = ? AND state = 'pending'`)
+    .bind(claim.apiKeyId, claim.key, claim.token).run();
 }
 
 // ---------- 输出 ----------
