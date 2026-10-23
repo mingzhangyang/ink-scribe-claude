@@ -87,7 +87,9 @@ export function LibraryPage() {
   }, [entries, query]);
 
   function open(entry: LibraryEntry) {
-    const alreadyOpen = useNoteStore.getState().libraryLink?.revision === entry.revision;
+    // Imported copies can share a revision, so the id must match too.
+    const link = useNoteStore.getState().libraryLink;
+    const alreadyOpen = link?.id === entry.id && link.revision === entry.revision;
     if (!alreadyOpen) {
       if (hasUnsavedWork() && !window.confirm(t.library.replaceConfirm)) return;
       openEntry(entry);

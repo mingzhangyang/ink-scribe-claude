@@ -155,4 +155,42 @@ describe("library in the editor", () => {
     await c.saveToLibrary({ asNew: true });
     expect(c.store.getState().libraryLink?.id).not.toBe(entry.id);
   });
+
+  it("treats edits to the startup sample as unsaved work", async () => {
+    const c = await boot();
+    c.store.getState().setResult(document.note!, null, "sample");
+    expect(c.hasUnsavedWork()).toBe(false);
+    c.store.getState().updateNote((n) => ({ ...n, title: "改过的示例" }));
+    expect(c.hasUnsavedWork()).toBe(true);
+    c.store.getState().setResult(document.note!, null, "sample");
+    c.store.getState().setSettings({ paper: "kraft" });
+    expect(c.hasUnsavedWork()).toBe(true);
+  });
+
+  it("rechecks a known link when asked, catching changes missed while unmounted", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    await deleteEntry(c.store.getState().libraryLink!.id);
+    await c.checkLibraryLink();
+    expect(c.useLibraryStatus.getState().status).toBe("saved");
+    await c.checkLibraryLink(true);
+    expect(c.useLibraryStatus.getState().status).toBe("deleted");
+  });
+
+  it("ignores the outcome of a save once another document is opened", async () => {
+    const c = await boot();
+    const other = await saveEntry(null, edited("B"));
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    const stale = c.store.getState().libraryLink!;
+    await saveEntry(stale, edited("另一个标签页"));
+    c.store.getState().setInput({ text: "A 的修改" });
+    const pending = c.saveToLibrary();
+    c.openEntry(other);
+    await pending;
+    expect(c.useLibraryStatus.getState().status).toBe("idle");
+    expect(c.store.getState().libraryLink).toEqual({ id: other.id, revision: other.revision });
+    expect(c.hasUnsavedWork()).toBe(false);
+  });
 });

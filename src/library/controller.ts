@@ -9,9 +9,21 @@ type Baseline = { revision: string; text: string } | null;
 export const useLibraryStatus = create<{ status: Status; baseline: Baseline }>(() => ({ status: "idle", baseline: null }));
 const set = (patch: Partial<{ status: Status; baseline: Baseline }>) => useLibraryStatus.setState(patch);
 let persistRequested = false;
+type SampleParts = Pick<NoteDocument, "input" | "note" | "settings" | "stickers" | "aiDoodle">;
+/** The sample exactly as the editor loaded it; any change to these parts counts as the user's work. */
+let sample: SampleParts | null = null;
 
-// A link replaced elsewhere (restored draft, shared note) invalidates the previous save result.
-useNoteStore.subscribe((next, previous) => { if (next.libraryLink !== previous.libraryLink) set({ status: "idle" }); });
+useNoteStore.subscribe((next, previous) => {
+  // A link replaced elsewhere (restored draft, shared note) invalidates the previous save result.
+  if (next.libraryLink !== previous.libraryLink) set({ status: "idle" });
+  if (next.noteSerial !== previous.noteSerial) {
+    // Only a freshly generated sample counts; a restored draft may hold edits made on top of one.
+    const { input, note, settings, stickers, aiDoodle } = next;
+    const fresh = next.source === "sample" && next.documentSerial === previous.documentSerial
+      && !input.text.trim() && stickers.length === 0 && !aiDoodle;
+    sample = fresh ? { input, note, settings, stickers, aiDoodle } : null;
+  }
+});
 
 /** Normalized so that a document and its stored copy compare equal. */
 export function serialize(document: NoteDocument): string {
@@ -25,10 +37,11 @@ export function isModified(document: NoteDocument, link: LibraryLink, baseline: 
 
 /** Whether replacing the editor would lose work that is not in the library. */
 export function hasUnsavedWork(): boolean {
-  const { note, source, input, stickers, libraryLink } = useNoteStore.getState();
-  if (libraryLink) return isModified(currentDocument(), libraryLink, useLibraryStatus.getState().baseline);
-  const untouchedSample = source === "sample" && !input.text.trim() && stickers.length === 0;
-  return !!note && !untouchedSample;
+  const state = useNoteStore.getState();
+  if (state.libraryLink) return isModified(currentDocument(), state.libraryLink, useLibraryStatus.getState().baseline);
+  const untouchedSample = state.source === "sample" && !!sample
+    && (Object.keys(sample) as Array<keyof SampleParts>).every((key) => sample![key] === state[key]);
+  return !!state.note && !untouchedSample;
 }
 
 /**
@@ -60,13 +73,19 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
     // Best effort: asks the browser not to evict the library under storage pressure.
     void navigator.storage?.persist?.().catch(() => {});
   }
+  // Another document was opened or restored meanwhile: the result, success or failure, no longer describes the
+  // editor, and the status now belongs to that document. Regenerating the same note keeps the link current.
+  const replaced = () => {
+    const now = useNoteStore.getState();
+    return now.documentSerial !== state.documentSerial || now.libraryLink !== state.libraryLink;
+  };
   try {
     const entry = await saveEntry(link, document, force);
-    // Another note was opened or generated meanwhile; the entry is saved but no longer describes the editor.
-    if (useNoteStore.getState().noteSerial !== state.noteSerial) { set({ status: "idle" }); return; }
+    if (replaced()) return;
     useNoteStore.getState().setLibraryLink({ id: entry.id, revision: entry.revision });
     set({ status: "saved", baseline: { revision: entry.revision, text: serialize(document) } });
   } catch (error) {
+    if (replaced()) return;
     set({ status: error instanceof LibraryConflict ? (error.deleted ? "deleted" : "conflict") : "error" });
   }
 }

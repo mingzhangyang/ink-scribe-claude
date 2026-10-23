@@ -22,7 +22,8 @@ export function LibraryBar() {
     [link, baseline, input, note, settings, stickers, aiDoodle, source],
   );
 
-  useEffect(() => { void checkLibraryLink(); }, [link]);
+  // Always read the entry: changes made while the editor was unmounted sent messages nobody received.
+  useEffect(() => { void checkLibraryLink(true); }, [link]);
   // Another tab may have changed or deleted the linked entry.
   useEffect(() => onLibraryChange(() => void checkLibraryLink(true)), []);
 

@@ -33,6 +33,8 @@ type State = {
   aiDoodle: DoodleSpec | null;
   /** 每次生成或载入一条新笔记时递增，用于丢弃针对旧笔记的异步结果（如 AI 插图）。 */
   noteSerial: number;
+  /** 每次换成另一份文档（恢复草稿、打开笔记库条目、载入已发布笔记）时递增；重新生成笔记不算。 */
+  documentSerial: number;
   /** 当前编辑内容对应的本机笔记库条目；为空时“保存到笔记库”会新建一条。 */
   libraryLink: LibraryLink | null;
 
@@ -73,11 +75,13 @@ export const useNoteStore = create<State>()(
       selectedStickerId: null,
       aiDoodle: null,
       noteSerial: 0,
+      documentSerial: 0,
       libraryLink: null,
 
       setLibraryLink: (link) => set({ libraryLink: link }),
       loadDocument: (document, link) =>
-        set((s) => ({ ...document, libraryLink: link, meta: null, status: "idle", error: null, selectedStickerId: null, noteSerial: s.noteSerial + 1 })),
+        set((s) => ({ ...document, libraryLink: link, meta: null, status: "idle", error: null, selectedStickerId: null, noteSerial: s.noteSerial + 1,
+          documentSerial: s.documentSerial + 1 })),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
@@ -101,6 +105,7 @@ export const useNoteStore = create<State>()(
           stickers,
           aiDoodle: doodle,
           noteSerial: s.noteSerial + 1,
+          documentSerial: s.documentSerial + 1,
           meta: null,
           source: "shared",
           libraryLink: null,
