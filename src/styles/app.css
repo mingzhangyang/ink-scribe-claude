@@ -22,9 +22,14 @@
   --warn-bg: rgba(133, 77, 14, 0.22);
   --info-border: #3b82f6;
   --info-text: #bfdbfe;
-  --primary-bg: var(--paper-ui);
-  --primary-fg: #1c1917;
-  --primary-hover: #fff;
+  /* 主按钮：薄荷绿；选中的标签：天空蓝。与“撰写”的蜂蜜金一起，取代原先的黑/白按钮 */
+  --primary-bg: #6ee7b7;
+  --primary-fg: #0f2e24;
+  --primary-hover: #8ef0c8;
+  --select-bg: #7dd3fc;
+  --select-fg: #082f49;
+  --toast-bg: var(--paper-ui);
+  --toast-fg: #1c1917;
   /* “撰写”按钮：Logo 笔尖的蜂蜜金 */
   --compose-bg: #e8c468;
   --compose-hover: #f0d080;
@@ -64,9 +69,13 @@
   --warn-bg: #fdf6e7;
   --info-border: #93c5fd;
   --info-text: #1d4ed8;
-  --primary-bg: #27272a;
-  --primary-fg: #fafaf9;
-  --primary-hover: #3f3f46;
+  --primary-bg: #5ad6a8;
+  --primary-fg: #0f2e24;
+  --primary-hover: #4bc898;
+  --select-bg: #7cc8f5;
+  --select-fg: #082f49;
+  --toast-bg: #27272a;
+  --toast-fg: #fafaf9;
   --compose-bg: #f0c75e;
   --compose-hover: #e6b84a;
   --overlay: rgba(244, 242, 238, 0.8);
@@ -389,9 +398,9 @@ input[type="range"] {
 }
 
 .chip.is-active {
-  background: var(--primary-bg);
-  color: var(--primary-fg);
-  border-color: var(--primary-bg);
+  background: var(--select-bg);
+  color: var(--select-fg);
+  border-color: var(--select-bg);
 }
 
 .btn {
@@ -1041,8 +1050,8 @@ input[type="range"] {
   transform: translateX(-50%);
   padding: 10px 18px;
   border-radius: 999px;
-  background: var(--primary-bg);
-  color: var(--primary-fg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
   box-shadow: var(--shadow);
   z-index: 50;
 }
