@@ -2,7 +2,6 @@ import { memo, type ComponentType } from "react";
 import { DoodleArt } from "../components/note/DoodleArt.tsx";
 import { builtinDoodle } from "../doodles/library.ts";
 import { hashString } from "../lib/random.ts";
-import { Bird, Hedgehog } from "./art/animals.tsx";
 import { paint, type ArtProps } from "./art/common.tsx";
 import { BinderClip, MaskingTape, Paperclip, PhotoCorner, PushPin, Staple, Tape } from "./art/fasten.tsx";
 import {
@@ -25,6 +24,7 @@ import {
   WaterFormula,
 } from "./art/formulas.tsx";
 import { Apple, Banana, Grape, Mango, Orange, Strawberry, Watermelon } from "./art/fruit.tsx";
+import { Bird, Chili, Detective, Dog, Hedgehog } from "./art/line-art.tsx";
 import { Arrow, Bracket, Check, CircleMark, Cross, Exclaim, Question, WavyUnderline } from "./art/marks.tsx";
 import { Face, Heart, PressedFlower, Sparkles, Star } from "./art/mood.tsx";
 import { DogEar, KraftTag, PageFlag, PostageStamp, RibbonBookmark, StickyNote, TicketStub, TornPaper } from "./art/paper.tsx";
@@ -142,6 +142,9 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   astronaut: Astronaut,
   bird: Bird,
   hedgehog: Hedgehog,
+  dog: Dog,
+  chili: Chili,
+  detective: Detective,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };

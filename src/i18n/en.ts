@@ -1,6 +1,6 @@
 import type { Messages } from "./zh.ts";
 
-/** Pen colors shared by the formula stickers, and the two styles of the science, space and animal stickers. */
+/** Pen colors shared by the formula stickers, and the two styles of the science, space and line-art stickers. */
 const PEN = { ink: "Ink", red: "Red pen", blue: "Blue pen" };
 const DIAGRAM = { color: "Color", ink: "Ink line" };
 
@@ -209,6 +209,9 @@ export const en: Messages = {
       astronaut: "Astronaut",
       bird: "Bird",
       hedgehog: "Hedgehog",
+      dog: "Dog",
+      chili: "Chili pepper",
+      detective: "Detective",
     },
     stickerVariants: {
       tape: { yellow: "Lemon", mint: "Mint", pink: "Sakura", blue: "Mist blue", kraft: "Kraft", dots: "Polka dots", checks: "Gingham", stripes: "Stripes" },
@@ -317,8 +320,11 @@ export const en: Messages = {
       astronaut: DIAGRAM,
       bird: DIAGRAM,
       hedgehog: DIAGRAM,
+      dog: DIAGRAM,
+      chili: DIAGRAM,
+      detective: DIAGRAM,
     },
-    stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit", animals: "Animals", formulas: "Formulas", greek: "Greek letters", science: "Science", vehicles: "Vehicles", space: "Space" },
+    stickerCategories: { fasten: "Tape & clips", paper: "Paper & tags", marks: "Marks", stamps: "Stamps & stains", mood: "Mood", fruit: "Fruit & veg", animals: "Animals", people: "People", formulas: "Formulas", greek: "Greek letters", science: "Science", vehicles: "Vehicles", space: "Space" },
     fileKinds: { text: "text", html: "web page", docx: "Word", pdf: "PDF" },
   },
 
