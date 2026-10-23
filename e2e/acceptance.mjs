@@ -39,6 +39,18 @@ async function waitForNoteReady(page) {
   await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30_000 });
 }
 
+async function openAppMenu(page) {
+  const toggle = page.locator(".app-menu-toggle");
+  if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+  await page.locator(".app-menu-panel").waitFor({ state: "visible" });
+}
+
+async function setAppPreference(page, preference, value) {
+  await openAppMenu(page);
+  await page.locator(`input[name="app-menu-${preference}"][value="${value}"]`).check();
+  await page.locator(".app-menu-toggle").click();
+}
+
 // Measure actual text ranges independently of the renderer's status flag. Rotated handwriting
 // may extend into a visible region's padding; only clipped regions and the paper edge matter.
 function inspectNoteLayout(el, expected = []) {
@@ -781,6 +793,266 @@ if (process.env.E2E_API_KEY) {
   await c8.close();
 }
 
+// ---------- U. 使用说明、机器可读示例与站点菜单 ----------
+{
+  const { page: guide, context: guideContext } = await newPage({ colorScheme: "light" });
+  const directResponses = [];
+  for (const [path, language, htmlLang] of [["guide", "zh-CN", "zh-CN"], ["guide/", "en-US", "en"]]) {
+    const response = await guide.request.get(`${URL}${path}`, { headers: { "Accept-Language": language } });
+    const html = await response.text();
+    directResponses.push({
+      path,
+      status: response.status(),
+      valid: response.status() === 200 && html.includes(`<html lang="${htmlLang}"`) &&
+        html.includes(`<link rel="canonical" href="${URL}guide"`) &&
+        ["users", "agents", "faq"].every((id) => html.includes(`id="${id}"`) && html.includes(`href="#${id}"`)) &&
+        html.includes('data-guide-code="json"') && html.includes("/api/v1/notes/validate") &&
+        (response.headers().vary ?? "").toLowerCase().includes("accept-language"),
+    });
+  }
+  check("U1", "说明页和尾斜杠直达均返回完整双语 HTML 与统一 canonical", directResponses.every((response) => response.valid), JSON.stringify(directResponses));
+
+  const { page: noJs, context: noJsContext } = await newPage({ javaScriptEnabled: false, locale: "en-US", viewport: { width: 390, height: 844 } });
+  await noJs.goto(`${URL}guide/`, { waitUntil: "networkidle" });
+  const staticExample = JSON.parse(await noJs.locator('[data-guide-code="json"]').textContent());
+  check(
+    "U2",
+    "禁用 JavaScript 仍能阅读用户/agent/FAQ 和完整 JSON、机器规范链接",
+    await noJs.locator("#users").isVisible() && await noJs.locator("#agents").isVisible() && await noJs.locator("#faq").isVisible() &&
+      staticExample.schemaVersion === 1 && staticExample.note.sections.length > 0 && !("text" in staticExample) &&
+      await noJs.locator('a[href$="/api/v1/openapi.json"]').count() > 0 && await noJs.locator('a[href$="/llms.txt"]').count() > 0,
+  );
+  await noJsContext.close();
+
+  await guide.goto(URL, { waitUntil: "networkidle" });
+  const source = "菜单导航之后，这段尚在编辑的原文必须保留。";
+  const title = "菜单往返保留的标题";
+  await guide.locator(".source-text").fill(source);
+  await guide.getByRole("tab", { name: "内容", exact: true }).click();
+  await guide.locator(".content-editor input").first().fill(title);
+  await openAppMenu(guide);
+  await guide.locator('.app-nav a[href="/guide"]').click();
+  await guide.locator("main.guide-page").waitFor();
+  const zhHeading = await guide.locator("main.guide-page h1").innerText();
+  check(
+    "U3",
+    "通过站点菜单进入说明页，当前项正确且菜单自动收起",
+    new globalThis.URL(guide.url()).pathname === "/guide" &&
+      await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" &&
+      await guide.locator('.app-nav a[href="/guide"]').getAttribute("aria-current") === "page",
+  );
+  await guide.screenshot({ path: `${SP}/guide-desktop.png` });
+
+  await guide.locator('main.guide-page a[href="#agents"]').click();
+  const anchor = await guide.evaluate(() => ({ hash: location.hash, top: document.getElementById("agents").getBoundingClientRect().top }));
+  check("U4", "说明页目录会跳到真实的 agent 章节", anchor.hash === "#agents" && anchor.top >= 0 && anchor.top < 160, JSON.stringify(anchor));
+  await guideContext.grantPermissions(["clipboard-read", "clipboard-write"], { origin: ORIGIN });
+  const copied = [];
+  for (const kind of ["json", "curl"]) {
+    const displayed = await guide.locator(`[data-guide-code="${kind}"]`).innerText();
+    await guide.locator(`[data-guide-copy="${kind}"]`).click();
+    const clipboard = await guide.evaluate(() => navigator.clipboard.readText());
+    copied.push(clipboard === displayed && (await guide.locator(`[data-guide-copy-status="${kind}"]`).textContent()).includes("已复制"));
+  }
+  check("U5", "JSON 与 curl 复制按钮写入完整示例并反馈成功", copied.every(Boolean));
+
+  // Keep the anchor in the URL while opening preferences at the top. A locale
+  // update must not restore the old anchor and move the still-open menu away.
+  await guide.evaluate(() => window.scrollTo(0, 0));
+  await openAppMenu(guide);
+  await guide.locator('input[name="app-menu-locale"][value="en"]').check();
+  await guide.waitForFunction(() => document.documentElement.lang === "en");
+  const menuAfterLocale = await guide.evaluate(() => {
+    const panel = document.querySelector(".app-menu-panel");
+    const bounds = panel.getBoundingClientRect();
+    return {
+      scrollY,
+      hash: location.hash,
+      expanded: document.querySelector(".app-menu-toggle").getAttribute("aria-expanded"),
+      visible: !panel.hidden && bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.height > 0,
+    };
+  });
+  const enHeading = await guide.locator("main.guide-page h1").innerText();
+  const englishExample = JSON.parse(await guide.locator('[data-guide-code="json"]').innerText());
+  const englishCurl = await guide.locator('[data-guide-code="curl"]').innerText();
+  check(
+    "U6",
+    "切换英文同步更新说明与示例，保留顶部展开菜单而不重跳旧锚点",
+    enHeading !== zhHeading && (await guide.locator("html").getAttribute("lang")) === "en" &&
+      (await guide.title()).includes("guide") && englishExample.note.title === staticExample.note.title &&
+      englishCurl.includes(ORIGIN) && await guide.locator('.app-nav a[href="/guide"]').innerText() === "Guide" &&
+      menuAfterLocale.hash === "#agents" && Math.abs(menuAfterLocale.scrollY) <= 1 && menuAfterLocale.expanded === "true" && menuAfterLocale.visible,
+    JSON.stringify(menuAfterLocale),
+  );
+  // Only interact again after measuring, so Playwright cannot auto-scroll and
+  // hide a regression in the language switch above.
+  await guide.locator(".app-menu-toggle").click();
+
+  await setAppPreference(guide, "theme", "dark");
+  const darkGuide = await guide.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    color: getComputedStyle(document.querySelector("main.guide-page")).color,
+  }));
+  await guide.screenshot({ path: `${SP}/guide-dark.png` });
+  await setAppPreference(guide, "theme", "light");
+  const lightGuide = await guide.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    color: getComputedStyle(document.querySelector("main.guide-page")).color,
+  }));
+  check("U7", "说明页支持深色与浅色主题", darkGuide.theme === "dark" && lightGuide.theme === "light" && darkGuide.color !== lightGuide.color, JSON.stringify({ darkGuide, lightGuide }));
+
+  await openAppMenu(guide);
+  await guide.keyboard.press("Escape");
+  check("U8", "Escape 收起菜单并将焦点归还菜单按钮", await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" && await guide.locator(".app-menu-toggle").evaluate((element) => element === document.activeElement));
+  await openAppMenu(guide);
+  await guide.locator("main.guide-page h1").click();
+  check("U9", "点击菜单外部可收起菜单", await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false");
+  await openAppMenu(guide);
+  await guide.locator('.app-nav a[href="/"]').click();
+  await guide.locator(".source-text").waitFor();
+  check(
+    "U10",
+    "菜单往返说明页后原文和已编辑的笔记保持不变",
+    await guide.locator(".source-text").inputValue() === source && await guide.locator(".note-title").first().innerText() === title &&
+      await guide.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false",
+  );
+
+  await guide.goto(`${URL}guide#agents`, { waitUntil: "networkidle" });
+  await guide.locator("main.guide-page").waitFor();
+  const deepLink = await guide.evaluate(() => ({ top: document.getElementById("agents").getBoundingClientRect().top, hash: location.hash }));
+  check("U11", "直接访问章节链接在 React 挂载后仍定位正确", deepLink.hash === "#agents" && deepLink.top >= 0 && deepLink.top < 160, JSON.stringify(deepLink));
+
+  const mobile = [];
+  for (const locale of ["zh", "en"]) {
+    await setAppPreference(guide, "locale", locale);
+    for (const width of [320, 390]) {
+      await guide.setViewportSize({ width, height: 844 });
+      const closed = await guide.evaluate(() => ({
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        codesContained: [...document.querySelectorAll("[data-guide-code]")].every((element) => element.getBoundingClientRect().right <= innerWidth && element.clientWidth <= innerWidth),
+      }));
+      await openAppMenu(guide);
+      const opened = await guide.evaluate(() => {
+        const bounds = document.querySelector(".app-menu-panel").getBoundingClientRect();
+        return { overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, contained: bounds.left >= 0 && bounds.right <= innerWidth };
+      });
+      mobile.push({ locale, width, valid: closed.overflow <= 0 && closed.codesContained && opened.overflow <= 0 && opened.contained });
+      if (locale === "zh" && width === 390) await guide.screenshot({ path: `${SP}/guide-mobile-menu.png` });
+      await guide.locator(".app-menu-toggle").click();
+    }
+  }
+  check("U12", "320/390px 中英文说明页和展开菜单均无整体横向溢出", mobile.every((item) => item.valid), JSON.stringify(mobile));
+  check("U13", "说明页与菜单流程无脚本错误", guide.errors.length === 0, guide.errors.join("; "));
+  await guideContext.close();
+}
+
+// ---------- LG. 隐私政策与使用条款 ----------
+{
+  const { page: legal, context: legalContext } = await newPage({ viewport: { width: 320, height: 844 } });
+  const responses = [];
+  for (const kind of ["privacy", "terms"]) {
+    for (const [suffix, language, htmlLang] of [["", "zh-CN", "zh-CN"], ["/", "en-US", "en"]]) {
+      const response = await legal.request.get(`${URL}${kind}${suffix}`, { headers: { "Accept-Language": language } });
+      const html = await response.text();
+      responses.push({
+        path: `${kind}${suffix}`,
+        status: response.status(),
+        valid: response.status() === 200 && html.includes('<main class="legal-page"') &&
+          html.includes(`<html lang="${htmlLang}"`) && html.includes(`<link rel="canonical" href="${URL}${kind}"`) &&
+          (response.headers().vary ?? "").toLowerCase().includes("accept-language"),
+      });
+    }
+  }
+  check("LG1", "隐私/条款及尾斜杠路径均提供双语 SSR 和统一 canonical", responses.every((response) => response.valid), JSON.stringify(responses));
+
+  const inspectLegal = () => ({
+    heading: document.querySelector("main.legal-page h1")?.textContent ?? "",
+    title: document.title,
+    lang: document.documentElement.lang,
+    sections: [...document.querySelectorAll("main.legal-page section.legal-section[id]")].map((section) => {
+      const heading = section.querySelector("h2")?.cloneNode(true);
+      heading?.querySelectorAll('[aria-hidden="true"]').forEach((element) => element.remove());
+      return {
+        id: section.id,
+        title: heading?.textContent.trim() ?? "",
+        readable: [...section.querySelectorAll("p, li")].some((element) => element.textContent.trim().length > 0),
+      };
+    }),
+    anchorsValid: [...document.querySelectorAll('main.legal-page a[href^="#"]')].every((link) => document.getElementById(link.getAttribute("href").slice(1))),
+    links: [...document.querySelectorAll("main.legal-page a[href]")].map((link) => link.getAttribute("href")),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  });
+  const { page: staticLegal, context: staticLegalContext } = await newPage({ javaScriptEnabled: false, locale: "en-US", viewport: { width: 320, height: 844 } });
+  const staticPages = {};
+  for (const kind of ["privacy", "terms"]) {
+    await staticLegal.goto(`${URL}${kind}/`, { waitUntil: "networkidle" });
+    staticPages[kind] = await staticLegal.evaluate(inspectLegal);
+  }
+  check(
+    "LG2",
+    "禁用 JavaScript 可完整阅读两份政策，目录和相互链接有效",
+    Object.entries(staticPages).every(([kind, state]) => state.lang === "en" && state.heading && state.sections.length > 1 &&
+      state.sections.every((section) => section.title && section.readable) && state.anchorsValid &&
+      state.links.includes(`/${kind === "privacy" ? "terms" : "privacy"}`) && state.links.includes("/guide") && state.overflow <= 0),
+  );
+  await staticLegalContext.close();
+
+  await legal.goto(URL, { waitUntil: "networkidle" });
+  await openAppMenu(legal);
+  await legal.locator('.menu-legal-link[href="/privacy"]').click();
+  await legal.locator("main.legal-page").waitFor();
+  const privacyZh = await legal.evaluate(inspectLegal);
+  check(
+    "LG3",
+    "手机菜单可进入隐私政策，当前项正确且菜单自动关闭",
+    new globalThis.URL(legal.url()).pathname === "/privacy" && privacyZh.lang === "zh-CN" &&
+      await legal.locator(".app-menu-toggle").getAttribute("aria-expanded") === "false" &&
+      await legal.locator('.menu-legal-link[href="/privacy"]').getAttribute("aria-current") === "page",
+  );
+  await setAppPreference(legal, "locale", "en");
+  const privacyEn = await legal.evaluate(inspectLegal);
+  await legal.screenshot({ path: `${SP}/privacy-mobile.png` });
+  await legal.evaluate(() => { window.legalSpaVisit = "preserved"; });
+  await legal.locator('main.legal-page a[href="/terms"]').last().click();
+  await legal.waitForURL(`${URL}terms`);
+  const termsEn = await legal.evaluate(inspectLegal);
+  check(
+    "LG4",
+    "政策相关链接通过客户端路由切换，英文各章节与 SSR 一致",
+    await legal.evaluate(() => window.legalSpaVisit === "preserved") &&
+      JSON.stringify(privacyEn.sections) === JSON.stringify(staticPages.privacy.sections) &&
+      JSON.stringify(termsEn.sections) === JSON.stringify(staticPages.terms.sections) &&
+      await legal.locator('.menu-legal-link[href="/terms"]').getAttribute("aria-current") === "page",
+  );
+  await setAppPreference(legal, "locale", "zh");
+  const termsZh = await legal.evaluate(inspectLegal);
+  await legal.screenshot({ path: `${SP}/terms-mobile.png` });
+  check(
+    "LG5",
+    "两份政策随语言切换更新标题与正文，320px 中英文均无横向溢出",
+    privacyZh.heading !== privacyEn.heading && privacyZh.title !== privacyEn.title &&
+      termsZh.heading !== termsEn.heading && termsZh.title !== termsEn.title && termsZh.lang === "zh-CN" &&
+      [privacyZh, privacyEn, termsZh, termsEn].every((state) => state.overflow <= 0 && state.anchorsValid && state.sections.every((section) => section.readable)),
+  );
+
+  const termsAnchor = staticPages.terms.sections[1].id;
+  await legal.locator(`main.legal-page a[href="#${termsAnchor}"]`).click();
+  const clickedAnchor = await legal.evaluate((id) => ({ hash: location.hash, top: document.getElementById(id).getBoundingClientRect().top }), termsAnchor);
+  const privacyAnchor = staticPages.privacy.sections[1].id;
+  await legal.goto(`${URL}privacy/#${privacyAnchor}`, { waitUntil: "networkidle" });
+  await legal.locator(".app-menu-toggle").waitFor();
+  const directAnchor = await legal.evaluate((id) => ({ hash: location.hash, top: document.getElementById(id).getBoundingClientRect().top }), privacyAnchor);
+  check(
+    "LG6",
+    "政策目录和尾斜杠章节深链接在客户端挂载后均定位正确",
+    clickedAnchor.hash === `#${termsAnchor}` && clickedAnchor.top >= 0 && clickedAnchor.top < 160 &&
+      directAnchor.hash === `#${privacyAnchor}` && directAnchor.top >= 0 && directAnchor.top < 160,
+    JSON.stringify({ clickedAnchor, directAnchor }),
+  );
+  check("LG7", "法律页面与菜单导航无脚本错误", legal.errors.length === 0, legal.errors.join("; "));
+  await legalContext.close();
+}
+
 // ---------- T. 界面语言与外观主题 ----------
 {
   const { page: p9, context: c9 } = await newPage({ locale: "en-US", colorScheme: "light" });
@@ -803,13 +1075,11 @@ if (process.env.E2E_API_KEY) {
   );
   check("T2", "系统为浅色时默认使用浅色主题", en.theme === "light" && en.bg !== "rgb(24, 24, 27)", `${en.theme} ${en.bg}`);
 
-  await p9.click(".pref-lang");
+  await setAppPreference(p9, "locale", "zh");
   const zh = await state();
   check("T3", "切换为中文界面，未修改的示例笔记随之切换", zh.lang === "zh-CN" && zh.brand === "墨语笔记" && zh.title.includes("深度工作"), JSON.stringify(zh));
 
-  // 跟随系统 → 浅色 → 深色
-  await p9.click(".pref-btn:not(.pref-lang)");
-  await p9.click(".pref-btn:not(.pref-lang)");
+  await setAppPreference(p9, "theme", "dark");
   const dark = await state();
   check("T4", "可手动切换为深色主题", dark.theme === "dark" && dark.bg === "rgb(24, 24, 27)", `${dark.theme} ${dark.bg}`);
 
@@ -824,7 +1094,7 @@ if (process.env.E2E_API_KEY) {
   await p9.selectOption(".sample-picker select", "en-lecture");
   await p9.click(".input-panel .btn-primary");
   await p9.waitForSelector(".loading-overlay");
-  await p9.click(".pref-lang");
+  await setAppPreference(p9, "locale", "en");
   await p9.waitForSelector(".loading-overlay", { state: "detached", timeout: 20_000 });
   const midSwitch = await p9.evaluate(() => ({
     title: document.querySelector(".note-title")?.textContent ?? "",
@@ -866,7 +1136,7 @@ if (process.env.E2E_API_KEY) {
   await p11.waitForSelector(".alert-error");
   await p11.locator('input[type="file"]').setInputFiles({ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") });
   await p11.waitForSelector(".upload-row + div .hint.is-error");
-  await p11.click(".pref-lang");
+  await setAppPreference(p11, "locale", "en");
   const afterSwitch = await p11.evaluate(() => ({
     alert: document.querySelector(".alert-error strong")?.textContent ?? "",
     retry: document.querySelector(".alert-error .btn")?.textContent ?? "",
@@ -941,7 +1211,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await page.goto(URL, { waitUntil: "networkidle" });
   await page.locator(".source-text").fill("已有输入的示例笔记");
   await page.locator('[data-draft-status="saved"]').waitFor();
-  await page.locator(".pref-lang").click();
+  await setAppPreference(page, "locale", "en");
   await page.locator('[data-draft-status="saved"]').waitFor();
   const title = await page.locator(".note-title").first().innerText();
   await page.reload({ waitUntil: "networkidle" });

@@ -3,7 +3,7 @@
 任何具备 HTTP 调用能力、持有站点 API 密钥的 AI agent 或自动化程序，都可以把已经整理好的笔记发布到 InkScribe。`POST /api/v1/notes` **必须提供 `schemaVersion: 1` 和完整的 `note`**。服务验证数据并保存作品，返回查看链接 `/n/<id>`；发布和预检都不会调用 AI，也不会重新总结、截断或补写正文。
 
 - 发布不需要传原文，`text` 字段会作为未知字段拒绝。agent 在自己的上下文中完成整理并检查事实，InkScribe 负责验证结构、排版与分享。
-- 服务保存整理后的笔记结构、外观、贴纸和插图。笔记保存至通过 API 删除；发布者可把它载入编辑器继续修改，但无法从发布记录取回原文。
+- 服务保存整理后的笔记结构、外观、贴纸和插图。笔记保存至通过 API 删除；发布者可把它载入编辑器继续修改，但发布记录没有独立的原文副本。主动保留在 `note` 中的原文摘录或个人信息仍会保存和展示。
 - 写操作需要管理员发放的 API 密钥；不按 agent 品牌或模型限制，不提供匿名发布。
 - 新笔记默认 `unlisted`（持有链接可见，页面带 `noindex`）。只有明确传入 `"visibility": "public"` 才会进入图库；`unlisted` 不是需要登录的私有文档。
 
@@ -113,10 +113,10 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | --- | --- | --- |
 | `POST /api/v1/notes/validate` | 密钥 | 预检完整发布数据，不保存 |
 | `GET /api/v1/notes?cursor=&limit=` | 密钥 | 列出当前密钥发布的笔记 |
-| `GET /api/v1/notes/:id` | 密钥 | 查询当前密钥发布的作品，不包含原文 |
+| `GET /api/v1/notes/:id` | 密钥 | 查询当前密钥发布的作品，不包含独立原文字段 |
 | `PATCH /api/v1/notes/:id` | 密钥 | 修改 `visibility` |
 | `DELETE /api/v1/notes/:id` | 密钥 | 删除笔记，返回 `204` |
-| `GET /api/notes/:id` | 公开 | 查看页使用的笔记数据；`public` 与 `unlisted` 均可按 ID 读取，不包含原文 |
+| `GET /api/notes/:id` | 公开 | 查看页使用的笔记数据；`public` 与 `unlisted` 均可按 ID 读取，不包含独立原文字段 |
 | `GET /api/gallery?cursor=&template=&language=` | 公开 | 图库中的公开笔记 |
 | `GET /api/v1/openapi.json`、`GET /llms.txt` | 公开 | 完整契约与 agent 使用说明 |
 
@@ -139,7 +139,7 @@ npm run keys -- revoke --id key_xxxxxxxxxxxx --remote
 
 密钥只保存 SHA-256 哈希；吊销后立即返回 `401`。有 Rate Limiting 绑定时以绑定阈值为准：当前 `wrangler.jsonc` 为每个密钥每分钟 12 次，预检与其他 `/api/v1` 操作共享该额度。没有绑定时使用 `API_RATE_LIMIT_PER_MINUTE`，默认每分钟 30 次。`/api/v1/*` 面向服务端调用，不开放浏览器 CORS。
 
-笔记 ID 使用 128 位随机数。`unlisted` 不出现在图库、站点地图或搜索收录中，但持有链接者可以读取内容。查看页、SEO 正文和公开 JSON 只包含发布的笔记，不包含原文；删除或修改可见性后公开读取不使用旧缓存。
+笔记 ID 使用 128 位随机数。`unlisted` 不列入图库或站点地图，并通过 `noindex` 请求搜索引擎不要收录，但持有链接者可以读取内容。查看页、SEO 正文和公开 JSON 包含发布的笔记，不包含独立原文副本；你保留在笔记中的摘录仍会展示。删除或修改可见性后应用的公开读取不使用旧缓存，但无法收回第三方已下载或缓存的副本。
 
 ## 并发、重试与删除语义
 

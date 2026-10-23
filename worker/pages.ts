@@ -1,4 +1,6 @@
 import type { PublishedNote, PublishedNoteSummary } from "../shared/api.ts";
+import { GUIDE_CONTENT, getGuideExamples, type GuideItem, type GuideLocale } from "../shared/guide.ts";
+import { LEGAL_CONTENT, type LegalLocale, type LegalPageId } from "../shared/legal.ts";
 import { TEMPLATE_LABELS, TEMPLATES, isOneOf } from "../shared/options.ts";
 import { loadConfig } from "./config.ts";
 import type { Env } from "./env.ts";
@@ -7,7 +9,7 @@ import { getNoteRow, isNoteId, listNotes, listPublicNoteDates, toPublished, toSu
 /**
  * 服务端渲染的页面元信息（SEO / GEO）。
  *
- * 前端是 SPA，但搜索引擎、链接预览和 AI 爬虫大多不执行 JavaScript。首页、图库和笔记查看页由 Worker
+ * 前端是 SPA，但搜索引擎、链接预览和 AI 爬虫大多不执行 JavaScript。首页、图库、说明页面和笔记查看页由 Worker
  * 返回 index.html，并注入标题、描述、canonical、Open Graph、JSON-LD，以及写在 #root 里的语义化正文；
  * 浏览器加载脚本后，React 会替换 #root 的内容。
  */
@@ -32,6 +34,7 @@ export type PageMeta = {
   ogTitle: string;
   lang: "zh-CN" | "en";
   robots?: string;
+  vary?: string;
   article?: { publishedTime: string; modifiedTime: string; section?: string; tags: string[] };
   jsonLd: object[];
   /** 放进 #root 的 HTML */
@@ -131,7 +134,7 @@ const FEATURES = [
 const FAQ: Array<[string, string]> = [
   ["墨语笔记是什么？", "一个在线工具：粘贴文字或上传文件，AI 会把内容整理成康奈尔结构的笔记，并以手写风格排版成一页可以导出为图片的笔记。"],
   ["需要注册吗？", "不需要。打开网页即可使用编辑器；排版与导出图片都在浏览器中完成。"],
-  ["我的原文会被保存吗？", "编辑器默认在本机保存原文和笔记草稿，可删除并关闭自动保存。整理时原文用于本次 AI 调用，服务端日志只记录元数据；上传文件在浏览器本地解析。只有通过 API 发布的笔记会在服务端保存整理后的结构，不保存原文。"],
+  ["我的原文会被保存吗？", "编辑器默认在本机保存原文和笔记草稿，可删除并关闭自动保存。上传文件在浏览器本地解析；选择 AI 整理会发送提取出的文字，应用日志只记录元数据。通过 API 发布时保存整理后的笔记，不另外保存原文副本；你主动保留在笔记中的原文摘录仍会保存和展示。具体说明见隐私政策。"],
   ["可以导出什么格式？", "PNG 或 JPG，分辨率可选 1x、2x、3x，也可以一键复制图片到剪贴板。"],
   ["AI agent 如何使用？", "通过 REST API（POST /api/v1/notes）提交整理好的笔记结构与 schemaVersion，校验后返回分享链接，无需提交原文或再次调用 AI；可先用 /api/v1/notes/validate 预检，完整说明见 /llms.txt 与 /api/v1/openapi.json。"],
 ];
@@ -151,7 +154,8 @@ export function homePage(origin: string): PageMeta {
   </ol>
   <h2>常见问题</h2>
   <dl>${FAQ.map(([q, a]) => `<dt>${escapeHtml(q)}</dt><dd>${escapeHtml(a)}</dd>`).join("")}</dl>
-  <p><a href="/gallery">浏览公开笔记图库</a> · <a href="/llms.txt">给 AI agent 的说明</a></p>
+  <p><a href="/guide">使用说明</a> · <a href="/gallery">浏览公开笔记图库</a> · <a href="/llms.txt">给 AI agent 的说明</a></p>
+  <p><a href="/privacy">隐私政策</a> · <a href="/terms">使用条款</a></p>
 </main>`;
   return {
     status: 200,
@@ -185,6 +189,143 @@ export function homePage(origin: string): PageMeta {
       },
     ],
     body,
+  };
+}
+
+// ---------- 使用说明 ----------
+
+export function guidePage(origin: string, locale: GuideLocale = "zh"): PageMeta {
+  const content = GUIDE_CONTENT[locale];
+  const examples = getGuideExamples(origin, locale);
+  const url = `${origin}/guide`;
+  const lang = locale === "zh" ? "zh-CN" : "en";
+  const steps = (items: GuideItem[]) => `<ol class="guide-steps">${items
+    .map((item, index) => `<li><span class="guide-step-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p></div></li>`)
+    .join("")}</ol>`;
+  const definitions = (items: GuideItem[], className: string) => `<dl class="${className}">${items
+    .map((item) => `<div><dt>${escapeHtml(item.title)}</dt><dd>${escapeHtml(item.body)}</dd></div>`)
+    .join("")}</dl>`;
+  const tableHead = (headers: string[]) => `<thead><tr>${headers.map((label) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}</tr></thead>`;
+  const codeExample = (kind: "json" | "curl", title: string, description: string) => `<div class="guide-example">
+    <div class="guide-example-heading"><h3>${escapeHtml(title)}</h3></div><p>${escapeHtml(description)}</p>
+    <pre class="guide-code" data-guide-code="${kind}" tabindex="0" aria-label="${escapeHtml(title)}"><code>${escapeHtml(examples[kind])}</code></pre>
+  </div>`;
+  const { users, agents, faq } = content;
+  return {
+    status: 200,
+    title: content.documentTitle,
+    description: content.description,
+    canonical: url,
+    ogType: "website",
+    ogTitle: content.title,
+    lang,
+    vary: "Accept-Language",
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: content.title,
+        url,
+        description: content.description,
+        inLanguage: lang,
+        isPartOf: { "@id": `${origin}/#website` },
+      },
+      breadcrumbLd([{ name: SITE_NAME, url: `${origin}/` }, { name: content.title, url }]),
+    ],
+    body: `<main class="guide-page">
+  <header class="guide-hero">
+    <p class="guide-eyebrow">${escapeHtml(content.eyebrow)}</p>
+    <h1>${escapeHtml(content.title)}</h1><p class="guide-lead">${escapeHtml(content.description)}</p>
+    <nav class="guide-toc" aria-label="${escapeHtml(content.tocLabel)}">${content.toc.map((item) => `<a href="#${item.id}">${escapeHtml(item.label)}<span aria-hidden="true">↗</span></a>`).join("")}</nav>
+  </header>
+  <section class="guide-section" id="users" aria-labelledby="guide-users-title">
+    <header class="guide-section-header"><span class="guide-section-number" aria-hidden="true">01</span><div><h2 id="guide-users-title">${escapeHtml(users.title)}</h2><p>${escapeHtml(users.description)}</p></div></header>
+    ${steps(users.steps)}
+    <div class="guide-notes">${users.notes.map((item) => `<div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p></div>`).join("")}</div>
+    <a class="btn btn-primary guide-editor-link" href="${escapeHtml(users.action.href)}">${escapeHtml(users.action.label)}<span aria-hidden="true">→</span></a>
+  </section>
+  <section class="guide-section" id="agents" aria-labelledby="guide-agents-title">
+    <header class="guide-section-header"><span class="guide-section-number" aria-hidden="true">02</span><div><h2 id="guide-agents-title">${escapeHtml(agents.title)}</h2><p>${escapeHtml(agents.description)}</p></div></header>
+    <aside class="guide-callout"><h3>${escapeHtml(agents.access.title)}</h3><p>${escapeHtml(agents.access.body)}</p></aside>
+    ${steps(agents.steps)}
+    <h3 class="guide-subheading">${escapeHtml(agents.fieldsTitle)}</h3>
+    <div class="guide-table-wrap" role="region" tabindex="0" aria-label="${escapeHtml(agents.fieldsTitle)}"><table class="guide-table">
+      ${tableHead(agents.fieldHeaders)}
+      <tbody>${agents.fields.map((item) => `<tr><th scope="row"><code>${escapeHtml(item.field)}</code></th><td>${escapeHtml(item.required)}</td><td>${escapeHtml(item.description)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${codeExample("json", agents.jsonTitle, agents.jsonDescription)}
+    ${codeExample("curl", agents.curlTitle, agents.curlDescription)}
+    <h3 class="guide-subheading">${escapeHtml(agents.rulesTitle)}</h3>
+    ${definitions(agents.rules, "guide-rules")}
+    <h3 class="guide-subheading">${escapeHtml(agents.statusTitle)}</h3>
+    <div class="guide-table-wrap" role="region" tabindex="0" aria-label="${escapeHtml(agents.statusTitle)}"><table class="guide-table guide-status-table">
+      ${tableHead(agents.statusHeaders)}
+      <tbody>${agents.statuses.map((item) => `<tr><th scope="row"><code>${escapeHtml(item.code)}</code></th><td>${escapeHtml(item.description)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <h3 class="guide-subheading">${escapeHtml(agents.resourcesTitle)}</h3>
+    <div class="guide-resources">${agents.resources.map((item) => `<a href="${escapeHtml(item.href)}"><strong>${escapeHtml(item.label)}<span aria-hidden="true">↗</span></strong><span>${escapeHtml(item.description)}</span><code>${escapeHtml(item.href)}</code></a>`).join("")}</div>
+  </section>
+  <section class="guide-section" id="faq" aria-labelledby="guide-faq-title">
+    <header class="guide-section-header"><span class="guide-section-number" aria-hidden="true">03</span><h2 id="guide-faq-title">${escapeHtml(faq.title)}</h2></header>
+    ${definitions(faq.items, "guide-faq")}
+  </section>
+</main>`,
+  };
+}
+
+// ---------- 隐私政策与使用条款 ----------
+
+export function legalPage(origin: string, page: LegalPageId, locale: LegalLocale = "zh"): PageMeta {
+  const content = LEGAL_CONTENT[locale][page];
+  const url = `${origin}/${page}`;
+  const lang = locale === "zh" ? "zh-CN" : "en";
+  const links = (items: Array<{ href: string; label: string }>, arrow = "↗") => items
+    .map((item) => `<a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}<span aria-hidden="true"> ${arrow}</span></a>`)
+    .join("");
+  return {
+    status: 200,
+    title: content.documentTitle,
+    description: content.description,
+    canonical: url,
+    ogType: "website",
+    ogTitle: content.title,
+    lang,
+    vary: "Accept-Language",
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: content.title,
+        url,
+        description: content.description,
+        dateModified: content.updatedDate,
+        inLanguage: lang,
+        isPartOf: { "@id": `${origin}/#website` },
+      },
+      breadcrumbLd([{ name: SITE_NAME, url: `${origin}/` }, { name: content.title, url }]),
+    ],
+    body: `<main class="legal-page" data-legal-page="${page}">
+  <header class="legal-hero">
+    <p class="legal-updated">${escapeHtml(content.updatedLabel)} <time datetime="${escapeHtml(content.updatedDate)}">${escapeHtml(content.updatedDate)}</time></p>
+    <h1>${escapeHtml(content.title)}</h1>
+    <p class="legal-lead">${escapeHtml(content.description)}</p>
+  </header>
+  <nav class="legal-toc" aria-label="${escapeHtml(content.tocLabel)}">
+    <h2>${escapeHtml(content.tocLabel)}</h2>
+    <ol>${content.sections.map((section) => `<li><a href="#${escapeHtml(section.id)}">${escapeHtml(section.title)}</a></li>`).join("")}</ol>
+  </nav>
+  <div class="legal-body">
+  ${content.sections.map((section, index) => `<section class="legal-section" id="${escapeHtml(section.id)}" aria-labelledby="legal-${page}-${escapeHtml(section.id)}">
+    <h2 id="legal-${page}-${escapeHtml(section.id)}"><span class="legal-section-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>${escapeHtml(section.title)}</h2>
+    ${section.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}
+    ${section.items?.length ? `<ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+    ${section.links?.length ? `<div class="legal-links">${links(section.links)}</div>` : ""}
+  </section>`).join("\n  ")}
+  </div>
+  <nav class="legal-related" aria-label="${escapeHtml(content.relatedTitle)}">
+    <h2>${escapeHtml(content.relatedTitle)}</h2><div>${links(content.relatedLinks, "→")}</div>
+  </nav>
+</main>`,
   };
 }
 
@@ -369,6 +510,9 @@ export function sitemapXml(origin: string, notes: Array<{ id: string; updatedAt:
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     entry(`${origin}/`),
     entry(`${origin}/gallery`, latest),
+    entry(`${origin}/guide`),
+    entry(`${origin}/privacy`),
+    entry(`${origin}/terms`),
     ...notes.map((note) => entry(`${origin}/n/${note.id}`, note.updatedAt)),
     "</urlset>",
     "",
@@ -381,6 +525,11 @@ function siteOrigin(env: Env, url: URL): string {
   return loadConfig(env).publicBaseUrl ?? url.origin;
 }
 
+function requestLocale(request: Request): "zh" | "en" {
+  const preferredLanguage = request.headers.get("Accept-Language")?.split(",")[0]?.trim().toLowerCase();
+  return !preferredLanguage || preferredLanguage.startsWith("zh") ? "zh" : "en";
+}
+
 async function renderShell(env: Env, url: URL, meta: PageMeta): Promise<Response> {
   // 不转发浏览器的条件请求头（If-None-Match 等）：否则静态资源会返回没有内容的 304，
   // 而这里需要完整的 index.html 来注入元信息
@@ -388,6 +537,7 @@ async function renderShell(env: Env, url: URL, meta: PageMeta): Promise<Response
   if (!shell || !shell.ok) return new Response("Not Found", { status: 404 });
   const headers = new Headers(shell.headers);
   headers.set("Cache-Control", "no-cache");
+  if (meta.vary) headers.append("Vary", meta.vary);
   // 页面内容按请求改写过，原有的校验头不再准确
   for (const name of ["Content-Length", "ETag", "Last-Modified"]) headers.delete(name);
 
@@ -413,6 +563,15 @@ export async function handlePage(request: Request, env: Env): Promise<Response |
   const origin = siteOrigin(env, url);
 
   if (url.pathname === "/") return renderShell(env, url, homePage(origin));
+
+  if (/^\/guide\/?$/.test(url.pathname)) {
+    return renderShell(env, url, guidePage(origin, requestLocale(request)));
+  }
+
+  const legal = url.pathname.match(/^\/(privacy|terms)\/?$/);
+  if (legal) {
+    return renderShell(env, url, legalPage(origin, legal[1] as LegalPageId, requestLocale(request)));
+  }
 
   if (/^\/gallery\/?$/.test(url.pathname)) {
     const rows = env.DB ? await listNotes(env.DB, { visibility: "public" }, null, GALLERY_SIZE).then((r) => r.rows).catch(() => []) : [];

@@ -19,7 +19,7 @@ export default {
         headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-cache" },
       });
     }
-    // 首页、图库、笔记查看页、robots.txt 与 sitemap.xml：服务端注入 SEO 元信息与正文
+    // 首页、图库、说明与政策页面、笔记查看页、robots.txt 与 sitemap.xml：服务端注入 SEO 元信息与正文
     const page = await handlePage(request, env);
     if (page) return page;
     // 正常情况下静态资源由 Workers Assets 直接返回，只有未命中时才会走到这里

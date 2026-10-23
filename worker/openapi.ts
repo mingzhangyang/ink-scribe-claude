@@ -207,6 +207,9 @@ export function llmsTxt(origin: string, recent: PublishedNoteSummary[] = []): st
 
 - [编辑器](${origin}/)：粘贴文字、整理、排版与导出
 - [图库](${origin}/gallery)：公开的笔记
+- [使用说明](${origin}/guide)：网页操作步骤、AI agent 接入与常见问题
+- [隐私政策](${origin}/privacy)：本地草稿、AI 处理、发布与删除的数据规则
+- [使用条款](${origin}/terms)：内容权利、分享范围与 agent 使用责任
 - 笔记查看页：\`${origin}/n/<id>\`，HTML 中包含笔记全文（标题、线索、分节与总结）
 
 ## 给 AI agent 的用法
@@ -236,6 +239,7 @@ curl -X POST ${origin}/api/v1/notes \\
 
 ## 文档
 
+- [AI agent 接入指南](${origin}/guide#agents)
 - [OpenAPI 规范](${origin}/api/v1/openapi.json)
 - [图库](${origin}/gallery)
 - [站点地图](${origin}/sitemap.xml)

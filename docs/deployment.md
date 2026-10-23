@@ -1,6 +1,6 @@
 # 部署与运维
 
-前端静态资源与 API 一起部署为**一个** Cloudflare Worker：Vite 构建 `dist/client`（静态资源），Cloudflare Vite 插件同时构建 Worker（`dist/ink_scribe`，含生成的 `wrangler.json`）。`/api/*`、需要注入 SEO 信息的页面（`/`、`/gallery`、`/n/*`）以及 `/llms.txt`、`/robots.txt`、`/sitemap.xml` 先交给 Worker（`run_worker_first`），其余路径由 Workers Static Assets 直接返回，未命中时回退到 `index.html`（SPA）。
+前端静态资源与 API 一起部署为**一个** Cloudflare Worker：Vite 构建 `dist/client`（静态资源），Cloudflare Vite 插件同时构建 Worker（`dist/ink_scribe`，含生成的 `wrangler.json`）。`/api/*`、需要注入 SEO 信息的页面（`/`、`/gallery`、`/guide`、`/privacy`、`/terms`、`/n/*`）以及 `/llms.txt`、`/robots.txt`、`/sitemap.xml` 先交给 Worker（`run_worker_first`），其余路径由 Workers Static Assets 直接返回，未命中时回退到 `index.html`（SPA）。
 
 ## 前置条件
 
@@ -24,7 +24,7 @@ npm run deploy          # = vite build && wrangler deploy
 
 agent 发布必须提供 `schemaVersion: 1` 与完整 `note`，不接受原文 `text`。升级前同步修改原有调用方，具体请求见 [publishing.md](publishing.md)。`POST /api/v1/notes/validate` 可在不创建作品的情况下预检；发布与预检均不调用 Workers AI。
 
-先应用 `0003_publication_schema.sql`，再部署新 Worker。迁移为已有作品记录版本 `0`，使历史链接继续可读；新作品保存为版本 `1`，按严格契约读取。原文不会写入 D1，不需要新增绑定。并发与删除保护仍依赖此前的 `0002_publish_reservations.sql`，应按顺序应用全部迁移。
+先应用 `0003_publication_schema.sql`，再部署新 Worker。迁移为已有作品记录版本 `0`，使历史链接继续可读；新作品保存为版本 `1`，按严格契约读取。不单独保存原文 `text`，但 `note` 中主动保留的摘录仍会作为笔记写入 D1；不需要新增绑定。并发与删除保护仍依赖此前的 `0002_publish_reservations.sql`，应按顺序应用全部迁移。
 
 ## 配置项
 
@@ -65,7 +65,7 @@ agent 发布必须提供 `schemaVersion: 1` 与完整 `note`，不接受原文 `
 
 ### AI Gateway（可选）
 
-在 Cloudflare 控制台创建 AI Gateway 后设置 `AI_GATEWAY_ID`，即可获得网关侧的请求统计、缓存与限流。Worker 调用时设置了 `collectLog: false`，网关不保存请求与响应正文。
+在 Cloudflare 控制台创建 AI Gateway 后设置 `AI_GATEWAY_ID`，即可获得网关侧的请求统计、缓存与限流。Worker 调用时设置 `collectLog: false`，请求关闭网关正文日志；可选缓存与平台数据保留仍取决于实际配置及平台规则。
 
 ## 日志与成本监控
 
