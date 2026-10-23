@@ -25,9 +25,9 @@
   --primary-bg: var(--paper-ui);
   --primary-fg: #1c1917;
   --primary-hover: #fff;
-  /* “撰写”按钮的暖黄色，深浅两种主题共用 */
-  --compose-bg: #fbbf24;
-  --compose-hover: #f59e0b;
+  /* “撰写”按钮的珊瑚橙，深浅两种主题共用 */
+  --compose-bg: #ff7759;
+  --compose-hover: #f5603f;
   --compose-fg: #1c1917;
   --overlay: rgba(24, 24, 27, 0.75);
   --overlay-soft: rgba(24, 24, 27, 0.45);
