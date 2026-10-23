@@ -252,6 +252,8 @@ export async function runJsonTask<T>(ai: AiBinding, task: AiTaskConfig, job: Jso
         lastUpstreamError = appError;
         continue;
       }
+      // 修复调用失败（超时、额度用尽等）时，已得到的合法结果仍然可用
+      if (fallback) return { ...fallback, attempts };
       throw appError;
     }
     lastUpstreamError = undefined;

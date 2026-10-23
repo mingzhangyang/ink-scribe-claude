@@ -148,5 +148,12 @@ describe("runJsonTask", () => {
     outputs.splice(0, 2, "中文");
     calls.length = 0;
     expect(await runJsonTask(ai, task, job)).toMatchObject({ value: "English", attempts: 2, warnings: ["模型输出经过一次修复"] });
+
+    // A failed repair call (timeout, quota) must not throw away the valid first result.
+    for (const failure of [new Error("Request timed out"), new Error("4006: daily free allocation exceeded")]) {
+      let n = 0;
+      const failing = { run: async () => { if (n++ === 0) return { response: JSON.stringify("中文") }; throw failure; } };
+      expect(await runJsonTask(failing, task, job)).toMatchObject({ value: "中文", attempts: 2, warnings: ["wrong language"] });
+    }
   });
 });
