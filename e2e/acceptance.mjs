@@ -753,6 +753,71 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await context.close();
 }
 
+// ---------- L. 本机笔记库 ----------
+{
+  const { page, context } = await newPage();
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const editTitle = async (title) => {
+    await page.getByRole("tab", { name: "内容", exact: true }).click();
+    await page.locator(".content-editor input").first().fill(title);
+  };
+  await editTitle("笔记库第一条");
+  await page.locator('[data-library-status="unsaved"]').waitFor();
+  await page.getByRole("button", { name: "保存到笔记库", exact: true }).click();
+  await page.locator('[data-library-status="linked"]').waitFor();
+  await editTitle("笔记库第二条");
+  await page.locator('[data-library-status="modified"]').waitFor();
+  await page.getByRole("button", { name: "另存为新笔记", exact: true }).click();
+  await page.locator('[data-library-status="linked"]').waitFor();
+  await page.locator('[data-draft-status="saved"]').waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  const relinked = await page.locator('[data-library-status="linked"]').waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check("LB1", "刷新后仍关联笔记库条目且无未保存修改", relinked);
+
+  await page.getByRole("link", { name: "笔记库", exact: true }).click();
+  const cards = page.locator(".library-card");
+  await cards.nth(1).waitFor();
+  const titles = await cards.locator(".gallery-caption strong").allInnerTexts();
+  check("LB2", "笔记库按更新时间列出多条笔记", JSON.stringify(titles) === JSON.stringify(["笔记库第二条", "笔记库第一条"]), JSON.stringify(titles));
+  await page.getByRole("button", { name: "打开“笔记库第一条”", exact: true }).click();
+  await page.locator(".note-title").first().waitFor();
+  check("LB3", "从笔记库打开笔记到编辑器", await page.locator(".note-title").first().innerText() === "笔记库第一条" && await page.locator('[data-library-status="linked"]').count() === 1);
+
+  await page.getByRole("link", { name: "笔记库", exact: true }).click();
+  await cards.nth(1).waitFor();
+  await page.locator(".library-search").fill("第二");
+  const filtered = await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1, null, { timeout: 5000 }).then(() => true, () => false);
+  check("LB4", "按标题搜索笔记", filtered && (await cards.locator(".gallery-caption strong").innerText()) === "笔记库第二条");
+  await page.locator(".library-search").fill("");
+  await cards.nth(1).waitFor();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出备份", exact: true }).click();
+  const backup = `${SP}/library-backup.json`;
+  await (await download).saveAs(backup);
+  await page.getByRole("button", { name: "删除“笔记库第二条”", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
+  await page.locator('.library-main input[type="file"]').setInputFiles(backup);
+  await page.locator(".library-main .hint.is-ok").waitFor();
+  // The notice appears before the list reloads, so wait for the restored card rather than counting at once.
+  const restored = await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 2, null, { timeout: 5000 }).then(() => true, () => false);
+  check("LB5", "导出备份后可导入恢复已删除的笔记", restored);
+  // The editor still holds "笔记库第一条"; once another tab deletes it, opening another note must ask first.
+  const other = await context.newPage();
+  other.on("dialog", (dialog) => dialog.accept());
+  await other.goto(`${URL}library`, { waitUntil: "networkidle" });
+  await other.getByRole("button", { name: "删除“笔记库第一条”", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1);
+  const prompts = [];
+  page.on("dialog", (dialog) => prompts.push(dialog.message()));
+  await page.getByRole("button", { name: "打开“笔记库第二条”", exact: true }).click();
+  await page.locator(".note-title").first().waitFor();
+  check("LB6", "另一标签页删除当前笔记后，打开其他笔记前先确认", prompts.some((m) => m.includes("尚未保存到笔记库")), JSON.stringify(prompts));
+  await other.close();
+  check("LB7", "笔记库流程无脚本错误", page.errors.length === 0, page.errors.join("; "));
+  await context.close();
+}
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

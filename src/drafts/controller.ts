@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { NoteDocument } from "../../shared/document.ts";
-import { useNoteStore } from "../state/store.ts";
+import { currentDocument as document, useNoteStore } from "../state/store.ts";
+import type { LibraryLink } from "../library/storage.ts";
 import { DraftConflict, readDraft, writeDraft } from "./storage.ts";
 
 type Status = "ready" | "saving" | "saved" | "restored" | "disabled" | "error" | "conflict";
@@ -11,18 +12,17 @@ let enabled = true;
 let suspended = false;
 let applying = false;
 let hasWork = false;
-let pending: NoteDocument | null = null;
+type Snapshot = { document: NoteDocument; library: LibraryLink | null };
+let pending: Snapshot | null = null;
 let working: Promise<void> | null = null;
 
-function document(): NoteDocument {
-  const { input, note, settings, stickers, aiDoodle, source } = useNoteStore.getState();
-  return { input, note, settings, stickers, aiDoodle, source };
+function snapshot(): Snapshot {
+  return { document: document(), library: useNoteStore.getState().libraryLink };
 }
 
-function apply(value: NoteDocument) {
+function apply(value: NoteDocument, library: LibraryLink | null) {
   applying = true;
-  useNoteStore.setState({ ...value, meta: null, status: "idle", error: null, selectedStickerId: null,
-    noteSerial: useNoteStore.getState().noteSerial + 1 });
+  useNoteStore.getState().loadDocument(value, library);
   applying = false;
 }
 
@@ -37,7 +37,7 @@ async function drain() {
     pending = null;
     status("saving");
     try {
-      const saved = await writeDraft(revision, value, true);
+      const saved = await writeDraft(revision, value.document, true, false, value.library);
       revision = saved.revision;
       if (!pending) status("saved");
     } catch (error) { failed(error); }
@@ -56,17 +56,20 @@ export async function startDrafts() {
     revision = saved?.revision ?? null;
     enabled = saved?.enabled ?? true;
     hasWork = !!saved?.document;
-    if (enabled && saved?.document) { apply(saved.document); status("restored"); }
+    if (enabled && saved?.document) { apply(saved.document, saved.library); status("restored"); }
     else status(enabled ? "ready" : "disabled");
   } catch (error) { failed(error); }
   useNoteStore.subscribe((next, previous) => {
     if (applying || !enabled) return;
     if (next.input === previous.input && next.note === previous.note && next.settings === previous.settings
-      && next.stickers === previous.stickers && next.aiDoodle === previous.aiDoodle && next.source === previous.source) return;
+      && next.stickers === previous.stickers && next.aiDoodle === previous.aiDoodle && next.source === previous.source
+      && next.libraryLink === previous.libraryLink) return;
     // Skip sample initialization only before user work exists. Later replacements must match the saved canvas.
-    if (!hasWork && next.source === "sample" && next.noteSerial !== previous.noteSerial) return;
+    // Opening a document (e.g. a library entry made from the sample) is not initialization, even with source "sample".
+    if (!hasWork && next.source === "sample" && next.noteSerial !== previous.noteSerial
+      && next.documentSerial === previous.documentSerial) return;
     hasWork = true;
-    pending = document();
+    pending = snapshot();
     save();
   });
   window.addEventListener("beforeunload", (event) => {
@@ -78,7 +81,7 @@ export async function retryDraft() {
   if (working) await working;
   suspended = false;
   hasWork = true;
-  pending = document();
+  pending = snapshot();
   save();
 }
 
@@ -98,7 +101,7 @@ export async function restoreLatestDraft() {
     enabled = saved?.enabled ?? true;
     pending = null;
     hasWork = !!saved?.document;
-    if (saved?.document) apply(saved.document);
+    if (saved?.document) apply(saved.document, saved.library);
     suspended = false;
     status(enabled ? (saved?.document ? "restored" : "ready") : "disabled");
   } catch (error) { failed(error); }

@@ -1,32 +1,24 @@
 import { readDocument, type NoteDocument } from "../../shared/document.ts";
+import { openDatabase } from "../lib/idb.ts";
+import { readLink, type LibraryLink } from "../library/storage.ts";
 
-export type DraftRecord = { version: 1; revision: string; enabled: boolean; document: NoteDocument | null; savedAt: number };
+/** `library` names the library entry the draft was opened from or last saved to. */
+export type DraftRecord = { version: 1; revision: string; enabled: boolean; document: NoteDocument | null; library: LibraryLink | null; savedAt: number };
 export class DraftConflict extends Error {}
 const DATABASE = "ink-scribe-drafts";
 const STORE = "drafts";
 const KEY = "current";
 
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
-    let expired = false;
-    const timer = setTimeout(() => { expired = true; reject(new Error("Draft database unavailable")); }, 3000);
-    request.onupgradeneeded = () => { request.result.createObjectStore(STORE); };
-    request.onsuccess = () => {
-      clearTimeout(timer);
-      if (expired) request.result.close();
-      else resolve(request.result);
-    };
-    request.onerror = () => { clearTimeout(timer); reject(request.error); };
-    request.onblocked = () => { clearTimeout(timer); expired = true; reject(new Error("Draft database blocked")); };
-  });
+  return openDatabase(DATABASE, 1, (db) => { db.createObjectStore(STORE); });
 }
 
 function parse(value: unknown): DraftRecord | null {
   if (value === undefined) return null;
   const r = value as Partial<DraftRecord> | null;
   if (!r || r.version !== 1 || typeof r.revision !== "string" || typeof r.enabled !== "boolean" || typeof r.savedAt !== "number") throw new Error("Unsupported draft version");
-  return { version: 1, revision: r.revision, enabled: r.enabled, savedAt: r.savedAt, document: r.document === null ? null : readDocument(r.document) };
+  return { version: 1, revision: r.revision, enabled: r.enabled, savedAt: r.savedAt, document: r.document === null ? null : readDocument(r.document),
+    library: readLink(r.library) };
 }
 
 export async function readDraft(): Promise<DraftRecord | null> {
@@ -41,14 +33,14 @@ export async function readDraft(): Promise<DraftRecord | null> {
 }
 
 /** Read/compare/write happens in one IndexedDB transaction, including across tabs. */
-export async function writeDraft(expected: string | null, document: NoteDocument | null, enabled: boolean, discard = false): Promise<DraftRecord> {
+export async function writeDraft(expected: string | null, document: NoteDocument | null, enabled: boolean, discard = false, library: LibraryLink | null = null): Promise<DraftRecord> {
   const db = await open();
   try {
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       const store = tx.objectStore(STORE);
       const get = store.get(KEY);
-      const next: DraftRecord = { version: 1, revision: crypto.randomUUID(), enabled, document, savedAt: Date.now() };
+      const next: DraftRecord = { version: 1, revision: crypto.randomUUID(), enabled, document, library, savedAt: Date.now() };
       let failure: Error | null = null;
       get.onsuccess = () => {
         const matches = expected === null ? get.result === undefined : get.result?.revision === expected;
