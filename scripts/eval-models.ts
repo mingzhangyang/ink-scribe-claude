@@ -147,7 +147,7 @@ async function runOnce(model: string, evalCase: EvalCase): Promise<RunResult> {
     const text = noteText(result.value);
     const price = prices[model];
     const dropped = result.warnings
-      .map((w) => Number(w.match(/丢弃了 (\d+) 个未出现在正文中的重点词/)?.[1] ?? 0))
+      .map((w) => Number(w.match(/丢弃了 (\d+) 个无法在正文中标出的重点词/)?.[1] ?? 0))
       .reduce((a, b) => a + b, 0);
     return {
       model,

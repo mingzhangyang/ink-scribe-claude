@@ -1,3 +1,4 @@
+import { parseContentLines, splitHighlights } from "./content.ts";
 import { normalizeDoodleSpec, type DoodleSpec, type NormalizeResult } from "./doodle.ts";
 import { cleanText } from "./text.ts";
 import { DOODLE_THEMES, inferDoodleTheme, type DoodleTheme } from "./themes.ts";
@@ -47,12 +48,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 重点词必须出现在所在段落正文中，否则无法在画布上标记。
- * 大小写不同的匹配会被替换为正文中的实际写法；找不到的重点词会被丢弃。
+ * 重点词必须能在画布上标出：出现在某一行正文中（不含列表符号），且至少有一处没有被更早的重点词覆盖。
+ * 规则与渲染器、发布校验一致，因此整理结果可以直接发布。大小写不同的匹配会被替换为正文中的实际写法；
+ * 无法标出的重点词会被丢弃。
  */
 function matchHighlights(rawHighlights: unknown, content: string): { highlights: string[]; dropped: number } {
   if (!Array.isArray(rawHighlights)) return { highlights: [], dropped: 0 };
-  const lowerContent = content.toLowerCase();
+  const lines = parseContentLines(content).flatMap((line) => (line.kind === "gap" ? [] : [line.text]));
   const seen = new Set<string>();
   const highlights: string[] = [];
   let dropped = 0;
@@ -62,17 +64,19 @@ function matchHighlights(rawHighlights: unknown, content: string): { highlights:
       if (phrase) dropped++;
       continue;
     }
-    let actual: string | undefined;
-    if (content.includes(phrase)) actual = phrase;
-    else {
-      const index = lowerContent.indexOf(phrase.toLowerCase());
-      if (index >= 0) actual = content.slice(index, index + phrase.length);
-    }
-    if (!actual) {
+    const pattern = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu");
+    const actual = lines.map((line) => line.match(pattern)?.[0]).find((match) => match !== undefined);
+    if (actual === undefined) {
       dropped++;
       continue;
     }
     if (seen.has(actual)) continue;
+    // Earlier highlights keep overlapping matches, so a phrase found only inside them would never show.
+    const candidate = [...highlights, actual];
+    if (!lines.some((line) => splitHighlights(line, candidate).some((run) => run.highlight === highlights.length))) {
+      dropped++;
+      continue;
+    }
     seen.add(actual);
     highlights.push(actual);
     if (highlights.length >= NOTE_LIMITS.maxHighlights) break;
@@ -102,7 +106,7 @@ function normalizeSection(item: unknown, warnings: string[]): NoteSection | unde
   if (!content) return undefined;
   const heading = cleanText(item.heading ?? item.title, NOTE_LIMITS.heading);
   const { highlights, dropped } = matchHighlights(item.highlights, content);
-  if (dropped > 0) warnings.push(`丢弃了 ${dropped} 个未出现在正文中的重点词`);
+  if (dropped > 0) warnings.push(`丢弃了 ${dropped} 个无法在正文中标出的重点词`);
   return heading ? { heading, content, highlights } : { content, highlights };
 }
 

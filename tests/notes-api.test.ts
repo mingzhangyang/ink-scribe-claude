@@ -344,24 +344,79 @@ describe("reading, gallery and management", () => {
     expect(env.AI.run).not.toHaveBeenCalled();
   });
 
-  it("refuses corrupt version 1 snapshots instead of rewriting their content or settings", async () => {
+  it("serves version 1 snapshots that fail a stricter contract normalized, without rewriting storage", async () => {
     const note = await create("unlisted");
     const corruptNote = { ...note.note, sections: [{ content: "x".repeat(901), highlights: [] }] };
     await env.DB!.prepare("UPDATE notes SET note_json = ? WHERE id = ?")
       .bind(JSON.stringify(corruptNote), note.id).run();
     const read = await call(request("GET", `/api/notes/${note.id}`, { key: null }));
-    expect(read.response.status).toBe(500);
-    expect(read.body!.error.code).toBe("INTERNAL_ERROR");
-    expect(read.body).not.toHaveProperty("note");
+    expect(read.response.status).toBe(200);
+    expect(read.body!.schemaVersion).toBe(0);
+    expect(read.body!.note.sections[0].content).toBe(`${"x".repeat(899)}…`);
     const stored = await env.DB!.prepare("SELECT note_json FROM notes WHERE id = ?")
       .bind(note.id).first<{ note_json: string }>();
     expect(JSON.parse(stored!.note_json)).toEqual(corruptNote);
+    // The log names the note and the failing field, never its content.
+    const logged = vi.mocked(console.log).mock.calls.map(([line]) => String(line)).find((line) => line.includes("note.snapshot_fallback"));
+    expect(JSON.parse(logged!)).toMatchObject({ noteId: note.id, path: "note.sections[0].content", code: "TOO_LONG" });
+    expect(logged).not.toContain("xxxx");
 
     await env.DB!.prepare("UPDATE notes SET note_json = ?, settings_json = ? WHERE id = ?")
       .bind(JSON.stringify(note.note), JSON.stringify({ ...note.settings, doodleMode: "ai" }), note.id).run();
-    const invalidSettings = await call(request("GET", `/api/v1/notes/${note.id}`));
-    expect(invalidSettings.response.status).toBe(500);
-    expect(invalidSettings.body!.error.code).toBe("INTERNAL_ERROR");
+    const legacySettings = await call(request("GET", `/api/v1/notes/${note.id}`));
+    expect(legacySettings.response.status).toBe(200);
+    expect(legacySettings.body!.schemaVersion).toBe(0);
+    expect(legacySettings.body!.settings.doodleMode).toBe("ai");
+
+    await env.DB!.prepare("UPDATE notes SET note_json = ? WHERE id = ?").bind("{}", note.id).run();
+    const unreadable = await call(request("GET", `/api/notes/${note.id}`, { key: null }));
+    expect(unreadable.response.status).toBe(500);
+    expect(unreadable.body!.error.code).toBe("INTERNAL_ERROR");
+  });
+
+  // Stored exactly as version 1 publishing wrote it. Keep it frozen: a contract change that stops reading it
+  // losslessly needs a migration or a deliberate decision to serve it normalized.
+  const FROZEN_V1 = {
+    note: '{"title":"间隔重复","date":"2026年10月23日","cues":[{"keyword":"遗忘曲线","note":"不复习就会快速遗忘"}],"sections":[{"heading":"方法","content":"按间隔复习卡片。\\n- 先难后易\\n1. 记录结果","highlights":["间隔","记录结果"]}],"summary":"间隔复习比集中复习更有效。","doodleTheme":"book"}',
+    settings: '{"layout":"classic-cornell","paper":"grid","zhFont":"lxgw","enFont":"kalam","fontSize":21,"lineHeight":1.8,"letterSpacing":0.02,"ink":"blue","accent":"yellow","naturalness":0.4,"pageSize":"a4","overflow":"error","doodleMode":"theme","doodleTheme":"book","seed":123456}',
+    stickers: '[{"id":"tape-1","type":"tape","x":120,"y":-12,"rotation":-4.5,"scale":1.2,"variant":"mint"}]',
+  };
+
+  async function insertSnapshot(id: string, schemaVersion?: 0 | 1) {
+    const version = schemaVersion === undefined ? ["", ""] : [", schema_version", `, ${schemaVersion}`];
+    await env.DB!.prepare(`INSERT INTO notes (id, api_key_id, visibility, title, summary, language, template, layout,
+      note_json, settings_json, stickers_json, doodle_json, image_status, created_at, updated_at${version[0]})
+      VALUES (?, 'key_owner', 'unlisted', '间隔重复', '间隔复习比集中复习更有效。', 'zh', 'general', 'classic-cornell',
+      ?, ?, ?, NULL, 'disabled', 1, 1${version[1]})`)
+      .bind(id, FROZEN_V1.note, FROZEN_V1.settings, FROZEN_V1.stickers).run();
+  }
+
+  it("reads a frozen version 1 snapshot losslessly, giving settings added later their defaults", async () => {
+    const id = noteStore.newNoteId();
+    await insertSnapshot(id, 1);
+    const read = await call(request("GET", `/api/notes/${id}`, { key: null }));
+    expect(read.response.status).toBe(200);
+    expect(read.body!.schemaVersion).toBe(1);
+    expect(read.body!.note).toEqual(JSON.parse(FROZEN_V1.note));
+    expect(read.body!.settings).toEqual(JSON.parse(FROZEN_V1.settings));
+    expect(read.body!.stickers).toEqual(JSON.parse(FROZEN_V1.stickers));
+
+    // Written before `overflow` existed: still lossless, and the new setting takes its default.
+    const { overflow: _, ...earlier } = JSON.parse(FROZEN_V1.settings);
+    await env.DB!.prepare("UPDATE notes SET settings_json = ? WHERE id = ?").bind(JSON.stringify(earlier), id).run();
+    const older = await call(request("GET", `/api/notes/${id}`, { key: null }));
+    expect(older.body!.schemaVersion).toBe(1);
+    expect(older.body!.settings).toEqual({ ...earlier, overflow: DEFAULT_SETTINGS.overflow });
+  });
+
+  it("keeps existing notes readable when the Worker is deployed before migration 0003", async () => {
+    await env.DB!.prepare("ALTER TABLE notes DROP COLUMN schema_version").run();
+    const id = noteStore.newNoteId();
+    await insertSnapshot(id);
+    const read = await call(request("GET", `/api/notes/${id}`, { key: null }));
+    expect(read.response.status).toBe(200);
+    expect(read.body!.schemaVersion).toBe(0);
+    expect(read.body!.note.title).toBe("间隔重复");
   });
 
   it("serves public and unlisted notes by id but lists only public ones in the gallery", async () => {

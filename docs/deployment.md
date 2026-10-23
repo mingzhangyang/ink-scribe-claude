@@ -6,7 +6,7 @@
 
 - Node.js 22+，`npm install`
 - Cloudflare 账号，已开通 Workers 与 Workers AI（Workers AI 按 Neurons 计费，免费额度有每日上限）
-- 登录 Wrangler：`npx wrangler login`；CI 中使用 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID` 环境变量（Token 需要 Workers Scripts 编辑与 Workers AI 权限）
+- 登录 Wrangler：`npx wrangler login`；CI 中使用 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID` 环境变量（Token 需要 Workers Scripts 编辑、Workers AI 与 D1 编辑权限）
 
 ## 发布
 
@@ -24,7 +24,7 @@ npm run deploy          # = vite build && wrangler deploy
 
 agent 发布必须提供 `schemaVersion: 1` 与完整 `note`，不接受原文 `text`。升级前同步修改原有调用方，具体请求见 [publishing.md](publishing.md)。`POST /api/v1/notes/validate` 可在不创建作品的情况下预检；发布与预检均不调用 Workers AI。
 
-先应用 `0003_publication_schema.sql`，再部署新 Worker。迁移为已有作品记录版本 `0`，使历史链接继续可读；新作品保存为版本 `1`，按严格契约读取。不单独保存原文 `text`，但 `note` 中主动保留的摘录仍会作为笔记写入 D1；不需要新增绑定。并发与删除保护仍依赖此前的 `0002_publish_reservations.sql`，应按顺序应用全部迁移。
+先应用 `0003_publication_schema.sql`，再部署新 Worker。若 Worker 先上线，已有作品仍按版本 `0` 读取，但发布会失败，直到迁移完成。迁移为已有作品记录版本 `0`，使历史链接继续可读；新作品保存为版本 `1`，按严格契约读取。不单独保存原文 `text`，但 `note` 中主动保留的摘录仍会作为笔记写入 D1；不需要新增绑定。并发与删除保护仍依赖此前的 `0002_publish_reservations.sql`，应按顺序应用全部迁移。
 
 ## 配置项
 
@@ -56,7 +56,8 @@ agent 发布必须提供 `schemaVersion: 1` 与完整 `note`，不接受原文 `
 在 Cloudflare 控制台把仓库连接到 `ink-scribe` Worker 时：
 
 - **Build command** 设为 `npm run build`。`wrangler.jsonc` 中的 `assets` 没有 `directory`，完整的部署配置由 `vite build` 生成到 `dist/ink_scribe/wrangler.json`；跳过构建直接运行 wrangler 会报 `The assets property … is missing the required directory property`。
-- 部署命令保持默认：生产分支 `npx wrangler deploy`，其他分支 `npx wrangler preview`（Worker Previews）。
+- 生产分支的 **Deploy command** 设为 `npm run db:migrate:remote && npx wrangler deploy`。合并到生产分支会直接部署，先应用 D1 迁移，新 Worker 上线时表结构才已就绪；迁移失败时不会部署。构建使用的 API Token 需要 D1 编辑权限，wrangler 在非交互环境中自动确认迁移。迁移执行到新 Worker 上线之间旧 Worker 仍在运行，因此迁移要保持向后兼容（如只加带默认值的列）。
+- 其他分支的部署命令保持默认 `npx wrangler preview`（Worker Previews）。
 - 预览使用 `wrangler.jsonc` 中的 `previews` 块：变量与生产一致但 `PUBLIC_BASE_URL` 为空，限流使用独立的命名空间，**不绑定 D1**，因此预览不会读写生产的笔记与 API 密钥（图库为空，发布接口返回 503）。修改顶层 `vars` 时要同步修改 `previews.vars`。
 
 ### 自定义域名

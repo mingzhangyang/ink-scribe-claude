@@ -93,7 +93,7 @@ export type PublishedNoteSummary = {
 };
 
 export type PublishedNote = PublishedNoteSummary & {
-  /** 0: notes published before the strict agent contract; 1: validated, lossless content. */
+  /** 0: normalized content (published before the strict agent contract, or no longer valid under it); 1: validated, lossless content. */
   schemaVersion: 0 | 1;
   note: import("./note.ts").NoteStructure;
   settings: import("./settings.ts").Settings;

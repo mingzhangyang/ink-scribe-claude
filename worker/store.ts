@@ -2,16 +2,18 @@ import type { NoteVisibility, PublishedNote, PublishedNoteSummary } from "../sha
 import { normalizeDoodleSpec, type DoodleSpec } from "../shared/doodle.ts";
 import { normalizeNoteStructure, type NoteStructure } from "../shared/note.ts";
 import { validatePublishedContent } from "../shared/publishing.ts";
-import { sanitizeSettings, type Settings } from "../shared/settings.ts";
+import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from "../shared/settings.ts";
 import { normalizeStickers, type StickerItem } from "../shared/stickers.ts";
+import { logEvent } from "./log.ts";
 
-/** D1 数据访问层。新版快照严格校验且不改写；旧版数据继续使用兼容规范化。 */
+/** D1 数据访问层。新版快照严格校验且不改写；旧版数据以及不再符合当前契约的快照使用兼容规范化。 */
 
 export type ApiKeyRecord = { id: string; name: string; revokedAt: number | null };
 
 export type NoteRow = {
   id: string;
-  schema_version: 0 | 1;
+  /** Absent until migration 0003 is applied. */
+  schema_version?: 0 | 1;
   api_key_id: string;
   visibility: NoteVisibility;
   title: string;
@@ -259,6 +261,8 @@ export function toSummary(row: NoteRow, origin: string): PublishedNoteSummary {
   };
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+
 function parseJson(text: string | null): unknown {
   if (!text) return undefined;
   try {
@@ -269,16 +273,28 @@ function parseJson(text: string | null): unknown {
 }
 
 export function toPublished(row: NoteRow, origin: string): PublishedNote | null {
-  if (row.schema_version === 1) {
+  // Before migration 0003 the column is absent, and every row is a legacy publication.
+  const version = row.schema_version ?? 0;
+  if (version === 1) {
+    const settings = parseJson(row.settings_json);
     const content = validatePublishedContent({
       note: parseJson(row.note_json),
-      settings: parseJson(row.settings_json),
+      // A setting added after this snapshot was written takes its default, which must keep the earlier rendering.
+      settings: isRecord(settings) ? { ...DEFAULT_SETTINGS, ...settings } : settings,
       stickers: parseJson(row.stickers_json),
     });
-    if (!content.ok) return null;
-    return { ...toSummary(row, origin), schemaVersion: 1, ...content.value };
+    if (content.ok) return { ...toSummary(row, origin), schemaVersion: 1, ...content.value };
+    // A stricter contract must not take a shared link offline: serve normalized content, marked as no longer
+    // lossless, and leave the stored snapshot untouched.
+    const [first] = content.issues;
+    logEvent("note.snapshot_fallback", { noteId: row.id, issues: content.issues.length, path: first.path, code: first.code });
+    return toLegacy(row, origin);
   }
-  if (row.schema_version !== 0) return null;
+  return version === 0 ? toLegacy(row, origin) : null;
+}
+
+/** Notes published before the strict contract, or no longer valid under it, are read through normalization. */
+function toLegacy(row: NoteRow, origin: string): PublishedNote | null {
   const note = normalizeNoteStructure(parseJson(row.note_json));
   if (!note.ok) return null;
   const doodle = normalizeDoodleSpec(parseJson(row.doodle_json));

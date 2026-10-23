@@ -149,10 +149,9 @@ export async function fetchPublishedNote(id: string): Promise<ViewableNote> {
   const summary = raw ? safeSummary(raw) : null;
   if (raw?.schemaVersion === 1) {
     const content = validatePublishedContent({ note: raw.note, settings: raw.settings, stickers: raw.stickers });
-    if (!summary || !content.ok) throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "笔记数据无效。" });
-    return { summary, ...content.value, doodle: null };
-  }
-  if (raw?.schemaVersion !== undefined && raw.schemaVersion !== 0) {
+    if (summary && content.ok) return { summary, ...content.value, doodle: null };
+    // A newer contract than this page knows (e.g. a setting added since it loaded) still displays, normalized below.
+  } else if (raw?.schemaVersion !== undefined && raw.schemaVersion !== 0) {
     throw new ApiRequestError({ code: "AI_OUTPUT_INVALID", message: "不支持的笔记版本。" });
   }
   const note = normalizeNoteStructure(raw?.note);
