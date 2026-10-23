@@ -163,7 +163,8 @@ describe("library in the editor", () => {
     expect(c.hasUnsavedWork()).toBe(true);
     await c.saveToLibrary();
     expect(c.store.getState().libraryLink?.id).not.toBe(first.id);
-    expect((await listEntries()).entries.map((e) => e.title)).toEqual(["第二篇", "重新生成"]);
+    // Both saves can land in the same millisecond, so the list order is not defined here.
+    expect((await listEntries()).entries.map((e) => e.title).sort()).toEqual(["第二篇", "重新生成"].sort());
     await vi.waitFor(async () => expect((await readDraft())?.library).toEqual(c.store.getState().libraryLink));
   });
 
