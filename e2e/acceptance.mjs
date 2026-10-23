@@ -1511,6 +1511,47 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   await context.close();
 }
 
+// 从遮罩按下、在弹窗内松开不关闭；窄屏上长笔记生成时加载提示与取消按钮始终可见
+{
+  const { page, context } = await newPage();
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await openInput(page);
+  const box = await page.locator(".input-sheet").boundingBox();
+  await page.mouse.move(20, 500);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  check("IS21", "从遮罩按下、拖进弹窗内松开时不关闭弹窗", await page.locator(".input-sheet").evaluate((dialog) => dialog.open && !dialog.hasAttribute("data-closing")));
+  await context.close();
+}
+
+{
+  const viewport = { width: 390, height: 844 };
+  const { page, context } = await newPage({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "样式" }).click();
+  await page.locator(".field").filter({ hasText: "页面尺寸" }).locator("select").selectOption("long");
+  // 放大到 160%，让画布远高于屏幕，再滚到页面底部
+  for (let i = 0; i < 14; i++) await page.getByRole("button", { name: "放大" }).click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.route("**/api/structure", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue().catch(() => {});
+  });
+  await page.locator(".input-trigger").tap();
+  await page.selectOption(".sample-picker select", "zh-reading");
+  await page.getByRole("button", { name: /转化为手写笔记/ }).tap();
+  await page.locator(".input-sheet").waitFor({ state: "hidden" });
+  const card = await page.locator(".loading-card").boundingBox();
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  const inView = card && card.y >= 0 && card.y + card.height <= viewport.height;
+  await page.locator(".loading-card").getByRole("button", { name: "取消生成" }).tap();
+  await page.waitForSelector(".loading-overlay", { state: "detached" });
+  check("IS22", "窄屏长笔记生成时，加载提示与取消按钮在屏幕内", inView && pageHeight > viewport.height * 3 && page.errors.length === 0, JSON.stringify({ card, pageHeight, errors: page.errors }));
+  await page.unroute("**/api/structure");
+  await context.close();
+}
+
 // ---------- D. 本地草稿 ----------
 {
   const { page, context } = await newPage();

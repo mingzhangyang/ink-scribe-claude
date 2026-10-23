@@ -1406,6 +1406,24 @@ html:has(.sheet[open]) {
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* 窄屏上画布不限高、整个页面滚动，粘性定位不起作用：加载提示固定在底部按钮上方，
+     笔记很长或页面已滚到下方时也能看到进度和取消按钮 */
+  .loading-overlay {
+    /* backdrop-filter 会让遮罩成为 fixed 子元素的定位参照，这里去掉 */
+    backdrop-filter: none;
+  }
+
+  .loading-card {
+    position: fixed;
+    top: auto;
+    left: 16px;
+    right: 16px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 31;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
   .workspace {
     min-height: 70vh;
   }

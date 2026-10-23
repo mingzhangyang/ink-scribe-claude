@@ -162,7 +162,11 @@ export function Sheet({ open, onClose, labelledBy, className, children }: {
       // 拖动中对话框被关闭等情况下，捕获被释放而收不到 pointerup：结束拖动，避免之后无法再拖
       onLostPointerCapture={endDrag}
       onClick={(event) => {
-        if (pressedBackdrop.current && event.target === event.currentTarget) onClose();
+        // 按下与松开的位置不同时，click 会落在两者的共同祖先（对话框）上：
+        // 还要确认松开的位置也在对话框外，从遮罩拖进抽屉里松手时不关闭
+        const rect = event.currentTarget.getBoundingClientRect();
+        const releasedOutside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+        if (pressedBackdrop.current && event.target === event.currentTarget && releasedOutside) onClose();
         pressedBackdrop.current = false;
       }}
     >
