@@ -112,7 +112,7 @@ export const en: Messages = {
 
   input: {
     title: "Source text",
-    open: "Edit source text",
+    open: "Compose",
     chars: (count) => `${count} chars`,
     close: "Close",
     options: "Options",
