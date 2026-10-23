@@ -113,7 +113,6 @@ export const en: Messages = {
   input: {
     title: "Source text",
     open: "Compose",
-    chars: (count) => `${count} chars`,
     close: "Close",
     options: "Options",
     samplePicker: "Insert sample text",

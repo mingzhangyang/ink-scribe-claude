@@ -1048,16 +1048,6 @@ input[type="range"] {
   min-height: 42px;
 }
 
-.input-trigger-count {
-  font-weight: 400;
-  opacity: 0.7;
-  font-variant-numeric: tabular-nums;
-}
-
-.input-trigger-count::before {
-  content: "· ";
-}
-
 .input-trigger.is-attention {
   animation: trigger-pulse 2.4s ease-in-out infinite;
 }
