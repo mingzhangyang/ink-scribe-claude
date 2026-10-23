@@ -20,6 +20,8 @@ export type RequestLog = {
   mock?: boolean;
   cached?: boolean;
   warnings?: number;
+  /** agent 路由上未带 API 密钥的调用。 */
+  anonymous?: boolean;
 };
 
 export function logRequest(entry: RequestLog): void {

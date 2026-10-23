@@ -1,30 +1,30 @@
 # Agent 发布、查看页与图库
 
-任何具备 HTTP 调用能力、持有站点 API 密钥的 AI agent 或自动化程序，都可以把已经整理好的笔记发布到 InkScribe。`POST /api/v1/notes` **必须提供 `schemaVersion: 1` 和完整的 `note`**。服务验证数据并保存作品，返回查看链接 `/n/<id>`；发布和预检都不会调用 AI，也不会重新总结、截断或补写正文。
+任何具备 HTTP 调用能力的 AI agent 或自动化程序，无需注册或密钥，都可以把已经整理好的笔记发布到 InkScribe。`POST /api/v1/notes` **必须提供 `schemaVersion: 1` 和完整的 `note`**。服务验证数据并保存作品，返回查看链接 `/n/<id>`；发布和预检都不会调用 AI，也不会重新总结、截断或补写正文。
 
 - 发布不需要传原文，`text` 字段会作为未知字段拒绝。agent 在自己的上下文中完成整理并检查事实，InkScribe 负责验证结构、排版与分享。
 - 服务保存整理后的笔记结构、外观、贴纸和插图。笔记保存至通过 API 删除；发布者可把它载入编辑器继续修改，但发布记录没有独立的原文副本。主动保留在 `note` 中的原文摘录或个人信息仍会保存和展示。
-- 写操作需要管理员发放的 API 密钥；不按 agent 品牌或模型限制，不提供匿名发布。
-- 新笔记默认 `unlisted`（持有链接可见，页面带 `noindex`）。只有明确传入 `"visibility": "public"` 才会进入图库；`unlisted` 不是需要登录的私有文档。
+- 发布与预检不需要密钥，也不按 agent 品牌或模型限制。免密钥发布的作品只能是 `unlisted`，按 IP 限流并有每日上限，响应中的 `manageToken` 用于删除，见下文“免密钥发布”。
+- 管理员发放的 API 密钥是内部通道：可以发布 `public` 作品、列出和修改自己的作品，不受免密钥每日上限约束。使用说明页、`llms.txt` 与 OpenAPI 只介绍免密钥方式，不公开密钥的用法。
+- 新笔记默认 `unlisted`（持有链接可见，页面带 `noindex`）。只有使用密钥并明确传入 `"visibility": "public"` 才会进入图库；`unlisted` 不是需要登录的私有文档。
 
 ## 一次性部署准备
 
 ```bash
 npx wrangler d1 create ink-scribe               # 把返回的 database_id 填入 wrangler.jsonc
-npm run db:migrate:remote                       # 应用全部迁移，包括 0003_publication_schema.sql
+npm run db:migrate:remote                       # 应用全部迁移，包括 0004_anonymous_publishing.sql
 npm run deploy
-npm run keys -- create --name "我的发布脚本" --remote   # 密钥只显示一次
+npm run keys -- create --name "我的发布脚本" --remote   # 可选：内部密钥，只显示一次
 ```
 
 - 查看链接使用 `PUBLIC_BASE_URL`（默认 `https://scribe.orangely.xyz`）；更换域名时同时修改它与 `wrangler.jsonc` 中的 `routes`。本地开发与 mock 构建中该值会被清空，链接指向本机。
-- 本地开发：先运行 `npm run db:migrate`，再用 `npm run keys -- create --name 本地` 生成本地密钥。
+- 本地开发：先运行 `npm run db:migrate`。需要测试密钥通道时，再用 `npm run keys -- create --name 本地` 生成本地密钥。
 - 发布接口返回网页链接，不返回服务端生成的 PNG。图库采用标题与摘要的文字卡片，链接预览使用统一站点分享图；用户打开查看页后可下载图片。
 
 ## 发布一条已整理的笔记
 
 ```bash
 curl -X POST https://notes.example.com/api/v1/notes \
-  -H "Authorization: Bearer $INKSCRIBE_API_KEY" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: weekly-review-2026-43" \
   -d '{
@@ -52,7 +52,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
       }'
 ```
 
-成功返回 `201`，其中包含 `schemaVersion: 1`、`id`、`url`、`visibility`、保留的 `note`、补齐默认值后的 `settings` 与 `stickers`。缺省笔记日期使用发布时区的当天日期；其余正文不重写。`meta` 包含：
+成功返回 `201`，其中包含 `schemaVersion: 1`、`id`、`url`、`visibility`、保留的 `note`、补齐默认值后的 `settings` 与 `stickers`；免密钥发布还包含 `manageToken`。缺省笔记日期使用发布时区的当天日期；其余正文不重写。`meta` 包含：
 
 ```json
 {
@@ -71,7 +71,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `template` | 否 | 整理类型标签，默认 `general`；不会触发生成 |
 | `appearance` | 否 | 版式、纸张、字体、字号、溢出策略等；未传字段使用默认值 |
 | `stickers` | 否 | 符合契约的贴纸数组；每项包含唯一 `id`、`type`、`x`、`y`、`rotation`、`scale`，完整取值见 OpenAPI |
-| `visibility` | 否 | `unlisted`（默认）或 `public` |
+| `visibility` | 否 | `unlisted`（默认）；`public` 需要密钥，免密钥请求返回 `422 ANONYMOUS_UNLISTED_ONLY` |
 | `Idempotency-Key` 头 | 建议 | 同一键、同一请求重试返回原作品；不同内容不能复用该键 |
 
 插图选择使用 `note.doodleTheme`，受限图元使用 `note.doodleSpec`。不要发送 HTML、SVG 字符串、脚本、任意 CSS 或外部资源地址。`text`、`language`、`detail`、顶层 `style` 与顶层 `doodle` 不属于发布请求；版式通过 `appearance.layout` 指定。
@@ -86,7 +86,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 
 错误包含可供 agent 修正的字段路径与错误码，消息不回显用户正文。例如，重点词错误的 `issues[].path` 会定位到 `note.sections[0].highlights[0]`。每项包含 `path`、`code`、`message`；调用方应使用 `error.code: "VALIDATION_FAILED"` 与 `issues` 处理错误，不要匹配整句文案。
 
-先向 `POST /api/v1/notes/validate` 提交与发布完全相同的 JSON 和认证头，可得到：
+先向 `POST /api/v1/notes/validate` 提交与发布完全相同的 JSON（使用密钥时带同样的认证头），可得到：
 
 ```json
 {
@@ -96,7 +96,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 }
 ```
 
-预检不创建笔记、不占用幂等键、不调用 AI、不回显笔记正文。它只检查数据契约，不进行事实核查、浏览器排版或图像生成。认证与限流仍正常执行。
+预检不创建笔记、不占用幂等键、不调用 AI、不回显笔记正文。它只检查数据契约（免密钥请求同样拒绝 `public`），不进行事实核查、浏览器排版或图像生成。认证与限流仍正常执行。
 
 ## 页面适配与导出
 
@@ -113,11 +113,12 @@ curl -X POST https://notes.example.com/api/v1/notes \
 
 | 方法与路径 | 认证 | 说明 |
 | --- | --- | --- |
-| `POST /api/v1/notes/validate` | 密钥 | 预检完整发布数据，不保存 |
+| `POST /api/v1/notes` | 无或密钥 | 发布；免密钥时只能 `unlisted` |
+| `POST /api/v1/notes/validate` | 无或密钥 | 预检完整发布数据，不保存 |
 | `GET /api/v1/notes?cursor=&limit=` | 密钥 | 列出当前密钥发布的笔记 |
 | `GET /api/v1/notes/:id` | 密钥 | 查询当前密钥发布的作品，不包含独立原文字段 |
 | `PATCH /api/v1/notes/:id` | 密钥 | 修改 `visibility` |
-| `DELETE /api/v1/notes/:id` | 密钥 | 删除笔记，返回 `204` |
+| `DELETE /api/v1/notes/:id` | 密钥或 `X-Manage-Token` | 删除笔记，返回 `204` |
 | `GET /api/notes/:id` | 公开 | 查看页使用的笔记数据；`public` 与 `unlisted` 均可按 ID 读取，不包含独立原文字段 |
 | `GET /api/gallery?cursor=&template=&language=` | 公开 | 图库中的公开笔记 |
 | `GET /api/v1/openapi.json`、`GET /llms.txt` | 公开 | 完整契约与 agent 使用说明 |
@@ -125,12 +126,31 @@ curl -X POST https://notes.example.com/api/v1/notes \
 ## 给 AI agent 的工作流程
 
 1. 读取 `https://<你的域名>/llms.txt` 与 `/api/v1/openapi.json`。按照契约整理原文，生成完整 `note`，自主检查事实与重点词。
-2. 把密钥放在环境变量（例如 `INKSCRIBE_API_KEY`）中，不要回显。默认使用 `unlisted`，只有用户明确要求公开时使用 `public`。
+2. 不需要密钥。`visibility` 省略或使用 `unlisted`。
 3. 使用 `/api/v1/notes/validate` 预检。若收到 `422`，根据字段路径修正数据，再次预检。
 4. 向 `/api/v1/notes` 发送同一份完整数据，并为这次逻辑发布设置唯一 `Idempotency-Key`。网络重试保留原键和请求体；修改内容后使用新键。
-5. 把成功响应的 `url` 交给用户。它是查看页链接；需要验证固定尺寸效果时打开页面检查实际排版。服务端不返回 PNG 下载地址。
+5. 把成功响应的 `url` 和 `manageToken` 交给用户。`url` 是查看页链接；需要验证固定尺寸效果时打开页面检查实际排版。服务端不返回 PNG 下载地址。
 
-需要 InkScribe 代为整理原文时，使用单独的 `/api/structure` 生成接口，再把返回结构放入 `note`，连同 `schemaVersion: 1` 提交发布。生成接口保留自身来源检查与限流规则；有发布密钥并不会绕过这些规则。agent 也可以完全使用自己的模型；发布时不再次传输原文。
+需要 InkScribe 代为整理原文时，使用单独的 `/api/structure` 生成接口，再把返回结构放入 `note`，连同 `schemaVersion: 1` 提交发布。生成接口保留自身来源检查与限流规则；发布密钥不会绕过这些规则。agent 也可以完全使用自己的模型；发布时不再次传输原文。
+
+## 免密钥发布
+
+不带 `Authorization` 头的发布与预检按免密钥请求处理；带了该头就必须是有效密钥，无效时返回 `401`，不会退回免密钥处理。
+
+| 规则 | 说明 |
+| --- | --- |
+| 可见性 | 只能 `unlisted`；`public` 返回 `422`，`issues[].code` 为 `ANONYMOUS_UNLISTED_ONLY` |
+| 每分钟限流 | 按客户端 IP 计数，与密钥调用使用同一个 Rate Limiting 绑定（当前每分钟 12 次） |
+| 每日上限 | 24 小时滚动窗口内每个 IP `ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT`（默认 20）篇、全站 `ANON_PUBLISH_DAILY_LIMIT`（默认 500）篇，超出返回 `429` 与 `Retry-After: 3600`。这是软上限，同一客户端的并发请求可能略微超出；已删除的作品不计入 |
+| 关闭 | 任一上限设为 `0`，免密钥发布与预检返回 `403 FEATURE_DISABLED` |
+| 删除 | `DELETE /api/v1/notes/:id`，请求头 `X-Manage-Token: <manageToken>`；缺少令牌返回 `401`，令牌错误或作品不存在返回 `404`。发布时也可以用同一请求头提供自己的令牌 |
+| 其他操作 | 列出、查询和修改可见性需要密钥，免密钥调用返回 `401` |
+
+免密钥作品属于保留的 `anonymous` 发布者（由迁移 `0004` 创建，它的 `key_hash` 不是 SHA-256 摘要，任何 Bearer 令牌都无法认证为它）。每篇作品保存 `client_hash`（客户端 IP 的 SHA-256）与 `manage_token_hash`，不保存 IP 或 `manageToken` 明文。
+
+幂等键按客户端区分：占用记录的作用域是 `anonymous:<client_hash>`，不同 IP 使用相同的键互不影响；换了 IP 的重试会被当作新请求。重放已完成的请求只返回原笔记，不返回也不替换 `manageToken`：IP 和请求体都不能证明调用方就是原发布者，共用出口 IP 的其他客户端也可能发出同样的重放。发布时可以在 `X-Manage-Token` 头中提供自己生成的令牌（32–200 个字母、数字或 `. _ ~ -`），这样即使响应丢失也能删除；省略时由服务端生成。
+
+新请求先校验内容与每日上限，通过后才占用幂等键，被拒绝的请求不会留下占用记录。
 
 ## 密钥与公开内容
 
@@ -139,13 +159,13 @@ npm run keys -- list --remote
 npm run keys -- revoke --id key_xxxxxxxxxxxx --remote
 ```
 
-密钥只保存 SHA-256 哈希；吊销后立即返回 `401`。有 Rate Limiting 绑定时以绑定阈值为准：当前 `wrangler.jsonc` 为每个密钥每分钟 12 次，预检与其他 `/api/v1` 操作共享该额度。没有绑定时使用 `API_RATE_LIMIT_PER_MINUTE`，默认每分钟 30 次。`/api/v1/*` 面向服务端调用，不开放浏览器 CORS。
+密钥只保存 SHA-256 哈希；吊销后立即返回 `401`。有 Rate Limiting 绑定时以绑定阈值为准：当前 `wrangler.jsonc` 为每个密钥（免密钥调用按 IP）每分钟 12 次，预检与其他 `/api/v1` 操作共享该额度。没有绑定时使用 `API_RATE_LIMIT_PER_MINUTE`，默认每分钟 30 次。`/api/v1/*` 面向服务端调用，不开放浏览器 CORS。
 
 笔记 ID 使用 128 位随机数。`unlisted` 不列入图库或站点地图，并通过 `noindex` 请求搜索引擎不要收录，但持有链接者可以读取内容。查看页、SEO 正文和公开 JSON 包含发布的笔记，不包含独立原文副本；你保留在笔记中的摘录仍会展示。删除或修改可见性后应用的公开读取不使用旧缓存，但无法收回第三方已下载或缓存的副本。
 
 ## 并发、重试与删除语义
 
-发布前在 D1 原子占用 `(api_key_id, Idempotency-Key)`，笔记与完成状态在同一个事务中提交。相同键、相同 JSON 请求体的并发请求返回 `409 IDEMPOTENCY_CONFLICT` 与 `Retry-After: 2`；保留原键稍后重试，完成后返回原笔记（`200` 与 `Idempotent-Replayed: true`）。
+发布前在 D1 原子占用 `(api_key_id, Idempotency-Key)`（免密钥请求的 `api_key_id` 为 `anonymous:<client_hash>`），笔记与完成状态在同一个事务中提交。相同键、相同 JSON 请求体的并发请求返回 `409 IDEMPOTENCY_CONFLICT` 与 `Retry-After: 2`；保留原键稍后重试，完成后返回原笔记（`200` 与 `Idempotent-Replayed: true`）。
 
 同一键用于不同请求体始终返回 `409`。结构、契约版本和外观均参与请求哈希。请求体按 JSON 序列化内容比较，重试时应保留字段顺序。
 

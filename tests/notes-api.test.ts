@@ -183,9 +183,8 @@ describe("POST /api/v1/notes", () => {
     expect(response.status).toBe(422);
     expect(JSON.stringify(body)).not.toContain(source);
     expect((await env.DB!.prepare("SELECT count(*) AS n FROM notes").first<{ n: number }>())!.n).toBe(0);
-    const reservation = await env.DB!.prepare("SELECT * FROM idempotency_keys WHERE idempotency_key = 'reject-source'").first();
-    expect(reservation).toMatchObject({ state: "pending", lease_until: 0, owner_token: null });
-    expect(JSON.stringify(reservation)).not.toContain(source);
+    // Validation precedes the reservation, so a rejected request does not bind its key.
+    expect(await env.DB!.prepare("SELECT * FROM idempotency_keys WHERE idempotency_key = 'reject-source'").first()).toBeNull();
     expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain(source);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(source);
   });
@@ -289,8 +288,8 @@ describe("POST /api/v1/notes/validate", () => {
     expect(env.AI.run).not.toHaveBeenCalled();
   });
 
-  it("requires a valid key and applies the publisher's rate limit", async () => {
-    expect((await call(request("POST", "/api/v1/notes/validate", { key: null, body: publication() }))).response.status).toBe(401);
+  it("rejects invalid keys and applies the publisher's rate limit", async () => {
+    expect((await call(request("POST", "/api/v1/notes/validate", { key: "isk_unknown", body: publication() }))).response.status).toBe(401);
     env.API_RATE_LIMIT_PER_MINUTE = "1";
     expect((await call(request("POST", "/api/v1/notes/validate", { body: publication() }))).response.status).toBe(200);
     expect((await call(request("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(429);
@@ -482,6 +481,7 @@ describe("reading, gallery and management", () => {
     const schema = body!.components.schemas.PublishRequest;
     expect(schema.required).toEqual(["schemaVersion", "note"]);
     expect(schema.properties).not.toHaveProperty("text");
+    expect(schema.properties.visibility.enum).toEqual(["unlisted"]);
     expect(schema.properties.note.properties.sections.items.properties.content.maxLength).toBe(900);
     const versions = body!.components.schemas.PublishedNote.allOf[1].oneOf;
     expect(versions.map((version: any) => version.properties.schemaVersion.const)).toEqual([1, 0]);
@@ -489,6 +489,160 @@ describe("reading, gallery and management", () => {
     expect(versions[1].properties.settings.$ref).toBe("#/components/schemas/LegacySettings");
     expect(body!.components.schemas.Settings.properties.doodleMode.enum).not.toContain("ai");
     expect(body!.components.schemas.LegacySettings.properties.doodleMode.enum).toContain("ai");
+  });
+});
+
+
+describe("anonymous publishing", () => {
+  const anonymous = (method: string, path: string, options: { body?: unknown; ip?: string; headers?: Record<string, string> } = {}) =>
+    request(method, path, { key: null, body: options.body, headers: { "CF-Connecting-IP": options.ip ?? "198.51.100.7", ...options.headers } });
+  const count = async (sql: string) => (await env.DB!.prepare(sql).first<{ n: number }>())!.n;
+
+  it("publishes an unlisted note without a key and returns a manage token", async () => {
+    const preflight = await call(anonymous("POST", "/api/v1/notes/validate", { body: publication() }));
+    expect(preflight.response.status).toBe(200);
+    const { response, body } = await call(anonymous("POST", "/api/v1/notes", { body: publication() }));
+    expect(response.status).toBe(201);
+    expect(body!.visibility).toBe("unlisted");
+    expect(body!.manageToken).toMatch(/^imt_[A-Za-z0-9_-]{43}$/);
+    expect(body!.meta).toMatchObject({ processing: "agent" });
+    expect(env.AI.run).not.toHaveBeenCalled();
+
+    const stored = await env.DB!.prepare("SELECT api_key_id, client_hash, manage_token_hash FROM notes WHERE id = ?")
+      .bind(body!.id).first<{ api_key_id: string; client_hash: string; manage_token_hash: string }>();
+    expect(stored!.api_key_id).toBe("anonymous");
+    expect(stored!.client_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored!.client_hash).not.toContain("198.51.100.7");
+    expect(stored!.manage_token_hash).toBe(sha(body!.manageToken));
+
+    const read = await call(request("GET", `/api/notes/${body!.id}`, { key: null }));
+    expect(read.response.status).toBe(200);
+    expect(read.body).not.toHaveProperty("manageToken");
+    expect((await call(request("GET", "/api/gallery", { key: null }))).body!.items).toHaveLength(0);
+  });
+
+  it("keeps anonymous notes out of the gallery", async () => {
+    for (const path of ["/api/v1/notes/validate", "/api/v1/notes"]) {
+      const { response, body } = await call(anonymous("POST", path, { body: publication({ visibility: "public" }) }));
+      expect(response.status).toBe(422);
+      expect(body!.error.issues).toEqual([expect.objectContaining({ path: "visibility", code: "ANONYMOUS_UNLISTED_ONLY" })]);
+    }
+    expect(await count("SELECT count(*) AS n FROM notes")).toBe(0);
+    expect(await count("SELECT count(*) AS n FROM idempotency_keys")).toBe(0);
+  });
+
+  it("requires a key to list, read through /api/v1 or change visibility", async () => {
+    const { body } = await call(anonymous("POST", "/api/v1/notes", { body: publication() }));
+    for (const [method, path, payload] of [
+      ["GET", "/api/v1/notes", undefined],
+      ["GET", `/api/v1/notes/${body!.id}`, undefined],
+      ["PATCH", `/api/v1/notes/${body!.id}`, { visibility: "public" }],
+    ] as const) {
+      const result = await call(anonymous(method, path, { body: payload }));
+      expect(result.response.status).toBe(401);
+      expect(result.body!.error.code).toBe("UNAUTHORIZED");
+    }
+    expect((await call(request("GET", `/api/v1/notes/${body!.id}`))).response.status).toBe(404);
+    expect((await call(request("GET", "/api/v1/notes"))).body!.items).toHaveLength(0);
+  });
+
+  it("deletes only with the manage token and does not recreate deleted notes", async () => {
+    const created = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "anon-1" } }));
+    const path = `/api/v1/notes/${created.body!.id}`;
+    expect((await call(anonymous("DELETE", path))).response.status).toBe(401);
+    expect((await call(anonymous("DELETE", path, { headers: { "X-Manage-Token": "imt_wrong" } }))).response.status).toBe(404);
+    expect((await call(request("DELETE", path))).response.status).toBe(404);
+    const deleted = await handleApi(anonymous("DELETE", path, { ip: "192.0.2.1", headers: { "X-Manage-Token": created.body!.manageToken } }), env, () => {});
+    expect(deleted.status).toBe(204);
+    expect((await call(request("GET", `/api/notes/${created.body!.id}`, { key: null }))).response.status).toBe(404);
+    const replay = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "anon-1" } }));
+    expect(replay.response.status).toBe(410);
+  });
+
+  it("scopes idempotency keys to the client and never reveals or replaces the manage token on replay", async () => {
+    const headers = { "Idempotency-Key": "shared-key" };
+    const first = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    // Anyone behind the same IP who knows the key and body gets the same note, but no deletion credential.
+    const replay = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    expect(replay.response.status).toBe(200);
+    expect(replay.response.headers.get("Idempotent-Replayed")).toBe("true");
+    expect(replay.body!.id).toBe(first.body!.id);
+    expect(replay.body).not.toHaveProperty("manageToken");
+
+    const elsewhere = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers, ip: "192.0.2.50" }));
+    expect(elsewhere.response.status).toBe(201);
+    expect(elsewhere.body!.id).not.toBe(first.body!.id);
+
+    const path = `/api/v1/notes/${first.body!.id}`;
+    expect((await call(anonymous("DELETE", path, { headers: { "X-Manage-Token": first.body!.manageToken } }))).response.status).toBe(204);
+  });
+
+  it("accepts a client-chosen manage token so a lost response can still be deleted", async () => {
+    const token = "my-own-secret-token-0123456789abcdef";
+    const headers = { "Idempotency-Key": "own-token", "X-Manage-Token": token };
+    const first = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    expect(first.response.status).toBe(201);
+    expect(first.body!.manageToken).toBe(token);
+    const replay = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers }));
+    expect(replay.body!.id).toBe(first.body!.id);
+    expect((await call(anonymous("DELETE", `/api/v1/notes/${first.body!.id}`, { headers: { "X-Manage-Token": token } }))).response.status).toBe(204);
+
+    const weak = await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "X-Manage-Token": "short" } }));
+    expect(weak.response.status).toBe(400);
+    expect(await count("SELECT count(*) AS n FROM notes")).toBe(0);
+  });
+
+  it("leaves no reservation behind for rejected requests", async () => {
+    env.ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT = "1";
+    const invalid = publication({ note: { ...aiNote, sections: [] } });
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: invalid, headers: { "Idempotency-Key": "bad" } }))).response.status).toBe(422);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication({ visibility: "public" }), headers: { "Idempotency-Key": "public" } }))).response.status).toBe(422);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "first" } }))).response.status).toBe(201);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "over" } }))).response.status).toBe(429);
+    const keys = await env.DB!.prepare("SELECT idempotency_key FROM idempotency_keys").all<{ idempotency_key: string }>();
+    expect(keys.results.map((row) => row.idempotency_key)).toEqual(["first"]);
+    // A completed request still replays after the quota is spent.
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), headers: { "Idempotency-Key": "first" } }))).response.status).toBe(200);
+  });
+
+  it("enforces daily quotas per client and for the whole site", async () => {
+    env.ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT = "2";
+    env.ANON_PUBLISH_DAILY_LIMIT = "3";
+    for (let i = 0; i < 2; i++) expect((await call(anonymous("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(201);
+    const limited = await call(anonymous("POST", "/api/v1/notes", { body: publication() }));
+    expect(limited.response.status).toBe(429);
+    expect(limited.response.headers.get("Retry-After")).toBe("3600");
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), ip: "192.0.2.2" }))).response.status).toBe(201);
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication(), ip: "192.0.2.3" }))).response.status).toBe(429);
+    // Key publishing is outside the anonymous quota, and notes older than a day no longer count.
+    expect((await call(request("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(201);
+    await env.DB!.prepare("UPDATE notes SET created_at = ? WHERE api_key_id = 'anonymous'").bind(Date.now() - 86_400_001).run();
+    expect((await call(anonymous("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(201);
+  });
+
+  it("can be turned off", async () => {
+    env.ANON_PUBLISH_DAILY_LIMIT = "0";
+    for (const path of ["/api/v1/notes/validate", "/api/v1/notes"]) {
+      const { response, body } = await call(anonymous("POST", path, { body: publication() }));
+      expect(response.status).toBe(403);
+      expect(body!.error.code).toBe("FEATURE_DISABLED");
+    }
+    expect((await call(request("POST", "/api/v1/notes", { body: publication() }))).response.status).toBe(201);
+  });
+
+  it("rate-limits anonymous calls by client IP", async () => {
+    env.API_RATE_LIMIT_PER_MINUTE = "1";
+    expect((await call(anonymous("POST", "/api/v1/notes/validate", { body: publication() }))).response.status).toBe(200);
+    expect((await call(anonymous("POST", "/api/v1/notes/validate", { body: publication() }))).response.status).toBe(429);
+    expect((await call(anonymous("POST", "/api/v1/notes/validate", { body: publication(), ip: "192.0.2.9" }))).response.status).toBe(200);
+  });
+
+  it("keeps key publishing working when the Worker is deployed before migration 0004", async () => {
+    await env.DB!.prepare("ALTER TABLE notes DROP COLUMN client_hash").run();
+    await env.DB!.prepare("ALTER TABLE notes DROP COLUMN manage_token_hash").run();
+    const { response, body } = await call(request("POST", "/api/v1/notes", { body: publication() }));
+    expect(response.status).toBe(201);
+    expect((await call(request("DELETE", `/api/v1/notes/${body!.id}`))).response.status).toBe(204);
   });
 });
 

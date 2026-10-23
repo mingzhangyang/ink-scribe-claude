@@ -28,4 +28,6 @@ export interface Env {
   PUBLIC_BASE_URL?: string;
   DEFAULT_TIMEZONE?: string;
   API_RATE_LIMIT_PER_MINUTE?: string;
+  ANON_PUBLISH_DAILY_LIMIT?: string;
+  ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT?: string;
 }

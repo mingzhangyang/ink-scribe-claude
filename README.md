@@ -24,7 +24,7 @@
 | 内容微调 | 结构化编辑标题、日期、线索、段落、重点短语与总结 |
 | 溢出处理 | 字体就绪后按实际尺寸适配页面；默认先缩小字号、再展开长图；固定页模式溢出时提示并阻止导出，保留全文 |
 | 导出 | PNG / JPG，1x / 2x / 3x；复制 PNG 到剪贴板（不支持时提示并保留下载）；字体按 unicode-range 分片按需内嵌 |
-| Agent 发布与分享 | 任意持有 API 密钥的 agent 调用 `POST /api/v1/notes`，提交 `schemaVersion: 1` 与已整理的 `note` 结构；不传原文，严格校验后保存，不调用 AI。`POST /api/v1/notes/validate` 可预检，发布返回查看链接 `/n/<id>`。详见 [docs/publishing.md](docs/publishing.md) |
+| Agent 发布与分享 | 任意 agent 无需注册或密钥即可调用 `POST /api/v1/notes`（作品为 `unlisted`，按 IP 限流并有每日上限，返回用于删除的 `manageToken`），提交 `schemaVersion: 1` 与已整理的 `note` 结构；不传原文，严格校验后保存，不调用 AI。`POST /api/v1/notes/validate` 可预检，发布返回查看链接 `/n/<id>`。详见 [docs/publishing.md](docs/publishing.md) |
 | 图库 | `/gallery` 展示公开笔记，可按模板与语言筛选；可在编辑器中打开任意已发布笔记继续修改 |
 | 使用说明 | `/guide` 提供中英文网页使用步骤、AI agent 接入指南、可复制的 JSON / curl 示例和常见问题；不执行 JavaScript 也能读取完整内容 |
 | 隐私政策与使用条款 | `/privacy` 说明本地存储、AI 处理、发布、运行记录与删除；`/terms` 说明内容权利、分享与 agent 使用责任。均提供中英双语、可直接阅读的 HTML，并从菜单进入 |
@@ -114,7 +114,9 @@ docs/        API、部署、模型评测、字体与导出说明
 | `ALLOWED_ORIGINS` | 空 | 额外允许跨源调用 AI 接口的来源，逗号分隔 |
 | `PUBLIC_BASE_URL` | `https://scribe.orangely.xyz` | 分享链接使用的站点地址；为空时使用请求的域名。本地开发与 mock 构建中自动清空 |
 | `DEFAULT_TIMEZONE` | `Asia/Shanghai` | 发布时自动补全笔记日期使用的时区 |
-| `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥每分钟的请求上限 |
+| `API_RATE_LIMIT_PER_MINUTE` | `30` | 未配置 Rate Limiting 绑定时，每个 API 密钥（免密钥调用按 IP）每分钟的请求上限 |
+| `ANON_PUBLISH_DAILY_LIMIT` | `500` | 24 小时内全站免密钥发布的上限；`0` 关闭免密钥发布 |
+| `ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT` | `20` | 24 小时内每个客户端 IP 免密钥发布的上限；`0` 关闭免密钥发布 |
 
 “按模型”的默认值来自 [`worker/config.ts`](worker/config.ts) 中的 `MODEL_PROFILES`，覆盖了 Qwen、Llama、Mistral、Gemma、GLM、DeepSeek、gpt-oss 等候选模型的调用约定。
 
@@ -126,7 +128,7 @@ docs/        API、部署、模型评测、字体与导出说明
 - 插图只接受受限图元规格；SVG 由本地生成器以 React 元素渲染，不使用 `innerHTML`，不允许脚本、事件处理器、外部资源或 URL。
 - AI 接口检查 `Origin`，拒绝其他站点借用浏览器调用；按客户端 IP 限流；静态资源带 CSP 等安全响应头（[`public/_headers`](public/_headers)）。
 - 上传的文件只在浏览器内解析（PDF 使用按需加载的 pdf.js，CMap 文件同源提供），文件本身不会发送到服务器。
-- 发布接口只接受 API 密钥（只存哈希、可吊销）；必传契约版本和完整结构，不接收原文。笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`，持有链接者仍可读取；新作品入库与读取均按其契约版本校验。
+- 免密钥发布只能 `unlisted`，按 IP 限流并有每日上限；只保存客户端 IP 的哈希与 `manageToken` 的哈希。API 密钥同样只存哈希、可吊销。发布必传契约版本和完整结构，不接收原文。笔记 ID 为 128 位随机数，`unlisted` 笔记不进入图库并带 `noindex`，持有链接者仍可读取；新作品入库与读取均按其契约版本校验。
 - 编辑器默认将原文、笔记、样式、贴纸与插图作为草稿保存在本机 IndexedDB，不自动同步服务器；刷新后自动恢复。可随时“删除草稿并停止保存”，移除保存的文档并关闭自动保存；关闭状态、当前画面和 localStorage 偏好仍保留。选择 AI 整理时仍会发送输入文字。
 
 ## 文档

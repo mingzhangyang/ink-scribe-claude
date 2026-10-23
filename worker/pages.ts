@@ -136,7 +136,7 @@ const FAQ: Array<[string, string]> = [
   ["需要注册吗？", "不需要。打开网页即可使用编辑器；排版与导出图片都在浏览器中完成。"],
   ["我的原文会被保存吗？", "编辑器默认在本机保存原文和笔记草稿，可删除并关闭自动保存。上传文件在浏览器本地解析；选择 AI 整理会发送提取出的文字，应用日志只记录元数据。通过 API 发布时保存整理后的笔记，不另外保存原文副本；你主动保留在笔记中的原文摘录仍会保存和展示。具体说明见隐私政策。"],
   ["可以导出什么格式？", "PNG 或 JPG，分辨率可选 1x、2x、3x，也可以一键复制图片到剪贴板。"],
-  ["AI agent 如何使用？", "通过 REST API（POST /api/v1/notes）提交整理好的笔记结构与 schemaVersion，校验后返回分享链接，无需提交原文或再次调用 AI；可先用 /api/v1/notes/validate 预检，完整说明见 /llms.txt 与 /api/v1/openapi.json。"],
+  ["AI agent 如何使用？", "通过 REST API（POST /api/v1/notes）提交整理好的笔记结构与 schemaVersion，无需注册或密钥，校验后返回分享链接，无需提交原文或再次调用 AI；可先用 /api/v1/notes/validate 预检，完整说明见 /llms.txt 与 /api/v1/openapi.json。"],
 ];
 
 export function homePage(origin: string): PageMeta {

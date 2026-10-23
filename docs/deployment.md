@@ -26,6 +26,10 @@ agent 发布必须提供 `schemaVersion: 1` 与完整 `note`，不接受原文 `
 
 先应用 `0003_publication_schema.sql`，再部署新 Worker。若 Worker 先上线，已有作品仍按版本 `0` 读取，但发布会失败，直到迁移完成。迁移为已有作品记录版本 `0`，使历史链接继续可读；新作品保存为版本 `1`，按严格契约读取。不单独保存原文 `text`，但 `note` 中主动保留的摘录仍会作为笔记写入 D1；不需要新增绑定。并发与删除保护仍依赖此前的 `0002_publish_reservations.sql`，应按顺序应用全部迁移。
 
+### 免密钥发布
+
+`0004_anonymous_publishing.sql` 添加保留的 `anonymous` 发布者以及 `notes.client_hash`、`notes.manage_token_hash` 两列。只添加可为空的列，旧 Worker 不受影响。若新 Worker 先于迁移上线，使用密钥的发布照常工作，免密钥发布在迁移完成前失败。每日上限由 `ANON_PUBLISH_DAILY_LIMIT`（全站）与 `ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT`（每个 IP）控制，任一设为 `0` 即关闭免密钥发布，见 [publishing.md](publishing.md)。
+
 ## 配置项
 
 在 [`wrangler.jsonc`](../wrangler.jsonc) 的 `vars` 中修改（完整列表见 README）。常见调整：

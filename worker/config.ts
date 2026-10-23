@@ -83,6 +83,10 @@ export type AppConfig = {
   publicBaseUrl?: string;
   defaultTimezone: string;
   apiRateLimitPerMinute: number;
+  /** 24 小时内全站匿名发布的上限；0 关闭匿名发布。 */
+  anonymousDailyLimit: number;
+  /** 24 小时内每个客户端（按 IP）匿名发布的上限；0 关闭匿名发布。 */
+  anonymousDailyLimitPerClient: number;
 };
 
 function int(value: string | undefined, fallback: number, min: number, max: number): number {
@@ -154,6 +158,8 @@ export function loadConfig(env: Env): AppConfig {
     publicBaseUrl: env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "") || undefined,
     defaultTimezone: env.DEFAULT_TIMEZONE?.trim() || "Asia/Shanghai",
     apiRateLimitPerMinute: int(env.API_RATE_LIMIT_PER_MINUTE, 30, 1, 1_000),
+    anonymousDailyLimit: int(env.ANON_PUBLISH_DAILY_LIMIT, 500, 0, 1_000_000),
+    anonymousDailyLimitPerClient: int(env.ANON_PUBLISH_DAILY_LIMIT_PER_CLIENT, 20, 0, 10_000),
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "")
       .split(",")
       .map((o) => o.trim())

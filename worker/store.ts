@@ -10,6 +10,9 @@ import { logEvent } from "./log.ts";
 
 export type ApiKeyRecord = { id: string; name: string; revokedAt: number | null };
 
+/** Owner of notes published without an API key (reserved by migration 0004). */
+export const ANONYMOUS_OWNER = "anonymous";
+
 export type NoteRow = {
   id: string;
   /** Absent until migration 0003 is applied. */
@@ -25,6 +28,9 @@ export type NoteRow = {
   settings_json: string;
   stickers_json: string;
   doodle_json: string | null;
+  /** Absent until migration 0004 is applied; set only for anonymous notes. */
+  client_hash?: string | null;
+  manage_token_hash?: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -40,6 +46,8 @@ export type NewNote = {
   settings: Settings;
   stickers: StickerItem[];
   doodle?: DoodleSpec;
+  /** Anonymous publications record the client hash and the hash of the returned manage token. */
+  anonymous?: { clientHash: string; manageTokenHash: string };
   now: number;
 };
 
@@ -49,6 +57,12 @@ const SUMMARY_COLUMNS =
 /** 128 位随机数编码为 22 位 base64url，作为不可枚举的笔记 ID。 */
 export function newNoteId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** 256 位随机数的 base64url 编码，用于只保存哈希的凭据。 */
+export function newSecretToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -80,11 +94,13 @@ function noteSummaryText(note: NoteStructure): string {
 }
 
 function noteInsert(db: D1Database, input: NewNote, claim?: PublishClaim): D1PreparedStatement {
+  // Key-authenticated publishing does not name the 0004 columns, so it keeps working before that migration.
+  const anonymous = input.anonymous ? ", client_hash, manage_token_hash" : "";
   return db
     .prepare(
       `INSERT INTO notes (id, api_key_id, visibility, title, summary, language, template, layout, note_json, settings_json,
-        stickers_json, doodle_json, image_status, created_at, updated_at, schema_version)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        stickers_json, doodle_json, image_status, created_at, updated_at, schema_version${anonymous})
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${input.anonymous ? ", ?, ?" : ""}
        ${claim ? "WHERE EXISTS (SELECT 1 FROM idempotency_keys WHERE api_key_id = ? AND idempotency_key = ? AND owner_token = ? AND state = 'pending')" : ""}`,
     )
     .bind(
@@ -105,6 +121,7 @@ function noteInsert(db: D1Database, input: NewNote, claim?: PublishClaim): D1Pre
       input.now,
       input.now,
       input.schemaVersion,
+      ...(input.anonymous ? [input.anonymous.clientHash, input.anonymous.manageTokenHash] : []),
       ...(claim ? [claim.apiKeyId, claim.key, claim.token] : []),
     );
 }
@@ -143,6 +160,27 @@ export async function deleteNote(db: D1Database, id: string, apiKeyId: string): 
   // Keep the completed request as a tombstone: delayed retries must not recreate deleted notes.
   await db.prepare("DELETE FROM notes WHERE id = ? AND api_key_id = ?").bind(id, apiKeyId).run();
   return row;
+}
+
+// ---------- 匿名发布 ----------
+
+/** Anonymous notes created since a time: all of them, and those from one client. */
+export async function countAnonymousNotes(db: D1Database, clientHash: string, since: number): Promise<{ total: number; client: number }> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(client_hash = ?), 0) AS client FROM notes
+      WHERE api_key_id = '${ANONYMOUS_OWNER}' AND created_at > ?`)
+    .bind(clientHash, since)
+    .first<{ total: number; client: number }>();
+  return { total: Number(row?.total ?? 0), client: Number(row?.client ?? 0) };
+}
+
+export async function deleteAnonymousNote(db: D1Database, id: string, tokenHash: string): Promise<boolean> {
+  // As with key deletion, the completed idempotency record stays behind as a tombstone.
+  const result = await db
+    .prepare(`DELETE FROM notes WHERE id = ? AND api_key_id = '${ANONYMOUS_OWNER}' AND manage_token_hash = ?`)
+    .bind(id, tokenHash)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
 
 // ---------- 分页 ----------
@@ -213,6 +251,11 @@ export async function listPublicNoteDates(db: D1Database, limit: number): Promis
 export type PublishClaim = { apiKeyId: string; key: string; token: string; noteId: string };
 export type PublishRequest = { note_id: string; request_hash: string; state: "pending" | "completed"; lease_until: number };
 
+export async function findPublishRequest(db: D1Database, apiKeyId: string, key: string): Promise<PublishRequest | null> {
+  return db.prepare(`SELECT note_id, request_hash, state, lease_until FROM idempotency_keys
+    WHERE api_key_id = ? AND idempotency_key = ?`).bind(apiKeyId, key).first<PublishRequest>();
+}
+
 /** Atomic reservation, with a fenced lease so a terminated Worker cannot strand a key. */
 export async function claimPublish(db: D1Database, apiKeyId: string, key: string, hash: string, now: number): Promise<
   { claim: PublishClaim } | { existing: PublishRequest }
@@ -227,8 +270,7 @@ export async function claimPublish(db: D1Database, apiKeyId: string, key: string
       AND idempotency_keys.request_hash = excluded.request_hash`)
     .bind(apiKeyId, key, hash, claim.noteId, now, claim.token, now + 120_000, now).run();
   if (result.meta.changes === 1) return { claim };
-  const existing = await db.prepare(`SELECT note_id, request_hash, state, lease_until FROM idempotency_keys
-    WHERE api_key_id = ? AND idempotency_key = ?`).bind(apiKeyId, key).first<PublishRequest>();
+  const existing = await findPublishRequest(db, apiKeyId, key);
   if (!existing) throw new Error("Publish reservation disappeared");
   return { existing };
 }

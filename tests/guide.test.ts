@@ -8,7 +8,7 @@ import { validatePublishRequest } from "../shared/publishing.ts";
 
 const ORIGIN = "https://ink.example";
 
-/** Run the copyable shell example with a fake curl: no requests or real keys are used. */
+/** Run the copyable shell example with a fake curl: no requests are sent. */
 function runExample(locale: GuideLocale, preflightExit = 0) {
   const directory = mkdtempSync(join(tmpdir(), "ink-guide-"));
   try {
@@ -31,7 +31,6 @@ ${example.curl}
         PATH: process.env.PATH,
         GUIDE_TEST_DIR: directory,
         GUIDE_TEST_PREFLIGHT_EXIT: String(preflightExit),
-        INKSCRIBE_API_KEY: "test-key-never-sent",
         INKSCRIBE_IDEMPOTENCY_KEY: "guide-contract-test",
       },
     });
@@ -46,7 +45,7 @@ ${example.curl}
 }
 
 describe("copyable guide examples", () => {
-  it.each(["zh", "en"] as const)("validates and publishes the same valid %s request without source text", (locale) => {
+  it.each(["zh", "en"] as const)("validates and publishes the same valid %s request without source text or a key", (locale) => {
     const { example, result, calls } = runExample(locale);
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
@@ -59,7 +58,7 @@ describe("copyable guide examples", () => {
 
     for (const [index, args] of calls.entries()) {
       expect(args).toContain(`${ORIGIN}/api/v1/notes${index === 0 ? "/validate" : ""}`);
-      expect(args).toContain("Authorization: Bearer test-key-never-sent");
+      expect(args.some((arg) => /^Authorization:/i.test(arg))).toBe(false);
       expect(args).toContain("Content-Type: application/json");
       expect(args[args.indexOf("--data-binary") + 1]).toBe(example.json);
     }
