@@ -21,6 +21,7 @@ export const STICKER_TYPES = [
   "airplane", "rocket", "starship", "satellite",
   "sun", "earth", "moon", "saturn", "jupiter",
   "comet", "galaxy", "black-hole", "big-dipper", "astronaut",
+  "bird", "hedgehog",
 ] as const;
 export type StickerType = (typeof STICKER_TYPES)[number];
 /** 装饰贴纸：除手绘插图外，外观由 variant 在 STICKER_VARIANTS 中选择。 */
@@ -151,10 +152,12 @@ export const STICKER_LABELS: Record<StickerType, string> = {
   "black-hole": "黑洞",
   "big-dipper": "北斗七星",
   astronaut: "宇航员",
+  bird: "小鸟",
+  hedgehog: "刺猬",
 };
 
 /** 贴纸面板按分类展示装饰贴纸；每种装饰贴纸恰好属于一个分类。 */
-export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "formulas", "greek", "science", "vehicles", "space"] as const;
+export const STICKER_CATEGORIES = ["fasten", "paper", "marks", "stamps", "mood", "fruit", "animals", "formulas", "greek", "science", "vehicles", "space"] as const;
 export type StickerCategory = (typeof STICKER_CATEGORIES)[number];
 
 export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
@@ -164,6 +167,7 @@ export const STICKER_CATEGORY_LABELS: Record<StickerCategory, string> = {
   stamps: "印章痕迹",
   mood: "心情点缀",
   fruit: "水果",
+  animals: "动物",
   formulas: "公式",
   greek: "希腊字母",
   science: "科学图示",
@@ -178,6 +182,7 @@ export const STICKER_CATEGORY_TYPES: Record<StickerCategory, readonly DecorStick
   stamps: ["seal", "postmark", "ink-blot", "coffee-stain", "paw-print"],
   mood: ["star", "sparkles", "heart", "face", "pressed-flower"],
   fruit: ["orange", "apple", "banana", "strawberry", "mango", "watermelon", "grape"],
+  animals: ["bird", "hedgehog"],
   formulas: [
     "pi", "pythagorean", "euler", "integral", "sigma", "sqrt", "infinity", "sine-wave",
     "bell-curve", "emc2", "fma", "ohm", "h2o", "co2", "nacl", "glucose-formula",
@@ -307,6 +312,8 @@ export const STICKER_SIZES: Record<StickerType, { w: number; h: number }> = {
   "black-hole": { w: 110, h: 80 },
   "big-dipper": { w: 120, h: 52 },
   astronaut: { w: 80, h: 100 },
+  bird: { w: 96, h: 90 },
+  hedgehog: { w: 100, h: 70 },
 };
 
 /** 胶带花纹（dots / checks / stripes）与纸片格线（grid / lines）。 */
@@ -328,7 +335,7 @@ const INK_VARIANTS = {
 /** 公式与希腊字母：和标注符号一样用笔的颜色。 */
 const PEN_VARIANTS = [INK_VARIANTS.ink, INK_VARIANTS.red, INK_VARIANTS.blue] as const;
 
-/** 科学图示与宇宙：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
+/** 科学图示、宇宙与动物：彩色款用 color 作代表色；墨线款不上色，只用墨水色勾线。 */
 const scienceVariants = <C extends string>(color: C) =>
   [
     { id: "color", label: "彩色", color },
@@ -610,6 +617,8 @@ export const STICKER_VARIANTS = {
     { id: "ink", label: "墨线", color: "ink" },
   ],
   astronaut: scienceVariants("#94A3B8"),
+  bird: scienceVariants("#F0468F"),
+  hedgehog: scienceVariants("#F7941D"),
 } as const satisfies Record<DecorStickerType, readonly StickerVariant[]>;
 
 export type StickerVariantId<T extends DecorStickerType> = (typeof STICKER_VARIANTS)[T][number]["id"];

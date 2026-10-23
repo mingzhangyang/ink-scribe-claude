@@ -2,6 +2,7 @@ import { memo, type ComponentType } from "react";
 import { DoodleArt } from "../components/note/DoodleArt.tsx";
 import { builtinDoodle } from "../doodles/library.ts";
 import { hashString } from "../lib/random.ts";
+import { Bird, Hedgehog } from "./art/animals.tsx";
 import { paint, type ArtProps } from "./art/common.tsx";
 import { BinderClip, MaskingTape, Paperclip, PhotoCorner, PushPin, Staple, Tape } from "./art/fasten.tsx";
 import {
@@ -139,6 +140,8 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   "black-hole": BlackHole,
   "big-dipper": BigDipper,
   astronaut: Astronaut,
+  bird: Bird,
+  hedgehog: Hedgehog,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };
