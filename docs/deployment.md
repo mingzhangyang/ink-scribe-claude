@@ -46,7 +46,7 @@ npm run deploy          # = vite build && wrangler deploy
 
 ### 自定义域名
 
-`routes` 中以 `custom_domain: true` 绑定 `ink-scribe.orangely.xyz`：`wrangler deploy` 会自动创建 DNS 记录并签发证书。前提是 `orangely.xyz` 托管在部署所用的 Cloudflare 账户中，且该子域名下没有已存在的 DNS 记录。`*.workers.dev` 地址仍然可用，但返回的分享链接统一使用 `PUBLIC_BASE_URL`。
+`routes` 中以 `custom_domain: true` 绑定 `ink-scribe.orangely.xyz`（主域名）与 `scribe.orangely.xyz`：`wrangler deploy` 会自动创建 DNS 记录并签发证书。前提是 `orangely.xyz` 托管在部署所用的 Cloudflare 账户中，且这两个子域名下没有已存在的 DNS 记录。两个域名提供同样的内容，界面与 API 都可以直接使用（同源请求按请求的域名判断）；`*.workers.dev` 地址也仍然可用。返回的分享链接、canonical 与站点地图统一使用 `PUBLIC_BASE_URL`，因此搜索引擎只收录主域名，不会把两个域名当作重复内容。
 
 ### AI Gateway（可选）
 
@@ -82,7 +82,7 @@ GROUP BY model
 - [ ] `npm run deploy` 后访问站点，用示例文本生成一次，检查 `X-Request-Id` 与 Workers Logs 中的 `api.request` 记录
 - [ ] 确认 `ratelimits.namespace_id` 不与账户内其他 Worker 冲突，必要时调整阈值
 - [ ] 若前端会被其他域名嵌入或调用，配置 `ALLOWED_ORIGINS`
-- [ ] 创建 D1 并执行 `npm run db:migrate:remote`；确认 `https://ink-scribe.orangely.xyz` 可访问；用 `npm run keys -- create --remote` 发放密钥，按 [publishing.md](publishing.md) 发布一条测试笔记，确认链接可打开、出现在图库
+- [ ] 创建 D1 并执行 `npm run db:migrate:remote`；确认 `https://ink-scribe.orangely.xyz` 与 `https://scribe.orangely.xyz` 都可访问；用 `npm run keys -- create --remote` 发放密钥，按 [publishing.md](publishing.md) 发布一条测试笔记，确认链接可打开、出现在图库
 - [ ] 根据预算决定是否开启 `DOODLE_API_ENABLED`、`METRICS` 与 AI Gateway
 - [ ] 在 Chrome、Safari、Firefox 上各导出一次 PNG/JPG 并测试“复制到剪贴板”
 - [ ] 在 Google Search Console、Bing Webmaster Tools 提交 `sitemap.xml`，检查结构化数据与链接预览，见 [seo.md](seo.md)
