@@ -1883,14 +1883,47 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     const summary = el.querySelector(".summary-sticky, .classic-summary");
     const artwork = el.querySelector(".doodle-slot");
     if (!summary || !artwork) return null;
-    const a = summary.getBoundingClientRect(), b = artwork.getBoundingClientRect();
+
+    const summaryText = summary.querySelector(".summary-text");
+    const summaryBounds = summary.getBoundingClientRect();
+    const artworkBounds = artwork.getBoundingClientRect();
+    const paperBounds = el.getBoundingClientRect();
+    // Check glyph rectangles as well as the containing grid cells: a positive CSS gap
+    // alone cannot catch text escaping an overflowing summary into the illustration.
+    const textRects = summaryText
+      ? [...summaryText.querySelectorAll("[data-fit-text]")].flatMap((node) => [...node.getClientRects()])
+      : [];
+    const textTouchesArtwork = textRects.some((rect) =>
+      rect.left < artworkBounds.right && rect.right > artworkBounds.left &&
+      rect.top < artworkBounds.bottom && rect.bottom > artworkBounds.top);
+    const textOutsidePaper = textRects.some((rect) =>
+      rect.left < paperBounds.left - 2 || rect.right > paperBounds.right + 2 ||
+      rect.top < paperBounds.top - 2 || rect.bottom > paperBounds.bottom + 2);
+    const clipped = [summary, summary.closest(".note-footer, .journal-footer")]
+      .filter(Boolean)
+      .some((region) => {
+        const style = getComputedStyle(region);
+        return (style.overflowY !== "visible" && region.scrollHeight > region.clientHeight + 2) ||
+          (style.overflowX !== "visible" && region.scrollWidth > region.clientWidth + 2);
+      });
     return {
-      gap: b.left - a.right,
-      content: summary.querySelector(".summary-text")?.textContent ?? "",
+      gap: artworkBounds.left - summaryBounds.right,
+      content: summaryText?.textContent ?? "",
       status: el.dataset.renderStatus,
       layout: el.className,
+      glyphs: textRects.length,
+      textTouchesArtwork,
+      textOutsidePaper,
+      clipped,
     };
   });
+  const summaryFits = (geometry, originalText) =>
+    geometry !== null && geometry.status === "ready" && geometry.gap > 8 &&
+    geometry.glyphs > 0 && !geometry.textTouchesArtwork &&
+    !geometry.textOutsidePaper && !geometry.clipped &&
+    // The shared visible-content parser strips whitespace at the edges of each line.
+    // The long English fixture intentionally ends with a space; that is not lost text.
+    geometry.content === originalText.trim();
 
   const summaries = [
     { label: "zh-short", locale: "zh", text: "简短总结，不遮挡插图。" },
@@ -1904,7 +1937,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     await waitForNoteReady(placeholders);
     const geometry = await measureFooter();
     check(`LS4-${item.label}`, `笔记摘要与插画无重叠：${item.label}`,
-      geometry !== null && geometry.status === "ready" && geometry.gap > 8 && geometry.content === item.text,
+      summaryFits(geometry, item.text),
       JSON.stringify(geometry && { ...geometry, contentLength: geometry.content.length, content: undefined }));
   }
 
@@ -1916,7 +1949,8 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     await waitForNoteReady(placeholders);
     const geometry = await measureFooter();
     check(`LS4-${label}`, `${label} 摘要与插图保留间距`,
-      geometry !== null && geometry.gap > 8 && geometry.content === summaries.at(-1).text, JSON.stringify(geometry));
+      summaryFits(geometry, summaries.at(-1).text),
+      JSON.stringify(geometry && { ...geometry, contentLength: geometry.content.length, content: undefined }));
   }
   await placeholderContext.close();
 
