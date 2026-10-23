@@ -474,16 +474,17 @@ export function notePage(origin: string, published: PublishedNote): PageMeta {
 }
 
 export function noteNotFoundPage(): PageMeta {
+  const heading = "这条笔记不存在或已被删除";
   return {
     status: 404,
-    title: `笔记不存在 · ${SITE_NAME}`,
-    description: "这条笔记不存在或已被删除。",
+    title: `${heading} · ${SITE_NAME}`,
+    description: heading,
     ogType: "website",
-    ogTitle: "笔记不存在",
+    ogTitle: heading,
     lang: "zh-CN",
     robots: "noindex",
     jsonLd: [],
-    body: `<main class="ssr"><h1>这条笔记不存在或已被删除。</h1><p><a href="/gallery">去图库看看</a></p></main>`,
+    body: `<main class="ssr"><h1>${heading}</h1><p><a href="/">回到编辑器</a> · <a href="/gallery">去图库看看</a></p></main>`,
   };
 }
 

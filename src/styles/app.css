@@ -1995,15 +1995,106 @@ a.brand {
 }
 
 .gallery-thumb-text strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   font-size: 20px;
   line-height: 1.3;
   font-weight: 400;
 }
 
 .gallery-thumb-text span {
+  display: -webkit-box;
+  min-height: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
   font-size: 14px;
   line-height: 1.7;
   color: #44403c;
+}
+
+.gallery-placeholder {
+  pointer-events: none;
+}
+
+.gallery-thumb-skeleton,
+.gallery-thumb-failed {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 24px 18px;
+  overflow: hidden;
+}
+
+.gallery-skeleton-line,
+.gallery-skeleton-caption {
+  display: block;
+  height: 12px;
+  border-radius: 4px;
+  opacity: 0.72;
+  animation: gallery-skeleton-pulse 1.5s ease-in-out infinite alternate;
+}
+
+.gallery-skeleton-line {
+  /* Thumbnail paper stays light even when the site theme is dark. */
+  background: #8799bb;
+}
+
+.gallery-skeleton-caption {
+  background: var(--muted);
+}
+
+.gallery-skeleton-title {
+  width: 72%;
+  height: 22px;
+  margin-bottom: 12px;
+}
+
+.gallery-skeleton-line:not(.gallery-skeleton-title) {
+  width: 88%;
+}
+
+.gallery-skeleton-line:nth-child(3) {
+  width: 62%;
+}
+
+.gallery-skeleton-caption {
+  width: 60%;
+}
+
+.gallery-thumb-failed {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #44403c;
+  border: 1px dashed #94a3b8;
+  overflow-wrap: anywhere;
+}
+
+.gallery-grid > .gallery-card:not(.gallery-placeholder) {
+  animation: gallery-card-appear 180ms ease-out both;
+}
+
+@keyframes gallery-skeleton-pulse {
+  to { opacity: 0.94; }
+}
+
+@keyframes gallery-card-appear {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-skeleton-line,
+  .gallery-skeleton-caption,
+  .gallery-grid > .gallery-card:not(.gallery-placeholder) {
+    animation: none;
+  }
 }
 
 .gallery-caption {

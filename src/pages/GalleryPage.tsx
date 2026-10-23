@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PublishedNoteSummary } from "../../shared/api.ts";
 import { isOneOf, TEMPLATES } from "../../shared/options.ts";
 import { ApiRequestError, fetchGallery } from "../api.ts";
+import { GalleryPlaceholder } from "../components/GalleryPlaceholder.tsx";
 import { errorMessage, useT } from "../i18n/index.ts";
 import type { RequestError } from "../state/store.ts";
 import { linkProps } from "../router.ts";
@@ -105,11 +106,15 @@ export function GalleryPage() {
         </div>
       ) : null}
 
-      {items.length > 0 ? (
-        <div className="gallery-grid">
+      {items.length > 0 || status !== "idle" ? (
+        <div className="gallery-grid" aria-busy={status === "loading"}>
           {items.map((item) => (
             <GalleryCard key={item.id} item={item} />
           ))}
+          {status === "loading" ? Array.from({ length: items.length ? 1 : 3 }, (_, i) => (
+            <GalleryPlaceholder key={`loading-${i}`} state="loading" message={t.gallery.loading} />
+          )) : null}
+          {status === "error" && items.length === 0 ? <GalleryPlaceholder state="error" message={t.gallery.loadFailed} /> : null}
         </div>
       ) : status === "idle" ? (
         <div className="empty-state">

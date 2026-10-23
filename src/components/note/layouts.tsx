@@ -37,7 +37,7 @@ function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps)
       </main>
       <footer className="note-footer">
         {note.summary ? (
-          <div className="summary-sticky" style={blockJitter(seed + 77, naturalness, 1.6, 3)} data-fit>
+          <div className="summary-sticky" style={blockJitter(seed + 77, naturalness, 0, 2)} data-fit>
             <TapeDecoration className="summary-tape" />
             <div className="region-label">{labels.summary}</div>
             <SummaryText text={note.summary} seed={seed} naturalness={naturalness} />
@@ -110,7 +110,7 @@ function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
       </main>
       <footer className="journal-footer">
         {note.summary ? (
-          <div className="summary-sticky" style={blockJitter(seed + 77, naturalness, 3, 3)} data-fit>
+          <div className="summary-sticky" style={blockJitter(seed + 77, naturalness, 0, 2)} data-fit>
             <div className="region-label">{labels.summary}</div>
             <SummaryText text={note.summary} seed={seed} naturalness={naturalness} />
           </div>
