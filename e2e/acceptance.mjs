@@ -785,9 +785,12 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   check("LB3", "从笔记库打开笔记到编辑器", await page.locator(".note-title").first().innerText() === "笔记库第一条" && await page.locator('[data-library-status="linked"]').count() === 1);
 
   await page.getByRole("link", { name: "笔记库", exact: true }).click();
+  await cards.nth(1).waitFor();
   await page.locator(".library-search").fill("第二");
-  check("LB4", "按标题搜索笔记", await cards.count() === 1);
+  const filtered = await page.waitForFunction(() => document.querySelectorAll(".library-card").length === 1, null, { timeout: 5000 }).then(() => true, () => false);
+  check("LB4", "按标题搜索笔记", filtered && (await cards.locator(".gallery-caption strong").innerText()) === "笔记库第二条");
   await page.locator(".library-search").fill("");
+  await cards.nth(1).waitFor();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出备份", exact: true }).click();
   const backup = `${SP}/library-backup.json`;
