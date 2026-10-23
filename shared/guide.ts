@@ -47,7 +47,7 @@ export type GuideContent = {
 export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
   zh: {
     title: "墨语笔记 · 使用说明",
-    documentTitle: "使用说明 · 墨语笔记 InkScribe"
+    documentTitle: "使用说明 · 墨语笔记 InkScribe",
     description: "从第一张手写笔记到自动发布：在网页里整理和导出，或让 AI agent 直接发布准备好的笔记。",
     eyebrow: "InkScribe / 使用说明",
     tocLabel: "使用说明目录",
@@ -131,7 +131,7 @@ export const GUIDE_CONTENT: Record<GuideLocale, GuideContent> = {
   },
   en: {
     title: "InkScribe · Guide",
-    documentTitle: "InkScribe · User & agent guide"
+    documentTitle: "InkScribe · User & agent guide",
     description: "From your first handwritten note to automated publishing: create and export in the editor, or let an AI agent publish a prepared note.",
     eyebrow: "InkScribe / Guide",
     tocLabel: "Guide contents",
