@@ -25,6 +25,10 @@
   --primary-bg: var(--paper-ui);
   --primary-fg: #1c1917;
   --primary-hover: #fff;
+  /* “撰写”按钮的暖黄色，深浅两种主题共用 */
+  --compose-bg: #fbbf24;
+  --compose-hover: #f59e0b;
+  --compose-fg: #1c1917;
   --overlay: rgba(24, 24, 27, 0.75);
   --overlay-soft: rgba(24, 24, 27, 0.45);
   --canvas-bg: #141417;
@@ -1046,6 +1050,12 @@ input[type="range"] {
   --trigger-shadow: 0 0 0 0 transparent;
   flex: none;
   min-height: 42px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+}
+
+.input-trigger:not(:disabled):hover {
+  background: var(--compose-hover);
 }
 
 .input-trigger.is-attention {
@@ -1055,10 +1065,10 @@ input[type="range"] {
 @keyframes trigger-pulse {
   0%,
   100% {
-    box-shadow: var(--trigger-shadow), 0 0 0 0 color-mix(in srgb, var(--gold) 45%, transparent);
+    box-shadow: var(--trigger-shadow), 0 0 0 0 color-mix(in srgb, var(--compose-bg) 50%, transparent);
   }
   50% {
-    box-shadow: var(--trigger-shadow), 0 0 0 5px color-mix(in srgb, var(--gold) 45%, transparent);
+    box-shadow: var(--trigger-shadow), 0 0 0 5px color-mix(in srgb, var(--compose-bg) 50%, transparent);
   }
 }
 
