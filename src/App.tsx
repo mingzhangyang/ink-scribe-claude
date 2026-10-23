@@ -7,6 +7,7 @@ import { EditorPage } from "./pages/EditorPage.tsx";
 import { GalleryPage } from "./pages/GalleryPage.tsx";
 import { GuidePage } from "./pages/GuidePage.tsx";
 import { LegalPage } from "./pages/LegalPage.tsx";
+import { LibraryPage } from "./pages/LibraryPage.tsx";
 import { NoteViewPage } from "./pages/NoteViewPage.tsx";
 import { linkProps, useRoute } from "./router.ts";
 import { resolveTheme, usePreferences } from "./state/preferences.ts";
@@ -73,6 +74,7 @@ export function App() {
 
       {route.name === "editor" ? <EditorPage config={config} onToast={setToast} /> : null}
       {route.name === "gallery" ? <GalleryPage /> : null}
+      {route.name === "library" ? <LibraryPage /> : null}
       {route.name === "guide" ? <GuidePage /> : null}
       {route.name === "privacy" || route.name === "terms" ? <LegalPage page={route.name} /> : null}
       {route.name === "note" ? <NoteViewPage id={route.id} onToast={setToast} /> : null}

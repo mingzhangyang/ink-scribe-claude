@@ -39,6 +39,7 @@ export function AppMenu({ route, mock }: { route: Route; mock: boolean }) {
   const pages = [
     { name: "editor", href: "/", label: t.app.editor },
     { name: "gallery", href: "/gallery", label: t.app.gallery },
+    { name: "library", href: "/library", label: t.app.library },
     { name: "guide", href: "/guide", label: t.app.guide },
   ];
   const legalPages = [
