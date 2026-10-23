@@ -10,17 +10,12 @@ import { useNoteStore } from "../state/store.ts";
 import { FileDropOverlay, isFileDrag } from "./FileDropOverlay.tsx";
 import type { ImportState } from "./useFileImport.ts";
 
-/** 打开原文弹窗的按钮：宽屏位于画布工具栏，窄屏（CSS）固定在屏幕底部。 */
+/** 打开原文弹窗的按钮：宽屏位于顶栏，窄屏（CSS）固定在屏幕底部。 */
 export function InputTrigger({ onOpen }: { onOpen: () => void }) {
-  const text = useNoteStore((s) => s.input.text);
-  // 还在看示例笔记、尚未输入原文时提示从这里开始
-  const attention = useNoteStore((s) => s.source === "sample") && text.trim().length === 0;
   const t = useT();
-  const length = charLength(text);
   return (
-    <button type="button" className={`btn btn-small btn-primary input-trigger${attention ? " is-attention" : ""}`} aria-haspopup="dialog" onClick={onOpen}>
-      <span aria-hidden="true">✍️</span> {t.input.open}
-      {length > 0 ? <span className="input-trigger-count">{t.input.chars(length.toLocaleString())}</span> : null}
+    <button type="button" className="btn btn-primary input-trigger" aria-haspopup="dialog" onClick={onOpen}>
+      {t.input.open}
     </button>
   );
 }

@@ -17,6 +17,9 @@ export const en: Messages = {
     privacy: "Privacy policy",
     terms: "Terms of use",
     legalLabel: "Privacy and terms",
+    contactLabel: "Contact",
+    contactEmail: "Email",
+    contactDiscord: "Join the community",
     menu: "Menu",
     menuLabel: "Site menu",
     mockBadge: "Demo mode",
@@ -112,8 +115,7 @@ export const en: Messages = {
 
   input: {
     title: "Source text",
-    open: "Edit source text",
-    chars: (count) => `${count} chars`,
+    open: "Compose",
     close: "Close",
     options: "Options",
     samplePicker: "Insert sample text",

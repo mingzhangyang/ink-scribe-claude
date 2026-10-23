@@ -1368,7 +1368,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const { page, context } = await newPage({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await page.goto(URL, { waitUntil: "networkidle" });
   const trigger = await page.locator(".input-trigger").boundingBox();
-  check("IS9", "移动端“编辑原文”按钮固定在屏幕底部", trigger && viewport.height - (trigger.y + trigger.height) <= 24 && trigger.y > viewport.height / 2, JSON.stringify(trigger));
+  check("IS9", "移动端“撰写”按钮固定在屏幕底部", trigger && viewport.height - (trigger.y + trigger.height) <= 24 && trigger.y > viewport.height / 2, JSON.stringify(trigger));
   await page.locator(".input-trigger").tap();
   await page.locator(".input-sheet").waitFor({ state: "visible" });
   await page.waitForTimeout(400);

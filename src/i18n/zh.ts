@@ -32,6 +32,9 @@ export const zh = {
     privacy: "隐私政策",
     terms: "使用条款",
     legalLabel: "隐私与条款",
+    contactLabel: "联系我们",
+    contactEmail: "邮箱",
+    contactDiscord: "加入社区",
     menu: "菜单",
     menuLabel: "站点菜单",
     mockBadge: "开发演示模式",
@@ -68,8 +71,7 @@ export const zh = {
 
   input: {
     title: "原文",
-    open: "编辑原文",
-    chars: (count: string) => `${count} 字`,
+    open: "撰写",
     close: "关闭",
     options: "生成选项",
     samplePicker: "填入示例文本",
