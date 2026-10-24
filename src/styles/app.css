@@ -1229,6 +1229,40 @@ input[type="range"] {
   z-index: 50;
 }
 
+/* ---------- PWA：新版本提示 ---------- */
+.pwa-update {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 18px;
+  border-radius: 999px;
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+
+.pwa-update > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.pwa-update .btn-small {
+  min-height: 32px;
+  border-radius: 999px;
+}
+
+/* 同时出现时，普通提示叠在新版本提示上方 */
+.pwa-update ~ .toast {
+  bottom: 84px;
+}
+
 /* ---------- 原文弹窗（窄屏为底部抽屉） ---------- */
 .input-trigger {
   flex: none;
@@ -1867,6 +1901,14 @@ a.brand {
 }
 
 .menu-status {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.menu-install {
+  display: grid;
+  gap: 8px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border);

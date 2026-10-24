@@ -1,16 +1,25 @@
 {
+  "id": "/",
   "name": "墨语笔记 InkScribe",
   "short_name": "墨语笔记",
-  "description": "把文字变成一页手写笔记",
+  "description": "把文字变成一页手写笔记：AI 整理康奈尔结构，可选纸张、手写字体、墨水颜色与贴纸，一键导出高清图片。",
   "lang": "zh-CN",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#18181b",
   "theme_color": "#18181b",
+  "categories": ["productivity", "education", "utilities"],
+  "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "笔记库", "short_name": "笔记库", "url": "/library", "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "图库", "short_name": "图库", "url": "/gallery", "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }

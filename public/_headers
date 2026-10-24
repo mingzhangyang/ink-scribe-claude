@@ -9,3 +9,10 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Service Worker 与 manifest 每次都要向服务器确认，新部署才能尽快被浏览器发现
+/sw.js
+  Cache-Control: no-cache
+
+/site.webmanifest
+  Cache-Control: no-cache

@@ -56,6 +56,11 @@ export const zh = {
     languageLabel: "语言",
     themeLabel: "主题",
     themeNames: { system: "跟随系统", light: "浅色", dark: "深色" } satisfies Record<ThemePreference, string>,
+    installApp: "安装应用",
+    installHint: "添加到桌面或主屏幕，离线时也能打开编辑器和笔记库",
+    updateReady: "新版本已就绪",
+    updateReload: "刷新",
+    updateLater: "稍后",
   },
 
   options: {

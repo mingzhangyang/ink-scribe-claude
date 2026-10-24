@@ -36,6 +36,11 @@ export const en: Messages = {
     languageLabel: "Language",
     themeLabel: "Theme",
     themeNames: { system: "System", light: "Light", dark: "Dark" },
+    installApp: "Install app",
+    installHint: "Add InkScribe to your desktop or home screen. The editor and library also open offline.",
+    updateReady: "A new version is ready",
+    updateReload: "Reload",
+    updateLater: "Later",
   },
 
   options: {
