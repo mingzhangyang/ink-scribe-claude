@@ -110,6 +110,8 @@ function resetFailedFontFaces(families: string[], text: string): void {
     const src = retry.src.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (match, _quote: string, path: string) => {
       const url = new URL(path, source.base);
       if (url.protocol !== "http:" && url.protocol !== "https:") return match;
+      // Same name as FONT_RETRY_PARAM in src/pwa/routing.ts, which the service worker strips from cache keys.
+      // Not imported: sw.js must not share chunks with the app.
       url.searchParams.set("ink-font-retry", String(retry.attempt));
       return `url("${url.href}")`;
     });

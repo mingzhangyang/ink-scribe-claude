@@ -32,6 +32,17 @@ export function classifyRequest(request: RequestLike, origin: string, precached:
   return "bypass";
 }
 
+/** 字体加载失败后重试时加在 URL 上的参数（src/export/fontEmbed.ts），用于绕过浏览器缓存的失败结果 */
+export const FONT_RETRY_PARAM = "ink-font-retry";
+
+/** Service Worker 缓存的键：去掉字体重试参数，重试成功的字体与原 URL 共用同一条缓存。 */
+export function cacheKey(url: string): string {
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has(FONT_RETRY_PARAM)) return url;
+  parsed.searchParams.delete(FONT_RETRY_PARAM);
+  return parsed.href;
+}
+
 /** 只缓存同源的成功响应；静态资源未命中时可能回退成 index.html，不能当作脚本或字体缓存下来。 */
 export function isCacheable(response: Pick<Response, "ok" | "status" | "type" | "headers">): boolean {
   if (!response.ok || response.status !== 200 || response.type !== "basic") return false;

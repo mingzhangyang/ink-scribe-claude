@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src/sw.ts", "src/pwa/routing.ts"]
+  "include": ["src/sw.ts", "src/pwa/routing.ts", "src/pwa/cleanup.ts"]
 }
