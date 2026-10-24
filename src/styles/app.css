@@ -614,8 +614,61 @@ input[type="range"] {
   z-index: 2;
   display: flex;
   justify-content: center;
-  padding: 0 12px;
+  /* 两侧留出右下角分享按钮的宽度，提示保持居中且不与按钮重叠 */
+  padding: 0 76px;
   pointer-events: none;
+}
+
+/* 分享按钮浮在画布右下角 */
+.share-anchor {
+  position: absolute;
+  right: var(--share-right, 16px);
+  bottom: var(--share-bottom, 16px);
+  z-index: 3;
+}
+
+.share-fab {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.share-fab:not(:disabled):hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.share-fab:focus-visible {
+  outline: 2px solid var(--select-bg);
+  outline-offset: 2px;
+}
+
+.share-fab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.share-fab[aria-busy="true"] {
+  cursor: progress;
+}
+
+.share-fab[aria-busy="true"] svg {
+  animation: share-pulse 1s ease-in-out infinite;
+}
+
+@keyframes share-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .fit-notice {
@@ -727,6 +780,12 @@ input[type="range"] {
 
 @media (prefers-reduced-motion: reduce) {
   .loading-pen {
+    animation: none;
+  }
+
+  .share-fab,
+  .share-fab[aria-busy="true"] svg {
+    transition: none;
     animation: none;
   }
 }
@@ -1571,6 +1630,10 @@ html:has(.sheet[open]) {
     box-shadow: var(--shadow);
   }
 
+  .fit-notice-anchor {
+    padding: 0 12px;
+  }
+
   .toast {
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
@@ -1604,9 +1667,11 @@ html:has(.sheet[open]) {
     min-height: 70vh;
   }
 
-  /* 窄屏上页面贴满画布宽度：画布顶部留出浮动控件的位置，避免盖住标题 */
+  /* 窄屏上页面贴满画布宽度：画布顶部留出浮动控件的位置，避免盖住标题；
+     底部留出右下角分享按钮的位置，避免盖住页面 */
   .viewport {
     padding-top: 48px;
+    padding-bottom: 80px;
   }
 
   .panel {

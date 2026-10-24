@@ -578,6 +578,14 @@ export const en: Messages = {
     clipboardNoPng: "This browser can't copy PNG images",
   },
 
+  share: {
+    label: "Share note image",
+    preparing: "Preparing the image to share…",
+    ready: "The image is ready. Tap the share button again.",
+    unsupported: "This browser can't open the share sheet, so the image was downloaded instead.",
+    failed: "Sharing failed. Try again later, or download the image from Export.",
+  },
+
   gallery: {
     documentTitle: "Gallery · InkScribe",
     title: "Gallery",
