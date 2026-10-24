@@ -1138,6 +1138,33 @@ if (process.env.E2E_API_KEY) {
       menuAfterLocale.hash === "#agents" && Math.abs(menuAfterLocale.scrollY) <= 1 && menuAfterLocale.expanded === "true" && menuAfterLocale.visible,
     JSON.stringify(menuAfterLocale),
   );
+  const contactIcons = await guide.locator(".menu-contact").evaluate((section) => ({
+    visibleText: section.textContent.trim(),
+    links: [...section.querySelectorAll("a")].map((link) => ({
+      href: link.getAttribute("href"),
+      label: link.getAttribute("aria-label"),
+      title: link.getAttribute("title"),
+      hasIcon: !!link.querySelector('svg[aria-hidden="true"]'),
+      hasVisibleText: !!link.textContent.trim(),
+      width: link.getBoundingClientRect().width,
+      height: link.getBoundingClientRect().height,
+      target: link.getAttribute("target"),
+      rel: link.getAttribute("rel"),
+    })),
+  }));
+  check(
+    "U15",
+    "Contact 仅显示可访问的 Email / Discord 图标按钮，保留原始跳转",
+    contactIcons.visibleText === "Contact" && contactIcons.links.length === 2 &&
+      contactIcons.links[0].href === "mailto:contact@orangely.xyz" &&
+      contactIcons.links[0].label === "Email" &&
+      contactIcons.links[1].href === "https://discord.gg/MgFEvCzW" &&
+      contactIcons.links[1].label === "Discord · Join the community" &&
+      contactIcons.links[1].target === "_blank" && contactIcons.links[1].rel?.includes("noopener") &&
+      contactIcons.links.every((link) => link.title === link.label && link.hasIcon && !link.hasVisibleText && link.width >= 44 && link.height >= 44),
+    JSON.stringify(contactIcons),
+  );
+
   // Only interact again after measuring, so Playwright cannot auto-scroll and
   // hide a regression in the language switch above.
   await guide.locator(".app-menu-toggle").click();
@@ -1204,12 +1231,16 @@ if (process.env.E2E_API_KEY) {
         const bounds = document.querySelector(".app-menu-panel").getBoundingClientRect();
         return { overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, contained: bounds.left >= 0 && bounds.right <= innerWidth };
       });
-      mobile.push({ locale, width, valid: closed.overflow <= 0 && closed.codesContained && opened.overflow <= 0 && opened.contained });
+      const contactNames = await guide.locator(".menu-contact a").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
+      const accessible = contactNames[0] === (locale === "zh" ? "邮箱" : "Email") &&
+        contactNames[1] === (locale === "zh" ? "Discord · 加入社区" : "Discord · Join the community");
+      mobile.push({ locale, width, accessible, valid: closed.overflow <= 0 && closed.codesContained && opened.overflow <= 0 && opened.contained });
       if (locale === "zh" && width === 390) await guide.screenshot({ path: `${SP}/guide-mobile-menu.png` });
       await guide.locator(".app-menu-toggle").click();
     }
   }
   check("U12", "320/390px 中英文说明页和展开菜单均无整体横向溢出", mobile.every((item) => item.valid), JSON.stringify(mobile));
+  check("U16", "中英文及窄屏模式下 Contact 图标保留正确的无障碍名称", mobile.every((item) => item.accessible), JSON.stringify(mobile));
   check("U13", "说明页与菜单流程无脚本错误", guide.errors.length === 0, guide.errors.join("; "));
   await guideContext.close();
 }
