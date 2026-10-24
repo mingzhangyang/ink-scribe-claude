@@ -63,9 +63,11 @@ export function readDocument(value: unknown): NoteDocument {
     note, settings: sanitizeSettings(value.settings),
     stickers: value.stickers.map((s: unknown): StickerItem => {
       if (!record(s) || !text(s.id) || !isOneOf(STICKER_TYPES, s.type) || !optionalText(s.variant)
+        || (s.flip !== undefined && typeof s.flip !== "boolean")
         || ![s.x, s.y, s.rotation, s.scale].every((n) => typeof n === "number" && Number.isFinite(n))) throw new Error("Invalid draft sticker");
       return { id: s.id, type: s.type, x: s.x as number, y: s.y as number, rotation: s.rotation as number, scale: s.scale as number,
-        ...(s.variant !== undefined ? { variant: s.variant } : {}), ...(s.doodle ? { doodle: doodle(s.doodle)! } : {}) };
+        ...(s.variant !== undefined ? { variant: s.variant } : {}), ...(s.doodle ? { doodle: doodle(s.doodle)! } : {}),
+        ...(s.flip === true ? { flip: true } : {}) };
     }),
     aiDoodle: doodle(value.aiDoodle), source: value.source as NoteDocument["source"],
   };

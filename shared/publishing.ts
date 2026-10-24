@@ -127,6 +127,7 @@ const stickerSchema: Schema = {
     y: { type: "integer", minimum: -40, maximum: MAX_STICKER_Y },
     rotation: number(-180, 180, 0.1), scale: number(0.3, 3, 0.01),
     variant: choices(type === "custom-doodle" ? DOODLE_THEMES : ids(STICKER_VARIANTS[type])),
+    flip: { type: "boolean", description: "Mirror the sticker horizontally. Defaults to false." },
     ...(type === "custom-doodle" ? { doodle: doodleSchema } : {}),
   }, ["id", "type", "x", "y", "rotation", "scale"]),
     ...(type === "custom-doodle" ? { description: "Provide variant or doodle. When both are present, doodle supplies the drawing." } : {}),

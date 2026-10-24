@@ -28,6 +28,7 @@
     "src/doodles",
     "src/config",
     "src/state/settings.ts",
+    "src/stickers/art/glyphs.ts",
     "src/import/decode.ts"
   ]
 }

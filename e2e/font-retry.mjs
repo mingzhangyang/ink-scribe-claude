@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fillSource } from "./input.mjs";
+import { addDecorSticker } from "./stickers.mjs";
 
 const READY = '.note-page[data-render-status="ready"]';
 const FONT_ERROR = '.note-fit-status[data-fit-status="font-error"]';
@@ -75,7 +76,7 @@ export async function verifyFontRetry({ newPage, check, url, outputDir, mode }) 
       await page.locator(READY).waitFor({ timeout: TIMEOUT });
       await fillSource(page, `字体重试后应保留的输入：${marker}`);
       await page.getByRole("tab", { name: "贴纸", exact: true }).click();
-      await page.getByTitle("和纸胶带 · 薄荷", { exact: true }).click();
+      await addDecorSticker(page, "胶带夹子", "和纸胶带", "薄荷");
       await page.getByRole("tab", { name: "样式", exact: true }).click();
       await page.locator(".field").filter({ hasText: "中文字体" }).locator("select").selectOption("ma-shan-zheng");
     }
