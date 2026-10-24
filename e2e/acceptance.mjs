@@ -26,8 +26,10 @@ const pngSize = (file) => {
 const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {});
 
 async function newPage(options = {}, init) {
-  // 界面语言按浏览器首选语言选择；除专门测试英文界面的用例外，都以中文浏览器运行
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, locale: "zh-CN", ...options });
+  // 界面语言按浏览器首选语言选择；除专门测试英文界面的用例外，都以中文浏览器运行。
+  // 默认屏蔽 Service Worker：受控页面的请求由 Service Worker 发出，page.route 拦截不到，模拟网络错误的用例会失效。
+  // PWA 用例单独开启
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, locale: "zh-CN", serviceWorkers: "block", ...options });
   if (init) await context.addInitScript(init);
   const page = await context.newPage();
   page.errors = [];
@@ -2206,6 +2208,56 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
     (await storageBlocked.locator("html").getAttribute("lang")) === "en" && storageBlocked.errors.length === 0,
     storageBlocked.errors.join("; "));
   await blockedContext.close();
+}
+
+// ---------- PWA. Service Worker、预缓存与离线打开 ----------
+{
+  const { page, context } = await newPage({ serviceWorkers: "allow" });
+  await page.goto(URL, { waitUntil: "load" });
+  const registration = await page.evaluate(async () => {
+    // 注册或预缓存失败时 serviceWorker.ready 会一直等待，需要自己设置超时，让用例失败而不是卡住
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Service Worker 未在 20 秒内接管页面")), 20_000));
+    let ready;
+    try {
+      ready = await Promise.race([
+        (async () => {
+          const result = await navigator.serviceWorker.ready;
+          if (!navigator.serviceWorker.controller) {
+            await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+          }
+          return result;
+        })(),
+        timeout,
+      ]);
+    } catch (error) {
+      return { error: error.message, controlled: false, cached: [] };
+    }
+    const names = await caches.keys();
+    const app = names.find((name) => name.startsWith("ink-scribe-app-"));
+    const cached = app ? (await (await caches.open(app)).keys()).map((request) => new globalThis.URL(request.url).pathname) : [];
+    return { scope: ready.scope, controlled: Boolean(navigator.serviceWorker.controller), cached };
+  });
+  check("PWA1", "Service Worker 接管首页并预缓存应用外壳",
+    registration.scope === URL && registration.controlled &&
+      ["/", "/site.webmanifest", "/theme-init.js", "/icon-192.png"].every((path) => registration.cached.includes(path)) &&
+      registration.cached.some((path) => /^\/assets\/index-.+\.js$/.test(path)) &&
+      !registration.cached.some((path) => path.endsWith(".woff2")),
+    JSON.stringify({ ...registration, cached: registration.cached.length }));
+
+  const sw = await page.request.get(`${URL}sw.js`);
+  const manifest = await (await page.request.get(`${URL}site.webmanifest`)).json().catch(() => ({}));
+  check("PWA2", "sw.js 是脚本，manifest 声明 id 与快捷方式",
+    sw.ok() && /javascript/.test(sw.headers()["content-type"] ?? "") && manifest.id === "/" && manifest.shortcuts?.length >= 2,
+    sw.headers()["content-type"]);
+
+  await context.setOffline(true);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const offlineEditor = await page.locator(".note-page").waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  await page.goto(`${URL}library`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  const offlineLibrary = await page.locator(".library-main h2").first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  check("PWA3", "离线时可以打开编辑器与笔记库", offlineEditor && offlineLibrary, JSON.stringify({ offlineEditor, offlineLibrary }));
+  await context.setOffline(false);
+  await context.close();
 }
 
 await browser.close();

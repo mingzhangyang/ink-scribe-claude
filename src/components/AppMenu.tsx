@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CONTACT_EMAIL, DISCORD_INVITE } from "../../shared/contact.ts";
 import { useT } from "../i18n/index.ts";
+import { promptInstall, usePwa } from "../pwa/register.ts";
 import { linkProps, type Route } from "../router.ts";
 import { LOCALES, THEMES, usePreferences, type ThemePreference } from "../state/preferences.ts";
 
@@ -31,6 +32,7 @@ export function AppMenu({ route, mock }: { route: Route; mock: boolean }) {
   const theme = usePreferences((s) => s.theme);
   const setLocale = usePreferences((s) => s.setLocale);
   const setTheme = usePreferences((s) => s.setTheme);
+  const { installable } = usePwa();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -148,6 +150,25 @@ export function AppMenu({ route, mock }: { route: Route; mock: boolean }) {
             </div>
           </fieldset>
         </div>
+        {installable ? (
+          <div className="menu-install">
+            <button
+              type="button"
+              className="btn btn-secondary btn-block"
+              onClick={() => {
+                setOpen(false);
+                toggleRef.current?.focus();
+                void promptInstall();
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+              </svg>
+              {t.app.installApp}
+            </button>
+            <p className="hint">{t.app.installHint}</p>
+          </div>
+        ) : null}
         {mock ? (
           <div className="menu-status">
             <span className="badge badge-warn" title={t.app.mockTitle}>

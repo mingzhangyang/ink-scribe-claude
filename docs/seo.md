@@ -16,7 +16,7 @@
 | `public/apple-touch-icon.png` | iOS 主屏幕图标（180px，直角，由系统加圆角） |
 | `public/icon-192.png`、`public/icon-512.png`、`public/icon-maskable-512.png` | Web App Manifest 图标（含 Android 自适应图标） |
 | `public/og-image.jpg` | 链接预览图（1200×630） |
-| `public/site.webmanifest` | Web App Manifest（手写） |
+| `public/site.webmanifest` | Web App Manifest（手写，安装与离线见 [pwa.md](pwa.md)） |
 
 ## 服务端注入的页面信息
 

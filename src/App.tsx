@@ -10,6 +10,7 @@ import { GuidePage } from "./pages/GuidePage.tsx";
 import { LegalPage } from "./pages/LegalPage.tsx";
 import { LibraryPage } from "./pages/LibraryPage.tsx";
 import { NoteViewPage } from "./pages/NoteViewPage.tsx";
+import { applyUpdate, usePwa } from "./pwa/register.ts";
 import { linkProps, useRoute } from "./router.ts";
 import { resolveTheme, subscribeToPreferenceSync, usePreferences } from "./state/preferences.ts";
 
@@ -39,6 +40,8 @@ export function App() {
   const t = useT();
   const [config, setConfig] = useState<PublicConfig>(DEFAULT_CONFIG);
   const [toast, setToast] = useState<string | null>(null);
+  const { updateReady } = usePwa();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   // 页面可把自己的操作按钮渲染到顶栏菜单左侧
   const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   useAppliedTheme();
@@ -101,6 +104,18 @@ export function App() {
       ) : null}
 
       <ConfirmDialog />
+
+      {updateReady && !updateDismissed ? (
+        <div className="pwa-update" role="status">
+          <span>{t.app.updateReady}</span>
+          <button type="button" className="btn btn-primary btn-small" onClick={applyUpdate}>
+            {t.app.updateReload}
+          </button>
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setUpdateDismissed(true)}>
+            {t.app.updateLater}
+          </button>
+        </div>
+      ) : null}
 
       {toast ? (
         <div className="toast" role="status">
