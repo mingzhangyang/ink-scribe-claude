@@ -438,6 +438,20 @@ const clip = await page.evaluate(async () => {
 });
 check("J1", "支持的浏览器可复制 PNG 到剪贴板", clip.types.includes("image/png") && clip.w > 0, JSON.stringify(clip));
 
+// ---------- J2. 系统分享 ----------
+// 无头 Chromium 没有系统分享面板：替换为记录调用的桩函数，验证交给系统分享的是 PNG 图片
+await page.evaluate(() => {
+  window.__shared = [];
+  navigator.canShare = (data) => Array.isArray(data.files);
+  navigator.share = async (data) => {
+    window.__shared.push({ type: data.files[0].type, name: data.files[0].name, size: data.files[0].size, title: data.title });
+  };
+});
+await page.getByRole("button", { name: "分享笔记图片" }).click();
+await page.waitForFunction(() => window.__shared.length > 0, null, { timeout: 60000 });
+const shared = await page.evaluate(() => window.__shared[0]);
+check("J2", "画布右下角分享按钮把笔记 PNG 交给系统分享", shared.type === "image/png" && shared.name.endsWith(".png") && shared.size > 0, JSON.stringify(shared));
+
 // ---------- I. 长图倍率限制 ----------
 await page.getByRole("tab", { name: "样式" }).click();
 await page.locator(".field").filter({ hasText: "页面尺寸" }).locator("select").selectOption("long");

@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { PAGE_WIDTH } from "../config/appearance.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
 import { NoteFitNotice, NoteFitStatus } from "./note/NoteFitStatus.tsx";
+import { ShareButton } from "./ShareButton.tsx";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
-export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
+export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
   pageRef: RefObject<HTMLDivElement | null>;
   fit: NoteFitState | null;
   onFitChange: (fit: NoteFitState) => void;
   onEditInput: () => void;
+  onToast: (message: string) => void;
 }) {
   const note = useNoteStore((s) => s.note);
   const settings = useNoteStore((s) => s.settings);
@@ -192,6 +194,13 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput }: {
         </div>
         <div className="fit-notice-anchor" style={{ paddingBottom: 12 + viewport.scrollbarBottom }}>
           <NoteFitNotice fit={fit} />
+        </div>
+        {/* 分享按钮浮在画布右下角，避开滚动条 */}
+        <div
+          className="share-anchor"
+          style={{ "--share-right": `${16 + viewport.scrollbar}px`, "--share-bottom": `${16 + viewport.scrollbarBottom}px` } as CSSProperties}
+        >
+          <ShareButton pageRef={pageRef} fit={fit} onToast={onToast} />
         </div>
       </div>
     </section>

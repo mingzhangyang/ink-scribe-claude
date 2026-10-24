@@ -294,6 +294,14 @@ export const zh = {
     clipboardNoPng: "当前浏览器不支持复制 PNG 图片",
   },
 
+  share: {
+    label: "分享笔记图片",
+    preparing: "正在生成分享图片…",
+    ready: "图片已生成，请再点一次分享按钮。",
+    unsupported: "当前浏览器不支持系统分享，已改为下载图片。",
+    failed: "分享失败，请稍后重试，或在“导出”中下载图片。",
+  },
+
   gallery: {
     documentTitle: "图库 · 墨语笔记 InkScribe",
     title: "图库",
