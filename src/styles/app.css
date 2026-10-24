@@ -1615,19 +1615,6 @@ html:has(.sheet[open]) {
     box-shadow: var(--shadow);
   }
 
-  /* 编辑页有分享按钮时，“撰写”按钮给它让出右侧位置 */
-  body:has(.share-fab) .input-trigger {
-    right: 76px;
-  }
-
-  /* 窄屏上整个页面滚动：分享按钮固定在屏幕右下角，与“撰写”按钮同一行 */
-  .share-anchor {
-    position: fixed;
-    right: 16px;
-    bottom: calc(13px + env(safe-area-inset-bottom, 0px));
-    z-index: 30;
-  }
-
   .fit-notice-anchor {
     padding: 0 12px;
   }
@@ -1665,9 +1652,11 @@ html:has(.sheet[open]) {
     min-height: 70vh;
   }
 
-  /* 窄屏上页面贴满画布宽度：画布顶部留出浮动控件的位置，避免盖住标题 */
+  /* 窄屏上页面贴满画布宽度：画布顶部留出浮动控件的位置，避免盖住标题；
+     底部留出右下角分享按钮的位置，避免盖住页面 */
   .viewport {
     padding-top: 48px;
+    padding-bottom: 80px;
   }
 
   .panel {

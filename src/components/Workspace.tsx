@@ -195,7 +195,7 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
         <div className="fit-notice-anchor" style={{ paddingBottom: 12 + viewport.scrollbarBottom }}>
           <NoteFitNotice fit={fit} />
         </div>
-        {/* 分享按钮浮在画布右下角，避开滚动条；窄屏上固定在底部“撰写”按钮右侧 */}
+        {/* 分享按钮浮在画布右下角，避开滚动条 */}
         <div
           className="share-anchor"
           style={{ "--share-right": `${16 + viewport.scrollbar}px`, "--share-bottom": `${16 + viewport.scrollbarBottom}px` } as CSSProperties}
