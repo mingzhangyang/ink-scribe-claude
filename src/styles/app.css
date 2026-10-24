@@ -614,8 +614,61 @@ input[type="range"] {
   z-index: 2;
   display: flex;
   justify-content: center;
-  padding: 0 12px;
+  /* 两侧留出右下角分享按钮的宽度，提示保持居中且不与按钮重叠 */
+  padding: 0 76px;
   pointer-events: none;
+}
+
+/* 分享按钮浮在画布右下角 */
+.share-anchor {
+  position: absolute;
+  right: var(--share-right, 16px);
+  bottom: var(--share-bottom, 16px);
+  z-index: 3;
+}
+
+.share-fab {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.share-fab:not(:disabled):hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.share-fab:focus-visible {
+  outline: 2px solid var(--select-bg);
+  outline-offset: 2px;
+}
+
+.share-fab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.share-fab[aria-busy="true"] {
+  cursor: progress;
+}
+
+.share-fab[aria-busy="true"] svg {
+  animation: share-pulse 1s ease-in-out infinite;
+}
+
+@keyframes share-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .fit-notice {
@@ -727,6 +780,12 @@ input[type="range"] {
 
 @media (prefers-reduced-motion: reduce) {
   .loading-pen {
+    animation: none;
+  }
+
+  .share-fab,
+  .share-fab[aria-busy="true"] svg {
+    transition: none;
     animation: none;
   }
 }
@@ -1554,6 +1613,23 @@ html:has(.sheet[open]) {
     padding: 12px 16px;
     font-size: 15px;
     box-shadow: var(--shadow);
+  }
+
+  /* 编辑页有分享按钮时，“撰写”按钮给它让出右侧位置 */
+  body:has(.share-fab) .input-trigger {
+    right: 76px;
+  }
+
+  /* 窄屏上整个页面滚动：分享按钮固定在屏幕右下角，与“撰写”按钮同一行 */
+  .share-anchor {
+    position: fixed;
+    right: 16px;
+    bottom: calc(13px + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+  }
+
+  .fit-notice-anchor {
+    padding: 0 12px;
   }
 
   .toast {
