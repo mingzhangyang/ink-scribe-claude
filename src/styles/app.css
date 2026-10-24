@@ -1922,35 +1922,34 @@ a.brand {
   border-top: 1px solid var(--border);
 }
 
-.contact-link {
+.menu-contact-actions {
   display: flex;
+  gap: 8px;
+}
+
+.contact-icon-link {
+  display: inline-flex;
+  flex: 0 0 44px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 44px;
-  padding: 9px 12px;
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 14px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
   text-decoration: none;
 }
 
-.contact-link:hover {
-  background: var(--field-bg);
+.contact-icon-link:hover {
+  background: var(--surface-2);
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
-.contact-link:focus-visible {
+.contact-icon-link:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 3px;
-}
-
-.contact-value {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .menu-legal {
