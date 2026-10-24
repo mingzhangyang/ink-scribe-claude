@@ -28,13 +28,15 @@ export function ShareButton({ pageRef, fit, onToast }: {
   const aiDoodle = useNoteStore((s) => s.aiDoodle);
   const generating = useNoteStore((s) => s.status === "loading");
   const selectSticker = useNoteStore((s) => s.selectSticker);
-  const [busy, setBusy] = useState(false);
+  // 渲染图片与系统分享面板打开期间都不接受新的点击：同时发起第二次分享会被浏览器拒绝
+  const [phase, setPhase] = useState<"idle" | "preparing" | "sharing">("idle");
   const prepared = useRef<{ snapshot: Snapshot; file: File } | null>(null);
   const t = useT();
 
   if (!note) return null;
   const snapshot: Snapshot = [note, settings, stickers, aiDoodle];
-  const disabled = busy || generating || fit?.status !== "ready";
+  const preparing = phase === "preparing";
+  const disabled = phase !== "idle" || generating || fit?.status !== "ready";
 
   function cachedFile(): File | null {
     const cached = prepared.current;
@@ -42,6 +44,7 @@ export function ShareButton({ pageRef, fit, onToast }: {
   }
 
   async function share(file: File, freshGesture: boolean) {
+    setPhase("sharing");
     try {
       await navigator.share({ files: [file], title: note!.title });
     } catch (error) {
@@ -49,13 +52,15 @@ export function ShareButton({ pageRef, fit, onToast }: {
       // 渲染耗时较长时点击手势已过期，浏览器会拒绝分享：图片已备好，再点一次即可立即分享
       if (!freshGesture && isDomError(error, "NotAllowedError")) onToast(t.share.ready);
       else onToast(t.share.failed);
+    } finally {
+      setPhase("idle");
     }
   }
 
   async function prepareAndShare() {
     const node = pageRef.current;
     if (!node) return;
-    setBusy(true);
+    setPhase("preparing");
     selectSticker(null);
     try {
       const { blob } = await renderNoteBlob(node, {
@@ -75,7 +80,7 @@ export function ShareButton({ pageRef, fit, onToast }: {
     } catch {
       onToast(t.share.failed);
     } finally {
-      setBusy(false);
+      setPhase("idle");
     }
   }
 
@@ -91,10 +96,10 @@ export function ShareButton({ pageRef, fit, onToast }: {
       type="button"
       className="share-fab"
       disabled={disabled}
-      aria-busy={busy}
+      aria-busy={preparing}
       onClick={handleClick}
       aria-label={t.share.label}
-      title={busy ? t.share.preparing : t.share.label}
+      title={preparing ? t.share.preparing : t.share.label}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="18" cy="5" r="3" />
