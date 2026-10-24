@@ -116,6 +116,44 @@ export function Wang({ color }: ArtProps) {
   );
 }
 
+export function Jiang({ color }: ArtProps) {
+  // “将”：右上角一面小令旗，和字一起裁成贴纸
+  return (
+    <Frame type="jiang">
+      <DieCut d={`${PHRASE_PATHS.jiang} M56 5 L58.5 5 L58.5 21 L56 21 Z M58.5 5 L67 9.5 L58.5 14 Z`} color={color} />
+    </Frame>
+  );
+}
+
+/** 四角星形的闪光。 */
+const sparkle = (cx: number, cy: number, r: number) =>
+  `M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r} Z`;
+
+export function Shuai({ color }: ArtProps) {
+  // “帅”：旁边闪着两颗星光
+  return (
+    <Frame type="shuai">
+      <DieCut d={PHRASE_PATHS.shuai} color={color} />
+      <path d={`${sparkle(63, 11, 7)} ${sparkle(55, 4.5, 3.5)}`} style={{ fill: "#FACC15", stroke: "#FFFFFF", strokeWidth: 3, strokeLinejoin: "round", paintOrder: "stroke" }} />
+    </Frame>
+  );
+}
+
+export function Ku({ color }: ArtProps) {
+  // “酷”：右上角架一副墨镜
+  const lens = "M47 8 L58 8 L57 14 C56.5 16 54 17 52 16.5 C49 16 47.5 13 47 8 Z M60 8 L71 8 C70.5 13 69 16 66 16.5 C64 17 61.5 16 61 14 Z";
+  return (
+    <Frame type="ku">
+      <DieCut d={PHRASE_PATHS.ku} color={color} />
+      <g transform="translate(-3 1)">
+        <path d={`${lens} M57 9.2 L61 9.2`} style={{ fill: "#1F2937", stroke: "#FFFFFF", strokeWidth: 3.5, strokeLinejoin: "round", paintOrder: "stroke" }} />
+        <path d="M57.5 9.2 L60.5 9.2" style={{ fill: "none", stroke: "#1F2937", strokeWidth: 1.6 }} />
+        <path d="M49.5 10 L52 10 M62.5 10 L65 10" style={{ fill: "none", stroke: "rgba(255,255,255,0.7)", strokeWidth: 1.2, strokeLinecap: "round" }} />
+      </g>
+    </Frame>
+  );
+}
+
 /** 字母 Y 用粗笔画画成，方头方角，和站酷快乐体的贴纸字一样厚实。 */
 const LETTER_Y = "M15 14 L32 37 L49 14 M32 37 L32 60";
 

@@ -24,15 +24,18 @@ import {
   WaterFormula,
 } from "./art/formulas.tsx";
 import { Apple, Banana, Grape, Mango, Orange, Strawberry, Watermelon } from "./art/fruit.tsx";
-import { Bird, Chili, Detective, Dog, Hedgehog } from "./art/line-art.tsx";
+import { Bird, Chili, Detective, Dog, Hedgehog, Princess } from "./art/line-art.tsx";
 import { Arrow, Bracket, Check, CircleMark, Cross, Exclaim, Question, WavyUnderline } from "./art/marks.tsx";
 import { Face, Heart, PressedFlower, Sparkles, Star } from "./art/mood.tsx";
 import { DogEar, KraftTag, PageFlag, PostageStamp, RibbonBookmark, StickyNote, TicketStub, TornPaper } from "./art/paper.tsx";
 import {
   Geili,
   Hang,
+  Jiang,
   Juan,
+  Ku,
   LetterY,
+  Shuai,
   Tainiule,
   Tangping,
   Tongyi,
@@ -173,6 +176,10 @@ const DECOR_ART: Record<DecorStickerType, ComponentType<ArtProps>> = {
   zan: Zan,
   "letter-y": LetterY,
   wang: Wang,
+  princess: Princess,
+  jiang: Jiang,
+  shuai: Shuai,
+  ku: Ku,
 };
 
 type Props = { item: StickerItem; naturalness: number; seed: number };
