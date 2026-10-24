@@ -70,6 +70,8 @@ function serviceWorker(): Plugin {
   return {
     name: "ink-scribe:service-worker",
     apply: "build",
+    // 在 Vite 生成 index.html 之后运行，版本号才能覆盖最终的 HTML 外壳
+    enforce: "post",
     buildStart() {
       if (this.environment.name !== "client") return;
       this.emitFile({ type: "chunk", id: resolve("src/sw.ts"), fileName: swFile });
@@ -86,7 +88,8 @@ function serviceWorker(): Plugin {
         .sort();
       const hash = createHash("sha256").update(sw.code).update(files.join("\n"));
       const html = bundle["index.html"];
-      if (html?.type === "asset") hash.update(html.source);
+      if (html?.type !== "asset") this.error("计算 Service Worker 版本时还没有生成 index.html");
+      hash.update(html.source);
       for (const name of publicFiles) hash.update(readFileSync(resolve("public", name)));
       const manifest = { version: hash.digest("hex").slice(0, 12), precache: ["/", ...publicFiles.map((name) => `/${name}`), ...files] };
       sw.code = sw.code.replaceAll(placeholder, JSON.stringify(manifest));

@@ -67,6 +67,8 @@ async function register() {
     worker.addEventListener("statechange", check);
   };
   track(registration.waiting);
+  // 另一个标签页可能已经在安装新版本，updatefound 早于本页注册时触发
+  track(registration.installing);
   registration.addEventListener("updatefound", () => track(registration.installing));
   // 长时间开着的页面回到前台时检查新版本
   document.addEventListener("visibilitychange", () => {

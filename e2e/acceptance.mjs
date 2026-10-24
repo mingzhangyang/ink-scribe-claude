@@ -2215,9 +2215,22 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
   const { page, context } = await newPage({ serviceWorkers: "allow" });
   await page.goto(URL, { waitUntil: "load" });
   const registration = await page.evaluate(async () => {
-    const ready = await navigator.serviceWorker.ready;
-    if (!navigator.serviceWorker.controller) {
-      await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+    // 注册或预缓存失败时 serviceWorker.ready 会一直等待，需要自己设置超时，让用例失败而不是卡住
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Service Worker 未在 20 秒内接管页面")), 20_000));
+    let ready;
+    try {
+      ready = await Promise.race([
+        (async () => {
+          const result = await navigator.serviceWorker.ready;
+          if (!navigator.serviceWorker.controller) {
+            await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+          }
+          return result;
+        })(),
+        timeout,
+      ]);
+    } catch (error) {
+      return { error: error.message, controlled: false, cached: [] };
     }
     const names = await caches.keys();
     const app = names.find((name) => name.startsWith("ink-scribe-app-"));
