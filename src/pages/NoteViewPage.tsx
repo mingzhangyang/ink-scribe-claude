@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { isOneOf, TEMPLATES } from "../../shared/options.ts";
+import { noteLanguage } from "../../shared/note.ts";
+import { templateLabel } from "../../shared/options.ts";
 import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.ts";
 import { NotePage } from "../components/note/NotePage.tsx";
 import { NoteFitNotice, NoteFitStatus } from "../components/note/NoteFitStatus.tsx";
@@ -89,6 +90,8 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   }
 
   const { data } = state;
+  const locale = noteLanguage(data.note);
+  const template = templateLabel(data.summary.template, locale) ?? (locale === "en" ? "Note" : "笔记");
   const page = (
     <NotePage
       ref={pageRef}
@@ -145,7 +148,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
         <div className="view-meta">
           <h2>{data.note.title}</h2>
           <p className="hint">
-            {isOneOf(TEMPLATES, data.summary.template) ? t.options.templates[data.summary.template] : t.view.note}
+            {template}
             {data.note.date ? ` · ${data.note.date}` : ""}
             {data.summary.visibility === "unlisted" ? t.view.unlisted : ""}
           </p>

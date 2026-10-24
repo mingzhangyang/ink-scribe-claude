@@ -1,7 +1,8 @@
 import type { PublishedNote, PublishedNoteSummary } from "../shared/api.ts";
 import { GUIDE_CONTENT, getGuideExamples, type GuideItem, type GuideLocale } from "../shared/guide.ts";
 import { LEGAL_CONTENT, type LegalLocale, type LegalPageId } from "../shared/legal.ts";
-import { TEMPLATE_LABELS, TEMPLATES, isOneOf } from "../shared/options.ts";
+import { noteLanguage, NOTE_LABELS } from "../shared/note.ts";
+import { templateLabel } from "../shared/options.ts";
 import { loadConfig } from "./config.ts";
 import type { Env } from "./env.ts";
 import { getNoteRow, isNoteId, listNotes, listPublicNoteDates, toPublished, toSummary } from "./store.ts";
@@ -331,16 +332,12 @@ export function legalPage(origin: string, page: LegalPageId, locale: LegalLocale
 
 // ---------- 图库 ----------
 
-function templateLabel(template: string): string | undefined {
-  return isOneOf(TEMPLATES, template) ? TEMPLATE_LABELS[template] : undefined;
-}
-
 export function galleryPage(origin: string, notes: PublishedNoteSummary[]): PageMeta {
   const url = `${origin}/gallery`;
   const description = "墨语笔记图库：浏览公开的手写风格笔记，包括读书摘抄、会议纪要、课程总结与思想碎片。";
   const items = notes
     .map((note) => {
-      const meta = [templateLabel(note.template), note.createdAt.slice(0, 10)].filter(Boolean).join(" · ");
+      const meta = [templateLabel(note.template, "zh"), note.createdAt.slice(0, 10)].filter(Boolean).join(" · ");
       return `<li><a href="/n/${note.id}">${escapeHtml(note.title)}</a><p>${escapeHtml(note.summary)}</p><small>${escapeHtml(meta)}</small></li>`;
     })
     .join("");
@@ -409,26 +406,31 @@ export function contentToHtml(content: string): string {
 export function notePage(origin: string, published: PublishedNote): PageMeta {
   const { note } = published;
   const url = published.url;
-  const lang = published.language === "en" ? "en" : "zh-CN";
-  const section = templateLabel(published.template);
+  const locale = noteLanguage(note);
+  const lang = locale === "en" ? "en" : "zh-CN";
+  const labels = NOTE_LABELS[locale];
+  const section = templateLabel(published.template, locale);
   const tags = note.cues.map((cue) => cue.keyword).filter(Boolean);
   const description = truncate(published.summary || note.summary || note.sections[0]?.content || note.title, 160);
   const isPublic = published.visibility === "public";
   const meta = [note.date, section].filter(Boolean).map((part) => escapeHtml(part!)).join(" · ");
   const cues = note.cues.length
-    ? `<aside><h2>线索</h2><dl>${note.cues.map((cue) => `<dt>${escapeHtml(cue.keyword)}</dt>${cue.note ? `<dd>${escapeHtml(cue.note)}</dd>` : ""}`).join("")}</dl></aside>`
+    ? `<aside><h2>${labels.cues}</h2><dl>${note.cues.map((cue) => `<dt>${escapeHtml(cue.keyword)}</dt>${cue.note ? `<dd>${escapeHtml(cue.note)}</dd>` : ""}`).join("")}</dl></aside>`
     : "";
   const sections = note.sections
     .map((s) => `<section>${s.heading ? `<h2>${escapeHtml(s.heading)}</h2>` : ""}${contentToHtml(s.content)}</section>`)
     .join("");
-  const summary = note.summary ? `<section><h2>总结</h2><p>${escapeHtml(note.summary)}</p></section>` : "";
+  const summary = note.summary ? `<section><h2>${labels.summary}</h2><p>${escapeHtml(note.summary)}</p></section>` : "";
+  const attribution = locale === "en"
+    ? `Made into a handwritten note with <a href="/">InkScribe</a>${isPublic ? ' · <a href="/gallery">More public notes</a>' : ""}`
+    : `由 <a href="/">${SITE_FULL_NAME}</a> 整理为手写笔记${isPublic ? ' · <a href="/gallery">更多公开笔记</a>' : ""}`;
   const body = `<main class="ssr">
   <article lang="${lang}">
     <h1>${escapeHtml(note.title)}</h1>
     <p class="ssr-meta"><time datetime="${published.createdAt}">${meta || published.createdAt.slice(0, 10)}</time></p>
     ${cues}${sections}${summary}
   </article>
-  <p class="ssr-meta">由 <a href="/">${SITE_FULL_NAME}</a> 整理为手写笔记${isPublic ? ` · <a href="/gallery">更多公开笔记</a>` : ""}</p>
+  <p class="ssr-meta">${attribution}</p>
 </main>`;
   const articleLd = {
     "@context": "https://schema.org",
@@ -450,7 +452,7 @@ export function notePage(origin: string, published: PublishedNote): PageMeta {
   };
   return {
     status: 200,
-    title: `${note.title} · ${SITE_NAME}`,
+    title: `${note.title} · ${locale === "en" ? "InkScribe" : SITE_NAME}`,
     description,
     canonical: url,
     ogType: "article",
@@ -463,8 +465,8 @@ export function notePage(origin: string, published: PublishedNote): PageMeta {
       ? [
           articleLd,
           breadcrumbLd([
-            { name: SITE_NAME, url: `${origin}/` },
-            { name: "图库", url: `${origin}/gallery` },
+            { name: locale === "en" ? "InkScribe" : SITE_NAME, url: `${origin}/` },
+            { name: locale === "en" ? "Gallery" : "图库", url: `${origin}/gallery` },
             { name: truncate(note.title, 60), url },
           ]),
         ]

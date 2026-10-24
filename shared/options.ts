@@ -17,6 +17,15 @@ export const TEMPLATE_LABELS: Record<Template, string> = {
   "idea-fragments": "思想碎片",
 };
 
+/** Shared with the English interface, published-note chrome, and crawler HTML. */
+export const TEMPLATE_LABELS_EN: Record<Template, string> = {
+  general: "General",
+  "reading-notes": "Reading notes",
+  "meeting-minutes": "Meeting minutes",
+  "lecture-summary": "Lecture summary",
+  "idea-fragments": "Idea fragments",
+};
+
 export const LANGUAGES = ["auto", "zh", "en"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
@@ -47,4 +56,9 @@ export const DETAIL_LABELS: Record<Detail, string> = {
 
 export function isOneOf<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === "string" && (values as readonly string[]).includes(value);
+}
+
+/** Published-note template labels follow the content language, not the visitor's interface preference. */
+export function templateLabel(value: string, locale: "zh" | "en"): string | undefined {
+  return isOneOf(TEMPLATES, value) ? (locale === "en" ? TEMPLATE_LABELS_EN : TEMPLATE_LABELS)[value] : undefined;
 }

@@ -33,6 +33,12 @@ export function noteLanguage(note: NoteStructure): "zh" | "en" {
   return detectLanguage([note.title, note.summary, ...note.sections.map((s) => s.content)].join("\n"));
 }
 
+/** Note-facing labels are keyed by the note's language, never by the viewer's UI preference. */
+export const NOTE_LABELS = {
+  zh: { cues: "线索", summary: "总结", notes: "笔记", topic: "主题", date: "日期", keywords: "关键词" },
+  en: { cues: "Cues", summary: "Summary", notes: "Notes", topic: "Topic", date: "Date", keywords: "Keywords" },
+} as const;
+
 export const NOTE_LIMITS = {
   title: 60,
   date: 40,
