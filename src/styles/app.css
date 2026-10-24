@@ -2088,13 +2088,21 @@ a.brand {
   text-decoration: none;
 }
 
+/* 缩略图只排标题与摘要文字，高度跟随内容而不是按 A4 比例，避免窄屏单列时卡片大半空白 */
 .gallery-thumb {
   width: 100%;
-  aspect-ratio: 840 / 1188;
+  min-height: 140px;
   border-radius: 6px;
   background: var(--paper-ui);
   box-shadow: var(--card-shadow);
   transition: transform 0.15s ease;
+}
+
+/* 同一行的缩略图拉齐到最高的一张，下方说明保持对齐 */
+.gallery-card > .gallery-thumb,
+.library-open,
+.library-open > .gallery-thumb {
+  flex-grow: 1;
 }
 
 .gallery-card:hover .gallery-thumb,
@@ -2133,7 +2141,7 @@ a.brand {
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 12;
+  -webkit-line-clamp: 6;
   font-size: 14px;
   line-height: 1.7;
   color: #44403c;
@@ -2314,7 +2322,8 @@ a.brand {
 }
 
 .library-open {
-  display: block;
+  display: flex;
+  flex-direction: column;
   padding: 0;
   border: 0;
   background: none;
