@@ -207,7 +207,7 @@ const mistPreview = await page.evaluate(() => {
     selected: swatch.getAttribute("aria-checked"),
     cls: paper.className,
     color: style.backgroundColor,
-    tileCount: (style.backgroundImage.match(/url\\(/g) ?? []).length,
+    tileCount: (style.backgroundImage.match(/url[(]/g) ?? []).length,
     swatchColor: getComputedStyle(swatch).backgroundColor,
   };
 });
