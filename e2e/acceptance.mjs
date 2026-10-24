@@ -178,6 +178,46 @@ const look = await page.evaluate(() => {
   return { cls: el.className, ink: el.style.getPropertyValue("--ink") };
 });
 check("F1", "切换纸张/墨水/版式即时生效", look.cls.includes("paper-kraft") && look.cls.includes("layout-classic-cornell") && look.ink === "#451A03", JSON.stringify(look));
+// Verify exactly two rows of four swatches across desktop, narrow sidebar and phone.
+const paperGridAtWidths = [];
+for (const width of [1600, 1024, 375]) {
+  await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+  paperGridAtWidths.push(await page.locator(".paper-swatch-grid").evaluate((grid) => {
+    const rects = [...grid.children].map((child) => child.getBoundingClientRect());
+    const tops = [...new Set(rects.map((r) => Math.round(r.top)))];
+    return {
+      count: rects.length,
+      rows: tops.length,
+      firstRow: rects.filter((r) => Math.abs(r.top - rects[0].top) < 1).length,
+      overflow: Math.max(...rects.map((r) => r.right)) - grid.getBoundingClientRect().right,
+    };
+  }));
+}
+await page.setViewportSize({ width: 1600, height: 1000 });
+check("F3", "八种纸张在桌面与手机均按四列两行排列", paperGridAtWidths.every(
+  (r) => r.count === 8 && r.rows === 2 && r.firstRow === 4 && r.overflow <= 1,
+), JSON.stringify(paperGridAtWidths));
+
+await page.getByRole("radio", { name: "雾蓝棉纸" }).click();
+const mistPreview = await page.evaluate(() => {
+  const paper = document.querySelector(".note-page");
+  const swatch = document.querySelector(".paper-swatch.paper-mist-cotton");
+  const style = getComputedStyle(paper);
+  return {
+    selected: swatch.getAttribute("aria-checked"),
+    cls: paper.className,
+    color: style.backgroundColor,
+    tileCount: (style.backgroundImage.match(/url\\(/g) ?? []).length,
+    swatchColor: getComputedStyle(swatch).backgroundColor,
+  };
+});
+check("F4", "雾蓝棉纸的预览底色和纤维纹理立即生效",
+  mistPreview.selected === "true" && mistPreview.cls.includes("paper-mist-cotton")
+  && mistPreview.color === "rgb(231, 240, 242)"
+  && mistPreview.swatchColor === mistPreview.color && mistPreview.tileCount === 2,
+  JSON.stringify(mistPreview));
+await page.getByRole("radio", { name: "牛皮纸" }).click();
+
 for (const label of ["字号", "行距", "字距"]) {
   const input = page.locator(".range-field").filter({ hasText: label }).locator("input");
   await input.fill(label === "字号" ? "17" : label === "行距" ? "1.6" : "0.05");
@@ -437,6 +477,51 @@ const clip = await page.evaluate(async () => {
   return { types: items[0].types, w: bmp.width, h: bmp.height };
 });
 check("J1", "支持的浏览器可复制 PNG 到剪贴板", clip.types.includes("image/png") && clip.w > 0, JSON.stringify(clip));
+
+// Verify the new embedded SVG fibers survive export, not just the CSS preview.
+await page.getByRole("tab", { name: "样式" }).click();
+await page.getByRole("radio", { name: "雾蓝棉纸" }).click();
+await waitForNoteReady(page);
+await page.getByRole("tab", { name: "导出" }).click();
+await page.getByRole("radio", { name: "PNG（无损）" }).click();
+await page.getByRole("radio", { name: "1x" }).click();
+const [mistDownload] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.getByRole("button", { name: "下载图片" }).click()]);
+const mistPath = `${SP}/accept-mist-cotton.png`;
+await mistDownload.saveAs(mistPath);
+const mistPixels = await page.evaluate(async (data) => {
+  const img = new Image();
+  img.src = `data:image/png;base64,${data}`;
+  await img.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+  let opaque = 0;
+  let bluePaper = 0;
+  let total = 0;
+  const colors = new Set();
+  for (const x of [12, 22, img.width - 22, img.width - 12]) {
+    for (const y of [15, 75, 135, 310, 730, 1080]) {
+      const i = (y * img.width + x) * 4;
+      const [r, g, b, a] = pixels.subarray(i, i + 4);
+      total++;
+      colors.add(`${r},${g},${b}`);
+      if (a >= 250) opaque++;
+      if (Math.abs(r - 231) <= 35 && Math.abs(g - 240) <= 35
+        && Math.abs(b - 242) <= 35 && b > r && g > r) bluePaper++;
+    }
+  }
+  return { total, opaque, bluePaper, variations: colors.size };
+}, fs.readFileSync(mistPath).toString("base64"));
+check("H7", "雾蓝棉纸 PNG 导出保留冷色纸面及细纹，且不黑屏或透明",
+  mistPixels.opaque === mistPixels.total && mistPixels.bluePaper >= mistPixels.total * 0.9
+  && mistPixels.variations > 1, JSON.stringify(mistPixels));
+// Keep the remainder of the existing acceptance flow on its original material.
+await page.getByRole("tab", { name: "样式" }).click();
+await page.getByRole("radio", { name: "牛皮纸" }).click();
+await page.getByRole("tab", { name: "导出" }).click();
 
 // ---------- I. 长图倍率限制 ----------
 await page.getByRole("tab", { name: "样式" }).click();

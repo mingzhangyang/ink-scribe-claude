@@ -8,6 +8,7 @@ export const PAPERS = [
   { id: "textured", label: "纹理纸", base: "#F5F5F3", lineColor: "transparent" },
   { id: "kraft", label: "牛皮纸", base: "#D8BF98", lineColor: "rgba(69, 26, 3, 0.10)" },
   { id: "parchment", label: "复古羊皮纸", base: "#EFE3CE", lineColor: "transparent" },
+  { id: "mist-cotton", label: "雾蓝棉纸", base: "#E7F0F2", lineColor: "transparent" },
 ] as const;
 export type PaperId = (typeof PAPERS)[number]["id"];
 
