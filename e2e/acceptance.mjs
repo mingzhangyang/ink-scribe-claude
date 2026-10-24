@@ -895,6 +895,39 @@ if (process.env.E2E_API_KEY) {
   const revisitHtml = await revisit.text();
   check("V4b", "带缓存校验头再次打开链接仍返回完整页面", revisit.status() === 200 && revisitHtml.includes(`og:title" content="${title}"`), `ETag ${shellEtag || "无"}，HTTP ${revisit.status()}`);
 
+  const englishPublication = await p7.request.post(`${URL}api/v1/notes`, {
+    headers: auth,
+    data: {
+      schemaVersion: 1,
+      visibility: "public",
+      template: "lecture-summary",
+      note: {
+        title: "Study Methods · Learning Science",
+        cues: [{ keyword: "Active recall", note: "Retrieve the answer from memory." }],
+        sections: [{ heading: "Spaced practice", content: "Review the material at increasing intervals.", highlights: [] }],
+        summary: "Retrieval practice builds lasting knowledge.",
+      },
+    },
+  });
+  const englishNote = await englishPublication.json();
+  if (englishPublication.status() !== 201) throw new Error(`English publication failed: ${JSON.stringify(englishNote)}`);
+  const englishHtml = await (await p7.request.get(englishNote.url)).text();
+  check("V4c", "英文笔记 SSR 标题、Summary、Cues、JSON-LD 与 article:section 均为英文",
+    englishHtml.includes("<h2>Summary</h2>") && englishHtml.includes("<h2>Cues</h2>") &&
+    englishHtml.includes('"articleSection":"Lecture summary"') &&
+    englishHtml.includes('article:section" content="Lecture summary"') &&
+    englishHtml.includes("Study Methods · Learning Science · InkScribe") &&
+    !englishHtml.includes("<h2>总结</h2>") && !englishHtml.includes("课程总结"));
+  await p7.goto(englishNote.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(p7);
+  await setAppPreference(p7, "locale", "en");
+  const englishChrome = await p7.locator(".view-meta .hint").innerText();
+  await setAppPreference(p7, "locale", "zh");
+  const chineseChrome = await p7.locator(".view-meta .hint").innerText();
+  check("V4d", "英文笔记 chrome 模板名称不受界面语言切换影响",
+    englishChrome.includes("Lecture summary") && chineseChrome.includes("Lecture summary") &&
+    !chineseChrome.includes("课程总结"), `en: ${englishChrome}; zh: ${chineseChrome}`);
+
   await p7.goto(`${URL}gallery`, { waitUntil: "networkidle" });
   const card = p7.locator(".gallery-card").filter({ hasText: title });
   check("V5", "公开笔记出现在图库", (await card.count()) === 1);
@@ -918,6 +951,8 @@ if (process.env.E2E_API_KEY) {
   check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
 
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
+  const englishRemoved = await p7.request.delete(`${URL}api/v1/notes/${englishNote.id}`, { headers: auth });
+  check("V8b", "英文回归样本已清理", englishRemoved.status() === 204);
   const unlistedRemoved = await p7.request.delete(`${URL}api/v1/notes/${unlisted.id}`, { headers: auth });
   const unlistedGone = await p7.request.get(`${URL}api/notes/${unlisted.id}`);
   check("V8", "仅链接可见的笔记也能删除且不能继续读取", unlistedRemoved.status() === 204 && unlistedGone.status() === 404, `DELETE ${unlistedRemoved.status()}，GET ${unlistedGone.status()}`);

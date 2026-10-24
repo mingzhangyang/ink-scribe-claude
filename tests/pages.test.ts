@@ -92,10 +92,39 @@ describe("note page", () => {
     expect(meta.body).not.toContain('href="/gallery"');
   });
 
-  it("uses the English locale for English notes", () => {
-    const meta = notePage(ORIGIN, published({ language: "en" }));
+  it("localizes English note HTML, template metadata and structured data by note language", () => {
+    const english = published({
+      language: "en",
+      template: "lecture-summary",
+      summary: "Retrieval practice strengthens long-term learning.",
+      note: {
+        title: "Study Methods · Learning Science",
+        cues: [{ keyword: "Recall", note: "Retrieve ideas without looking." }],
+        sections: [{ heading: "Spaced practice", content: "Review across several days.", highlights: [] }],
+        summary: "Retrieval practice strengthens long-term learning.",
+      },
+    });
+    const meta = notePage(ORIGIN, english);
+    const head = headTags(meta, ORIGIN);
     expect(meta.lang).toBe("en");
-    expect(headTags(meta, ORIGIN)).toContain('<meta property="og:locale" content="en_US" />');
+    expect(meta.title).toBe("Study Methods · Learning Science · InkScribe");
+    expect(meta.body).toContain("<h2>Cues</h2>");
+    expect(meta.body).toContain("<h2>Summary</h2>");
+    expect(meta.body).toContain("Lecture summary");
+    expect(meta.body).not.toMatch(/<h2>(总结|线索)<\/h2>|课程总结/);
+    expect(meta.article?.section).toBe("Lecture summary");
+    expect(meta.jsonLd[0]).toMatchObject({ inLanguage: "en", articleSection: "Lecture summary" });
+    expect(head).toContain('<meta property="og:locale" content="en_US" />');
+    expect(head).toContain('<meta property="article:section" content="Lecture summary" />');
+    expect(head).toContain('"articleSection":"Lecture summary"');
+  });
+
+  it("preserves Chinese note labels and metadata", () => {
+    const meta = notePage(ORIGIN, published({ template: "lecture-summary" }));
+    expect(meta.lang).toBe("zh-CN");
+    expect(meta.body).toContain("<h2>线索</h2>");
+    expect(meta.body).toContain("<h2>总结</h2>");
+    expect(meta.article?.section).toBe("课程总结");
   });
 
   it("serves a noindex 404 page for missing notes", () => {

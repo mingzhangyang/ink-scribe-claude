@@ -1,3 +1,4 @@
+import { TEMPLATE_LABELS_EN } from "../../shared/options.ts";
 import type { Messages } from "./zh.ts";
 
 /** Pen colors shared by the formula stickers, and the two styles of the science, space and line-art stickers. */
@@ -44,13 +45,7 @@ export const en: Messages = {
   },
 
   options: {
-    templates: {
-      general: "General",
-      "reading-notes": "Reading notes",
-      "meeting-minutes": "Meeting minutes",
-      "lecture-summary": "Lecture summary",
-      "idea-fragments": "Idea fragments",
-    },
+    templates: TEMPLATE_LABELS_EN,
     languages: { auto: "Same as source", zh: "中文", en: "English" },
     details: { concise: "Concise", standard: "Standard", detailed: "Detailed" },
     styles: {
