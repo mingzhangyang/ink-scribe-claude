@@ -12,6 +12,7 @@ import {
   type StickerVariant,
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
+import { PAPERS } from "../shared/appearance.ts";
 import { fetchPublishedNote } from "../src/api.ts";
 import { FORMULA_TEXT, GREEK_LETTERS, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
@@ -158,6 +159,14 @@ describe("doodle rendering", () => {
 });
 
 describe("sanitizeSettings", () => {
+  it("accepts the eighth, cool-toned cotton paper without changing the default", () => {
+    expect(PAPERS).toHaveLength(8);
+    expect(new Set(PAPERS.map((paper) => paper.id)).size).toBe(8);
+    expect(PAPERS[7]).toMatchObject({ id: "mist-cotton", label: "雾蓝棉纸", base: "#E7F0F2" });
+    expect(sanitizeSettings({ paper: "mist-cotton" }).paper).toBe("mist-cotton");
+    expect(DEFAULT_SETTINGS.paper).toBe("grid");
+  });
+
   it("falls back to defaults for unknown or malformed values", () => {
     expect(sanitizeSettings({ layout: "bogus", paper: 42, fontSize: "huge", naturalness: null, seed: 1.5 })).toEqual(DEFAULT_SETTINGS);
     expect(sanitizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);

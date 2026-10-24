@@ -69,7 +69,7 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
 
       <fieldset className="field">
         <legend>{t.style.paper}</legend>
-        <div className="swatch-group" role="radiogroup" aria-label={t.style.paper}>
+        <div className="swatch-group paper-swatch-grid" role="radiogroup" aria-label={t.style.paper}>
           {PAPERS.map((paper) => (
             <button
               key={paper.id}

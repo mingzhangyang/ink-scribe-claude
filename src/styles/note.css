@@ -82,6 +82,15 @@
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.3 0 0 0 0 0.15 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* Cool blue cotton fibers: sparse directional strands above fine, low-contrast
+   grain. Embedded SVG tiles use the same preview/export rasterization path as
+   the other paper materials and do not require external assets. */
+.paper-mist-cotton {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='none' stroke='%23698E9D' stroke-opacity='.18' stroke-width='.8' stroke-linecap='round'%3E%3Cpath d='M17 29l8 -2M80 14l5 1M144 40l7 -1M235 21l6 2M41 96l9 -1M118 116l4 -2M212 86l7 1M263 131l5 -2M19 174l6 1M92 214l9 -2M154 175l6 2M229 203l5 -1M44 261l7 -2M177 252l9 1'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.33 0 0 0 0 0.52 0 0 0 0 0.58 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 /* ---------- 手写抖动与重点 ---------- */
 .note-page .j {
   position: relative;

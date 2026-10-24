@@ -68,6 +68,7 @@ export const en: Messages = {
       textured: "Textured",
       kraft: "Kraft",
       parchment: "Parchment",
+      "mist-cotton": "Mist blue cotton",
     },
     inks: { carbon: "Carbon black", blue: "Fountain blue", brown: "Vintage brown", green: "Ink green", bordeaux: "Bordeaux" },
     accents: { yellow: "Lemon", green: "Mint", orange: "Apricot" },
