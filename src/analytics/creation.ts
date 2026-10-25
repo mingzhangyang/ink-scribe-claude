@@ -11,6 +11,7 @@ type Creation = { context: Context; attempted: boolean };
 let inputCreation: Creation | null = null;
 let rendered: { context: Context; serial: number; ready: boolean; failures: Set<string> } | null = null;
 let inputMethod: "text" | "file" = "text";
+let pendingFileInput = false;
 let queue: CreationEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 let initialized = false;
@@ -82,8 +83,8 @@ function ensureInput(): Creation | null {
     return inputCreation;
   } catch { return null; }
 }
-export function markFileInput(): void { inputMethod = "file"; inputCreation = null; }
-export function markTextInput(): void { inputMethod = "text"; }
+export function markFileInput(): void { inputMethod = "file"; inputCreation = null; pendingFileInput = true; }
+export function markTextInput(): void { inputMethod = "text"; pendingFileInput = false; }
 
 /** Start after draft hydration. Restoring a document is not a new creation. */
 export function startCreationTracking(): void {
@@ -91,10 +92,12 @@ export function startCreationTracking(): void {
   initialized = true;
   useNoteStore.subscribe((next, previous) => {
     if (next.documentSerial !== previous.documentSerial) {
-      inputCreation = null; rendered = null; inputMethod = "text";
+      inputCreation = null; rendered = null; inputMethod = "text"; pendingFileInput = false;
       return;
     }
-    if (next.input.text !== previous.input.text) {
+    // A completed import is a new journey even if its extracted text is unchanged.
+    if (pendingFileInput || next.input.text !== previous.input.text) {
+      pendingFileInput = false;
       const sample = SAMPLE_TEXTS.some((s) => s.text === next.input.text);
       if (!next.input.text.trim() || inputCreation?.attempted || (inputCreation && sample !== (inputCreation.context.source === "sample"))) inputCreation = null;
       ensureInput();

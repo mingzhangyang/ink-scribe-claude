@@ -106,3 +106,38 @@ it.each(["library_save_completed", "export_completed", "share_completed"] as con
   vi.spyOn(localStorage, "getItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
   expect(tracking.hasCreatedSuccessfully()).toBe(true);
 });
+
+
+it("records each completed identical file import before generation without duplicate starts", () => {
+  const text = "The same extracted file contents.";
+  store.getState().setInput({ text });
+  for (let i = 0; i < 2; i++) {
+    tracking.markFileInput();
+    store.getState().setInput({ text });
+    tracking.flushCreationEvents();
+    const starts = sent.filter((e) => e.name === "creation_started");
+    expect(starts).toHaveLength(i + 2);
+    expect(starts.at(-1)).toMatchObject({ inputMethod: "file", source: "own" });
+    expect(new Set(starts.map((e) => e.creationId)).size).toBe(starts.length);
+  }
+  store.getState().setInput({ language: "en" });
+  const job = tracking.beginGeneration("local");
+  job.cancel();
+  tracking.flushCreationEvents();
+  const starts = sent.filter((e) => e.name === "creation_started");
+  expect(starts).toHaveLength(3);
+  expect(sent.find((e) => e.name === "generation_started")?.creationId).toBe(starts.at(-1)?.creationId);
+});
+
+it("records changed file imports once and clears pending imports when restoring a document", () => {
+  tracking.markFileInput();
+  store.getState().setInput({ text: "New file contents." });
+  tracking.flushCreationEvents();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ name: "creation_started", inputMethod: "file" });
+  tracking.markFileInput();
+  store.setState((s) => ({ documentSerial: s.documentSerial + 1 }));
+  store.getState().setInput({ language: "en" });
+  tracking.flushCreationEvents();
+  expect(sent).toHaveLength(1);
+});
