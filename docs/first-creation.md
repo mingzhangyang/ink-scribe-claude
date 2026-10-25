@@ -90,7 +90,7 @@ reflect missing telemetry and are not proof of abandonment.
    through the normal pipeline. Ships disabled. The production `send_email`
    binding is already declared; previews have no email binding/enable flag and
    mock mode also prevents sending. No real delivery is attempted by tests.
-5. Confirm both crons: `17 13-23 * * 1` for reports and `17 3 * * *` for event cleanup.
+5. Confirm both crons: `17 13-23 * * MON` for reports and `17 3 * * *` for event cleanup.
 
 ### Delivery safety and troubleshooting
 

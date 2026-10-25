@@ -2,7 +2,8 @@ import { loadConfig } from "./config.ts";
 import type { Env } from "./env.ts";
 
 const DAY = 86_400_000;
-export const REPORT_CRON = "17 13-23 * * 1";
+// Cloudflare numbers Sunday as 1; use the weekday name to avoid cron dialect ambiguity.
+export const REPORT_CRON = "17 13-23 * * MON";
 
 /** Last complete UTC calendar week; only Monday's bounded delivery window may send. */
 export function reportWindow(now: number) {

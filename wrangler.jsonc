@@ -3,7 +3,7 @@
   "name": "ink-scribe",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
-  "triggers": { "crons": ["17 3 * * *", "17 13-23 * * 1"] },
+  "triggers": { "crons": ["17 3 * * *", "17 13-23 * * MON"] },
   "send_email": [{ "name": "WEEKLY_REPORT_EMAIL", "destination_address": "admin@orangely.xyz" }],
   "observability": { "enabled": true },
 

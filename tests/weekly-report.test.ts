@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import worker from "../worker/index.ts";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildWeeklyReport, reportWindow, sendWeeklyReport } from "../worker/weekly-report.ts";
+import { buildWeeklyReport, reportWindow, sendWeeklyReport, REPORT_CRON } from "../worker/weekly-report.ts";
 import type { Env } from "../worker/env.ts";
 import { createTestD1 } from "./helpers/d1.ts";
 
@@ -12,7 +14,7 @@ function setup() {
 
   return { DB, env, send };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("uses the previous full UTC week only in Monday's 11-hour delivery window", () => {
   expect(reportWindow(monday)).toEqual({ start: Date.parse("2026-10-19T00:00:00Z"), end: Date.parse("2026-10-26T00:00:00Z") });
@@ -117,5 +119,23 @@ it("does not resend if acceptance persistence fails after Cloudflare accepted", 
   });
   await expect(sendWeeklyReport(env, monday)).rejects.toThrow("D1 unavailable");
   await expect(sendWeeklyReport(env, monday + 3_600_000)).rejects.toThrow("already claimed");
+  expect(send).toHaveBeenCalledTimes(1);
+});
+
+
+it("routes the deployed Monday cron into email delivery, separately from daily cleanup", async () => {
+  const config = readFileSync("wrangler.jsonc", "utf8");
+  const cronArray = config.match(/"crons"\s*:\s*(\[[^\]]*\])/);
+  expect(cronArray).not.toBeNull();
+  const crons = JSON.parse(cronArray![1]) as string[];
+  // Named weekdays avoid Cloudflare's 1=Sunday versus Unix's 1=Monday mismatch.
+  expect(crons).toEqual(["17 3 * * *", "17 13-23 * * MON"]);
+  expect(crons[1]).toBe(REPORT_CRON);
+  const { env, send } = setup();
+  vi.useFakeTimers();
+  vi.setSystemTime(monday);
+  await worker.scheduled({ cron: crons[0], scheduledTime: monday } as ScheduledController, env);
+  expect(send).not.toHaveBeenCalled();
+  await worker.scheduled({ cron: crons[1], scheduledTime: monday } as ScheduledController, env);
   expect(send).toHaveBeenCalledTimes(1);
 });
