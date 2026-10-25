@@ -1,3 +1,4 @@
+import { captureCreationOutcome } from "../analytics/creation.ts";
 import { useState, type RefObject } from "react";
 import { byId, PAPERS, usedFamilies } from "../config/appearance.ts";
 import {
@@ -48,25 +49,30 @@ export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElemen
   }
 
   async function handleDownload() {
+    if (busy) return;
+    const outcome = captureCreationOutcome();
     setStatus({ kind: "working", task: "download" });
     try {
       const { blob, scale: used } = await render(format);
       downloadBlob(blob, fileNameFor(note!.title, format));
+      outcome("export_completed");
       setStatus({ kind: "done", task: "download", ...(used < scale ? { reducedScale: used } : {}) });
     } catch {
+      outcome("export_failed", "EXPORT_ERROR");
       setStatus({ kind: "error", task: "download" });
     }
   }
 
   function handleCopy() {
-    if (!clipboard.supported) return;
+    if (!clipboard.supported || busy) return;
+    const outcome = captureCreationOutcome();
     setStatus({ kind: "working", task: "copy" });
-    const fail = () => setStatus({ kind: "error", task: "copy" });
+    const fail = () => { outcome("export_failed", "EXPORT_ERROR"); setStatus({ kind: "error", task: "copy" }); };
     // ClipboardItem 必须在点击事件中同步创建，图片内容以 Promise 形式提供
     const blob = render("png").then((r) => r.blob);
     try {
       copyToClipboard(blob)
-        .then(() => setStatus({ kind: "done", task: "copy" }))
+        .then(() => { outcome("export_completed"); setStatus({ kind: "done", task: "copy" }); })
         .catch(fail);
     } catch {
       blob.catch(() => undefined);

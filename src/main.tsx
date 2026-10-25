@@ -1,3 +1,4 @@
+import { startCreationTracking } from "./analytics/creation.ts";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./fonts.ts";
@@ -11,6 +12,7 @@ import { startPwa } from "./pwa/register.ts";
 startPwa();
 
 void startDrafts().then(() => {
+  startCreationTracking();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <App />

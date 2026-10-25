@@ -87,6 +87,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           title: "运行数据与防滥用",
           paragraphs: [
             "为了诊断故障、管理资源和防止滥用，应用记录请求标识、路径、状态与错误码、模型、耗时、输入字数、token 用量和重试次数等元数据。应用定义的日志字段不包含原文或模型输出正文。",
+            "首次创作统计记录随机创作与操作标识、步骤结果、耗时、错误码、语言、模板、内容长度区间、设备宽度类别及是否为本浏览器首次创作；不记录原文、标题、笔记内容、文件名或页面 URL。创作标识不跨刷新保存，不用于跨站追踪。事件在 D1 中保留 30 天，由每日任务清理。启用浏览器 Do Not Track 时客户端不发送这些事件。",
             "AI 接口和发布接口会使用客户端 IP 信息限流。Cloudflare 的网络、安全和请求日志也可能处理 IP 地址及其他技术请求信息。",
           ],
           items: [
@@ -282,6 +283,7 @@ export const LEGAL_CONTENT: Record<LegalLocale, Record<LegalPageId, LegalContent
           id: "technical-data",
           title: "Operational data and abuse prevention",
           paragraphs: [
+            "First-creation statistics record random creation and operation IDs, step outcomes, duration, error codes, language, template, input-length buckets, viewport-width categories and whether this is the browser’s first creation. They exclude source text, titles, note content, filenames and page URLs. Creation IDs do not persist across reloads and are not used for cross-site tracking. Events are retained in D1 for 30 days and removed by a daily task. The client does not send these events when browser Do Not Track is enabled.",
             "To diagnose problems, manage resources, and prevent abuse, the application records metadata such as request identifiers, paths, status and error codes, models, duration, input length, token usage, and retry counts. Its defined logging fields do not contain source text or model response bodies.",
             "AI and publishing endpoints use client IP information for rate limiting. Cloudflare's network, security, and request logging services may also process IP addresses and other technical request information.",
           ],

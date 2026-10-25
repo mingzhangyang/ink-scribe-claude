@@ -141,6 +141,7 @@ docs/        API、部署、模型评测、字体与导出说明
 - [Workers AI 模型选择与评测](docs/model-evaluation.md)
 - [字体、导出与浏览器兼容](docs/fonts-and-export.md)
 - [安装与离线（PWA）](docs/pwa.md)
+- [首次创作体验、统计口径与报告](docs/first-creation.md)
 
 ## 许可证说明
 

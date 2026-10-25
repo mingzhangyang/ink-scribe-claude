@@ -1,3 +1,4 @@
+import { recordLayout } from "../../analytics/creation.ts";
 import { forwardRef, useCallback, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
@@ -53,7 +54,10 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
   const [node, setNode] = useState<HTMLDivElement | null>(null);
   const fit = useNoteFit(node, note, authoredSettings, aiDoodle);
   const settings = fit.settings;
-  useLayoutEffect(() => { onFitChange?.(fit); }, [fit, onFitChange]);
+  useLayoutEffect(() => {
+    onFitChange?.(fit);
+    if (interactive) recordLayout(note, fit.status);
+  }, [fit, onFitChange, interactive, note]);
   const height = pageHeightFor(settings);
   const paper = byId(PAPERS, settings.paper);
   const labels = useMemo(() => labelsFor(note), [note]);

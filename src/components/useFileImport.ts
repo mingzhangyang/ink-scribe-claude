@@ -1,3 +1,4 @@
+import { markFileInput } from "../analytics/creation.ts";
 import { useCallback, useRef, useState } from "react";
 import { charLength } from "../../shared/text.ts";
 import { extractTextFromFile, FileImportError, type ExtractResult, type ImportErrorKey } from "../import/extractText.ts";
@@ -27,6 +28,7 @@ export function useFileImport() {
         const result = await extractTextFromFile(file);
         if (current !== importGeneration.current) return;
         const { text, ...meta } = result;
+        markFileInput();
         setInput({ text });
         setImportState({ kind: "done", name: file.name, result: meta, chars: charLength(text) });
       } catch (error) {

@@ -10,6 +10,20 @@ export const en: Messages = {
   htmlLang: "en",
   dateLocale: "en-US",
 
+  creation: {
+    label: "Make your first note",
+    intro: "Turn your own text into a note. The canvas currently shows an example.",
+    start: "Paste text and create",
+    sample: "Or choose a sample in Compose to try it without preparing text.",
+    generating: "Organizing your content. Your source text is preserved.",
+    layout: "Content generated. Loading fonts and checking the layout.",
+    layoutBlocked: "Content generated. Resolve the font or layout notice on the canvas first.",
+    failed: "Generation did not finish. Your text is still here: retry or use quick local layout.",
+    ready: "Your note is ready. Edit it, save it to your library, or export an image.",
+    export: "Export your first image",
+    localStorage: "Drafts restore your current work; library saves let you reopen notes. Both stay in this browser. Export a backup for important work.",
+  },
+
   app: {
     name: "InkScribe",
     tagline: "Turn any text into a handwritten note page",

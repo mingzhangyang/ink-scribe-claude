@@ -1,3 +1,4 @@
+import { captureCreationOutcome } from "../analytics/creation.ts";
 import { useRef, useState, type RefObject } from "react";
 import { byId, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
@@ -43,21 +44,22 @@ export function ShareButton({ pageRef, fit, onToast }: {
     return cached && cached.snapshot.every((value, index) => value === snapshot[index]) ? cached.file : null;
   }
 
-  async function share(file: File, freshGesture: boolean) {
+  async function share(file: File, freshGesture: boolean, outcome: ReturnType<typeof captureCreationOutcome>) {
     setPhase("sharing");
     try {
       await navigator.share({ files: [file], title: note!.title });
+      outcome("share_completed");
     } catch (error) {
-      if (isDomError(error, "AbortError")) return;
+      if (isDomError(error, "AbortError")) { outcome("share_cancelled"); return; }
       // 渲染耗时较长时点击手势已过期，浏览器会拒绝分享：图片已备好，再点一次即可立即分享
-      if (!freshGesture && isDomError(error, "NotAllowedError")) onToast(t.share.ready);
-      else onToast(t.share.failed);
+      if (!freshGesture && isDomError(error, "NotAllowedError")) { outcome("share_retry_required"); onToast(t.share.ready); }
+      else { outcome("share_failed", "SHARE_ERROR"); onToast(t.share.failed); }
     } finally {
       setPhase("idle");
     }
   }
 
-  async function prepareAndShare() {
+  async function prepareAndShare(outcome: ReturnType<typeof captureCreationOutcome>) {
     const node = pageRef.current;
     if (!node) return;
     setPhase("preparing");
@@ -72,12 +74,14 @@ export function ShareButton({ pageRef, fit, onToast }: {
       const file = new File([blob], fileNameFor(note!.title, "png"), { type: "image/png" });
       if (!canShareFile(file)) {
         downloadBlob(blob, file.name);
+        outcome("export_completed");
         onToast(t.share.unsupported);
         return;
       }
       prepared.current = { snapshot, file };
-      await share(file, false);
+      await share(file, false, outcome);
     } catch {
+      outcome("share_failed", "SHARE_ERROR");
       onToast(t.share.failed);
     } finally {
       setPhase("idle");
@@ -86,9 +90,11 @@ export function ShareButton({ pageRef, fit, onToast }: {
 
   function handleClick() {
     // 已有对应当前画布的图片时在点击事件中同步调用分享，保留用户手势
+    if (disabled) return;
+    const outcome = captureCreationOutcome();
     const file = cachedFile();
-    if (file) void share(file, true);
-    else void prepareAndShare();
+    if (file) void share(file, true, outcome);
+    else void prepareAndShare(outcome);
   }
 
   return (
