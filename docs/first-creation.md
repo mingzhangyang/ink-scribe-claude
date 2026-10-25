@@ -46,83 +46,88 @@ Unit tests cover strict fields, duplicate delivery, retention, rate limits, fail
 
 ## Weekly email report
 
-The Worker can send a Chinese plain-text summary through Resend every Monday at
-**13:17 UTC** (09:17 New York during daylight saving time, 08:17 in winter).
-It covers the previous complete UTC Monday–Sunday week, not a rolling seven-day
-window. It reports deduplicated own-content creations, generation/readiness/useful
-outcomes, first-browser markers, failure event counts and successful AI median/P95.
-Percentages use all cohort creations as denominator. Zero activity still produces
-an email, with unavailable rates/latency shown explicitly.
+The Worker sends a Chinese plain-text report through the native **Cloudflare
+Email Service** `WEEKLY_REPORT_EMAIL` binding. No third-party mail API or API key
+is needed. The first scheduled attempt is Monday **13:17 UTC** (09:17 New York
+in summer, 08:17 in winter); hourly invocations through 23:17 provide a bounded
+retry window for explicit quota rejections.
+
+Reports cover the previous complete UTC Monday–Sunday week. They include
+own-content creations, generation/readiness/useful outcomes, browser-first
+markers, failure counts and successful AI median/P95. Zero activity still sends
+a report with unavailable rates/latency shown explicitly. Percentages use cohort
+creations as denominator, not attempts or unique users.
 
 Unlike the rolling SQL report above, the weekly funnel freezes both creation
 starts and their outcomes to that calendar week. Outcomes after Sunday are not
-retroactively included. Failure and latency populations use event receipt time,
-so they can include attempts from creations started earlier. Sample events are
-excluded. A low observed count is not proof of low traffic or abandonment.
+retroactively included. Failures and latency use event receipt time and can
+include attempts from earlier creations. Samples are excluded. Low counts can
+reflect missing telemetry and are not proof of abandonment.
 
 ### Enable in production
 
-1. Verify a sending domain in Resend and create a sending API key. Use a sender
-   address on that verified domain; a single recipient address is supported.
-2. From the repository root, log in once if necessary, then apply **all pending**
-   D1 migrations (including `0006_weekly_report_deliveries.sql`):
+1. Onboard the sender domain to Cloudflare Email Service and verify the recipient
+   as a destination address in the account. The checked-in binding has no address
+   override, so Cloudflare permits account-verified destinations only. Optionally
+   restrict its `destination_address` to the report recipient in `wrangler.jsonc`.
+   See the official [sending API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/)
+   and [binding configuration](https://developers.cloudflare.com/email-service/configuration/send-bindings/).
+2. Log in once if necessary and apply **all pending migrations**, including 0006
+   (report snapshot) and 0007 (atomic sending claim):
 
    ```sh
    npx wrangler login
    npm run db:migrate:remote
    ```
 
-   Local development uses `npm run db:migrate`. Do not execute migrations one by
-   one; Wrangler tracks which versions are already applied.
-3. Configure these production Worker secrets interactively (do not commit them):
+   Use `npm run db:migrate` for local development. Wrangler tracks applied versions;
+   do not run SQL files individually. 0007 is additive for databases that already
+   applied 0006.
+3. Configure sender and single recipient as production Worker secrets:
 
    ```sh
-   npx wrangler secret put RESEND_API_KEY
    npx wrangler secret put WEEKLY_REPORT_FROM
    npx wrangler secret put WEEKLY_REPORT_TO
    ```
 
-4. Set `WEEKLY_REPORT_ENABLED` to `"true"` in the production `vars` of
-   `wrangler.jsonc`, then use the normal deployment pipeline. It ships disabled
-   so merging code alone cannot accidentally send mail. Previews have neither
-   the enable flag nor the production mail credentials/D1 binding. Mock AI also
-   disables delivery.
-5. Confirm the scheduled triggers include `17 13-23 * * 1`, in addition to the
-   unchanged daily event-retention cron `17 3 * * *`.
+4. Set production `WEEKLY_REPORT_ENABLED` to `"true"` in `wrangler.jsonc` and deploy
+   through the normal pipeline. Ships disabled. The production `send_email`
+   binding is already declared; previews have no email binding/enable flag and
+   mock mode also prevents sending. No real delivery is attempted by tests.
+5. Confirm both crons: `17 13-23 * * 1` for reports and `17 3 * * *` for event cleanup.
 
-### Delivery and troubleshooting
+### Delivery safety and troubleshooting
 
-Each Monday the first invocation freezes the aggregate message and recipient in
-D1. Hourly invocations through 23:17 UTC retry unaccepted messages using the same
-payload and Resend idempotency key. This delivery window is under 24 hours, the
-provider's documented idempotency retention period:
-https://resend.com/docs/dashboard/emails/idempotency-keys
+The first invocation freezes the report and recipient in D1. An atomic update
+claims that week before calling `WEEKLY_REPORT_EMAIL.send()`, so concurrent
+invocations cannot send duplicate messages. Successful responses store Cloudflare's
+`messageId` and acceptance time. These confirm service acceptance, not inbox delivery.
 
-The handler uses actual execution time, so delayed/replayed invocations outside
-Monday's window do not resend an old report. An accepted week is skipped.
-Concurrent calls and ambiguous timeouts reuse the frozen request. Changing the
-recipient midway through retries takes effect the following week; do not delete
-or manually modify a pending snapshot. After Monday's window, failures are left
-for operator investigation rather than replaying beyond provider deduplication.
-There is no automatic backfill for missed weeks.
+Cloudflare's documented binding has no idempotency-key parameter. Only explicit
+`E_RATE_LIMIT_EXCEEDED` / `E_DAILY_LIMIT_EXCEEDED` rejections release the claim for
+a later hourly retry. Unknown errors, worker termination, malformed responses or
+failure to persist acceptance keep the claim. This favors avoiding duplicates:
+a crash between claiming and sending may result in no mail. Such weeks require
+operator reconciliation rather than a blind automatic retry. There is no backfill
+outside Monday's window; the handler uses actual execution time for delayed jobs.
 
-Inspect delivery status without exposing mail addresses or report contents:
+Inspect records without printing addresses or report contents:
 
 ```sh
-npx wrangler d1 execute ink-scribe --remote --command "SELECT datetime(period_end / 1000, 'unixepoch') AS week_end_utc, datetime(accepted_at / 1000, 'unixepoch') AS provider_accepted_utc, provider_id FROM weekly_report_deliveries ORDER BY period_end DESC LIMIT 12"
+npx wrangler d1 execute ink-scribe --remote --command "SELECT datetime(period_end / 1000, 'unixepoch') AS week_end_utc, datetime(attempted_at / 1000, 'unixepoch') AS claimed_utc, datetime(accepted_at / 1000, 'unixepoch') AS accepted_utc, provider_id FROM weekly_report_deliveries ORDER BY period_end DESC LIMIT 12"
 ```
 
-A non-null `accepted_at` means the provider accepted the message, **not** inbox
-delivery. Check Resend delivery/bounce records if it does not arrive. Missing
-configuration and provider failures fail the scheduled invocation in Worker logs;
-logs never include credentials, recipients or provider response bodies. If a row
-remains unaccepted after Monday, inspect these logs. The existing SQL report can
-still be run manually while mail is disabled.
+If `attempted_at` is set but `accepted_at` is null, inspect Cloudflare Email
+activity before taking action. If accepted, reconcile the record with its real
+message ID; only after confirming **no acceptance and no invocation still in
+flight** may an operator clear that week's claim for another Monday-window retry.
+Do not delete snapshots to resend. Changes to recipients take effect next week
+because an existing snapshot stays frozen. Check Email activity/bounces for a
+missing message even when acceptance is recorded. Scheduled failures are visible
+in Worker logs; provider messages and mail addresses are not logged by the handler.
 
-Delivery snapshots retain aggregate statistics and configured sender/recipient
-addresses in the operator's D1 database, independent of the 30-day raw-event TTL.
-They contain no note content or user identifiers. Resend receives only the mail
-addresses and this aggregate report. To stop sending, set the enable flag to
-`"false"` and redeploy; historical delivery records are not automatically deleted.
-Tests simulate the provider; production activation requires the credentials,
-verified sender and recipient above, and a real scheduled delivery check.
+Snapshots retain aggregate reports and configured mail addresses separately from
+the 30-day raw-event retention. They contain no note contents or user identities.
+Set the enable flag to `"false"` and redeploy to stop mail; historical records
+remain. Production activation still requires a verified domain/destination and
+an actual scheduled-delivery check; mocked binding tests are not delivery proof.

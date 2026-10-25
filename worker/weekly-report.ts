@@ -70,36 +70,50 @@ export async function buildWeeklyReport(db: D1Database, start: number, end: numb
   };
 }
 
-type Delivery = { payload: string; accepted_at: number | null };
+type Delivery = { payload: string; accepted_at: number | null; attempted_at: number | null };
 
-/** Frozen payload + provider idempotency protects concurrent calls and ambiguous timeouts. */
+/** Atomic claim prevents concurrent sends; ambiguous outcomes require operator reconciliation. */
 export async function sendWeeklyReport(env: Env, now = Date.now()): Promise<void> {
   if (env.WEEKLY_REPORT_ENABLED !== "true" || loadConfig(env).mock) return;
   const window = reportWindow(now);
   if (!window) return;
-  if (!env.DB || !env.RESEND_API_KEY || !env.WEEKLY_REPORT_FROM || !env.WEEKLY_REPORT_TO) {
+  if (!env.DB || !env.WEEKLY_REPORT_EMAIL || !env.WEEKLY_REPORT_FROM || !env.WEEKLY_REPORT_TO) {
     throw new Error("Weekly report configuration incomplete");
   }
   const db = env.DB;
-  let delivery = await db.prepare("SELECT payload, accepted_at FROM weekly_report_deliveries WHERE period_end = ?").bind(window.end).first<Delivery>();
+  let delivery = await db.prepare("SELECT payload, accepted_at, attempted_at FROM weekly_report_deliveries WHERE period_end = ?").bind(window.end).first<Delivery>();
   if (!delivery) {
     const report = await buildWeeklyReport(db, window.start, window.end);
     const payload = JSON.stringify({ from: env.WEEKLY_REPORT_FROM, to: [env.WEEKLY_REPORT_TO], ...report });
     await db.prepare("INSERT OR IGNORE INTO weekly_report_deliveries (period_end, payload) VALUES (?, ?)").bind(window.end, payload).run();
-    delivery = await db.prepare("SELECT payload, accepted_at FROM weekly_report_deliveries WHERE period_end = ?").bind(window.end).first<Delivery>();
+    delivery = await db.prepare("SELECT payload, accepted_at, attempted_at FROM weekly_report_deliveries WHERE period_end = ?").bind(window.end).first<Delivery>();
   }
   if (!delivery) throw new Error("Weekly report snapshot missing");
   if (delivery.accepted_at !== null) return;
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `ink-scribe-weekly/${window.end}` },
-    body: delivery.payload, signal: AbortSignal.timeout(15_000),
-  });
-  // Never log response bodies: provider errors can contain recipient or credential details.
-  if (!response.ok) throw new Error(`Weekly report provider HTTP ${response.status}`);
-  const result = await response.json() as { id?: unknown };
-  if (typeof result.id !== "string" || !result.id) throw new Error("Weekly report provider response missing ID");
+  if (delivery.attempted_at !== null) throw new Error("Weekly report send already claimed; check Cloudflare Email activity before retrying");
+  const message = JSON.parse(delivery.payload) as EmailMessageBuilder;
+  const claim = await db.prepare("UPDATE weekly_report_deliveries SET attempted_at = ? WHERE period_end = ? AND attempted_at IS NULL AND accepted_at IS NULL")
+    .bind(now, window.end).run();
+  if (claim.meta.changes !== 1) return;
+  let result: EmailSendResult;
+  try {
+    result = await env.WEEKLY_REPORT_EMAIL.send(message);
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null;
+    // Only explicit quota rejection is known not to have accepted a message.
+    // Internal errors, timeouts and worker termination must never trigger a blind resend.
+    if (code === "E_RATE_LIMIT_EXCEEDED" || code === "E_DAILY_LIMIT_EXCEEDED") {
+      await db.prepare("UPDATE weekly_report_deliveries SET attempted_at = NULL WHERE period_end = ? AND accepted_at IS NULL")
+        .bind(window.end).run();
+      throw new Error(`Weekly report Cloudflare rejection: ${code}`);
+    }
+    // Do not expose provider messages: they may include mail addresses.
+    throw new Error("Weekly report outcome unconfirmed; check Cloudflare Email activity before retrying");
+  }
+  if (!result || typeof result.messageId !== "string" || !result.messageId) {
+    throw new Error("Weekly report outcome unconfirmed: Cloudflare response missing messageId");
+  }
   await db.prepare("UPDATE weekly_report_deliveries SET accepted_at = ?, provider_id = ? WHERE period_end = ? AND accepted_at IS NULL")
-    .bind(now, result.id, window.end).run();
+    .bind(now, result.messageId, window.end).run();
   console.log(JSON.stringify({ event: "weekly_report.accepted", periodEnd: window.end }));
 }

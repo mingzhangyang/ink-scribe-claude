@@ -7,9 +7,9 @@ const monday = Date.parse("2026-10-26T13:17:00Z");
 const { start, end } = reportWindow(monday)!;
 function setup() {
   const DB = createTestD1();
-  const env = { DB, WEEKLY_REPORT_ENABLED: "true", WEEKLY_REPORT_FROM: "reports@example.com", WEEKLY_REPORT_TO: "owner@example.com", RESEND_API_KEY: "test-only" } as Env;
-  const send = vi.fn(async () => Response.json({ id: "email-1" }));
-  vi.stubGlobal("fetch", send);
+  const send = vi.fn(async (_message: EmailMessageBuilder): Promise<EmailSendResult> => ({ messageId: "email-1" }));
+  const env = { DB, WEEKLY_REPORT_ENABLED: "true", WEEKLY_REPORT_FROM: "reports@example.com", WEEKLY_REPORT_TO: "owner@example.com", WEEKLY_REPORT_EMAIL: { send } } as unknown as Env;
+
   return { DB, env, send };
 }
 afterEach(() => vi.unstubAllGlobals());
@@ -60,7 +60,7 @@ it("does not send while disabled, in mock, outside the window, or with incomplet
   await sendWeeklyReport({ ...env, WEEKLY_REPORT_ENABLED: "false" }, monday);
   await sendWeeklyReport({ ...env, AI_MOCK: "1" }, monday);
   await sendWeeklyReport(env, end);
-  await expect(sendWeeklyReport({ ...env, RESEND_API_KEY: undefined }, monday)).rejects.toThrow("configuration incomplete");
+  await expect(sendWeeklyReport({ ...env, WEEKLY_REPORT_EMAIL: undefined }, monday)).rejects.toThrow("configuration incomplete");
   expect(send).not.toHaveBeenCalled();
 });
 
@@ -73,32 +73,49 @@ it("sends once per week and records provider acceptance, not inbox delivery", as
   expect(row).toEqual({ accepted_at: monday, provider_id: "email-1" });
 });
 
-it("retries an ambiguous timeout with the same frozen payload and idempotency key", async () => {
+it("retries explicit quota rejection with the frozen payload", async () => {
   const { env, send } = setup();
-  send.mockRejectedValueOnce(new Error("timeout"));
-  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("timeout");
+  send.mockRejectedValueOnce(Object.assign(new Error("private provider details"), { code: "E_RATE_LIMIT_EXCEEDED" }));
+  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("E_RATE_LIMIT_EXCEEDED");
   await sendWeeklyReport({ ...env, WEEKLY_REPORT_TO: "changed@example.com" }, monday + 3_600_000);
   expect(send).toHaveBeenCalledTimes(2);
-  const calls = (send.mock.calls as unknown as [string, RequestInit][]);
-  expect(calls[0][1].body).toBe(calls[1][1].body);
-  expect(calls[0][1].headers).toEqual(calls[1][1].headers);
-  expect(JSON.parse(calls[1][1].body as string).to).toEqual(["owner@example.com"]);
+  expect(send.mock.calls[0][0]).toEqual(send.mock.calls[1][0]);
+  expect(send.mock.calls[1][0].to).toEqual(["owner@example.com"]);
 });
 
-it("does not mark failed or malformed provider responses accepted", async () => {
+it("keeps ambiguous timeout claimed and never blindly resends", async () => {
   const { env, send, DB } = setup();
-  send.mockResolvedValueOnce(new Response("sensitive details", { status: 429 }));
-  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("HTTP 429");
-  send.mockResolvedValueOnce(Response.json({}));
-  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("missing ID");
+  send.mockRejectedValueOnce(new Error("timeout with private details"));
+  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("outcome unconfirmed");
+  await expect(sendWeeklyReport(env, monday + 3_600_000)).rejects.toThrow("already claimed");
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(await DB.prepare("SELECT accepted_at, attempted_at FROM weekly_report_deliveries").first()).toEqual({ accepted_at: null, attempted_at: monday });
+});
+
+it("does not mark malformed responses accepted or retry them", async () => {
+  const { env, send, DB } = setup();
+  send.mockResolvedValueOnce({} as EmailSendResult);
+  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("missing messageId");
+  await expect(sendWeeklyReport(env, monday + 3_600_000)).rejects.toThrow("already claimed");
+  expect(send).toHaveBeenCalledTimes(1);
   expect(await DB.prepare("SELECT accepted_at FROM weekly_report_deliveries").first()).toEqual({ accepted_at: null });
 });
 
-it("concurrent invocations send the identical idempotent request", async () => {
+it("concurrent invocations call the Cloudflare binding only once", async () => {
   const { env, send } = setup();
   await Promise.all([sendWeeklyReport(env, monday), sendWeeklyReport(env, monday)]);
-  const calls = (send.mock.calls as unknown as [string, RequestInit][]);
-  expect(calls.length).toBeGreaterThan(0);
-  expect(new Set(calls.map((c) => c[1].body)).size).toBe(1);
-  expect(new Set(calls.map((c) => JSON.stringify(c[1].headers))).size).toBe(1);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][0]).toMatchObject({ from: "reports@example.com", to: ["owner@example.com"] });
+});
+
+it("does not resend if acceptance persistence fails after Cloudflare accepted", async () => {
+  const { env, send, DB } = setup();
+  const prepare = DB.prepare.bind(DB);
+  vi.spyOn(DB, "prepare").mockImplementation((sql) => {
+    if (sql.startsWith("UPDATE weekly_report_deliveries SET accepted_at")) throw new Error("D1 unavailable");
+    return prepare(sql);
+  });
+  await expect(sendWeeklyReport(env, monday)).rejects.toThrow("D1 unavailable");
+  await expect(sendWeeklyReport(env, monday + 3_600_000)).rejects.toThrow("already claimed");
+  expect(send).toHaveBeenCalledTimes(1);
 });

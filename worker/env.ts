@@ -10,7 +10,7 @@ export interface Env {
   WEEKLY_REPORT_ENABLED?: string;
   WEEKLY_REPORT_FROM?: string;
   WEEKLY_REPORT_TO?: string;
-  RESEND_API_KEY?: string;
+  WEEKLY_REPORT_EMAIL?: SendEmail;
 
   AI_MODEL?: string;
   AI_DOODLE_MODEL?: string;
