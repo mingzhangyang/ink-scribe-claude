@@ -1,3 +1,4 @@
+import { pruneCreationEvents } from "./routes/creation-events.ts";
 import { loadConfig } from "./config.ts";
 import type { Env } from "./env.ts";
 import { llmsTxt } from "./openapi.ts";
@@ -6,6 +7,9 @@ import { handlePage } from "./pages.ts";
 import { listNotes, toSummary } from "./store.ts";
 
 export default {
+  async scheduled(_event, env): Promise<void> {
+    await pruneCreationEvents(env);
+  },
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {

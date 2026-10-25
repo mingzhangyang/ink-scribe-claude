@@ -1,3 +1,4 @@
+import { captureCreationOutcome } from "../analytics/creation.ts";
 import { create } from "zustand";
 import { readDocument, type NoteDocument } from "../../shared/document.ts";
 import { currentDocument, useNoteStore } from "../state/store.ts";
@@ -105,6 +106,7 @@ export async function checkLibraryLink(recheck = false) {
 export async function saveToLibrary({ asNew = false, force = false } = {}) {
   const state = useNoteStore.getState();
   if (!state.note || useLibraryStatus.getState().status === "saving") return;
+  const outcome = captureCreationOutcome();
   const document = currentDocument();
   const link = asNew ? null : state.libraryLink;
   set({ status: "saving" });
@@ -124,10 +126,12 @@ export async function saveToLibrary({ asNew = false, force = false } = {}) {
   };
   try {
     const entry = await saveEntry(link, document, force);
+    outcome("library_save_completed");
     if (replaced()) return;
     useNoteStore.getState().setLibraryLink({ id: entry.id, revision: entry.revision });
     set({ status: "saved", baseline: baselineOf(entry.revision, document) });
   } catch (error) {
+    outcome("library_save_failed", error instanceof LibraryConflict ? "CONFLICT" : "STORAGE_ERROR");
     if (replaced()) return;
     if (error instanceof LibraryConflict && error.deleted) set({ status: "deleted", baseline: null });
     else set({ status: error instanceof LibraryConflict ? "conflict" : "error" });

@@ -1,3 +1,4 @@
+import { beginGeneration } from "../analytics/creation.ts";
 import { structureLocally } from "../../shared/heuristic.ts";
 import type { NoteStructure } from "../../shared/note.ts";
 import { detectLanguage } from "../../shared/text.ts";
@@ -26,6 +27,7 @@ export async function generateNote(): Promise<void> {
   controller?.abort();
   const current = new AbortController();
   controller = current;
+  const tracking = beginGeneration("ai");
   startLoading();
   try {
     const response = await structureText(
@@ -40,18 +42,21 @@ export async function generateNote(): Promise<void> {
     );
     if (stale()) return;
     setResult(withDate(response.note), response.meta, "ai", input.text);
+    tracking.complete(response.meta.requestId);
   } catch (error) {
     if (stale()) return;
     if (current.signal.aborted) {
       clearError();
       return;
     }
+    tracking.fail(error instanceof ApiRequestError ? error.detail.code : "INTERNAL_ERROR", error instanceof ApiRequestError ? error.detail.requestId : undefined);
     setError(
       error instanceof ApiRequestError
         ? error.detail
         : { code: "INTERNAL_ERROR", message: "生成失败，请稍后重试。" },
     );
   } finally {
+    tracking.cancel();
     if (controller === current) controller = null;
   }
 }
@@ -66,6 +71,9 @@ export function cancelGeneration(): void {
 export function generateLocally(): void {
   const { input, setResult } = useNoteStore.getState();
   if (!input.text.trim()) return;
+  cancelGeneration();
+  const tracking = beginGeneration("local");
   const note = structureLocally(input.text, { template: input.template, detail: input.detail });
   setResult(withDate(note), null, "local");
+  tracking.complete();
 }

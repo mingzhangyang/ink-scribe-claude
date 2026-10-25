@@ -1,3 +1,4 @@
+import { markTextInput } from "../analytics/creation.ts";
 import { DETAILS, LANGUAGES, TEMPLATES, type Detail, type Language } from "../../shared/options.ts";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { charLength } from "../../shared/text.ts";
@@ -113,7 +114,7 @@ export function InputPanel({ maxChars, importState, onImportFile, onClose, onSub
             <textarea
               className="source-text"
               value={input.text}
-              onChange={(e) => setInput({ text: e.target.value })}
+              onChange={(e) => { markTextInput(); setInput({ text: e.target.value }); }}
               onKeyDown={onKeyDown}
               placeholder={t.input.placeholder}
               aria-label={t.input.textareaLabel}

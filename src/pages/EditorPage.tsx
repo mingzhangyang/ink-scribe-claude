@@ -1,3 +1,4 @@
+import { CreationGuide } from "../components/CreationGuide.tsx";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PublicConfig } from "../../shared/api.ts";
@@ -98,6 +99,10 @@ export function EditorPage({ config, headerActions, onToast }: {
       {headerActions ? createPortal(<InputTrigger onOpen={openInput} />, headerActions) : null}
       {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} onEditInput={openInput} onToast={onToast} /> : <section className="workspace" />}
       <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
+        <CreationGuide fit={fit} onCompose={openInput} onExport={() => {
+          setTab("export");
+          requestAnimationFrame(() => document.getElementById("tab-export")?.focus());
+        }} />
         <DraftBar />
         <LibraryBar />
         <div className="tabs" role="tablist">

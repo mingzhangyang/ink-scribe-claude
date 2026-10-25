@@ -1,3 +1,4 @@
+import { handleCreationEvents } from "./routes/creation-events.ts";
 import type { PublicConfig } from "../shared/api.ts";
 import { upstreamErrorCode } from "./ai.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
@@ -46,13 +47,14 @@ type Route = {
    * public：公开读取；ai：网页调用模型（来源校验 + 按 IP 限流）；
    * agent：可选 API 密钥。带 Authorization 时必须是有效密钥并按密钥限流，否则按 IP 限流，需要密钥的操作由处理函数拒绝。
    */
-  access: "public" | "ai" | "agent";
+  access: "public" | "ai" | "agent" | "telemetry";
   methods: Partial<Record<Method, (ctx: RouteContext) => Promise<Response>>>;
 };
 
 const ID = "(?<id>[A-Za-z0-9_-]{22})";
 
 const ROUTES: Route[] = [
+  { name: "/api/creation-events", pattern: /^\/api\/creation-events$/, access: "telemetry", methods: { POST: handleCreationEvents } },
   {
     name: "/api/config",
     pattern: /^\/api\/config$/,
@@ -151,6 +153,9 @@ export async function handleApi(request: Request, env: Env, waitUntil: (promise:
     if (route.access === "ai") {
       assertAllowedOrigin(request, config.allowedOrigins);
       await enforceRateLimit(env, request, url.pathname, config.rateLimitPerMinute);
+    } else if (route.access === "telemetry") {
+      if (request.headers.get("Origin") !== url.origin) throw new AppError(403, "FORBIDDEN_ORIGIN", "Same-origin requests only.");
+      await enforceRateLimit(env, request, "/api/creation-events", 12);
     } else if (route.access === "agent") {
       if (request.headers.has("Authorization")) {
         apiKey = await authenticate(env, request);

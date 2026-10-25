@@ -29,6 +29,20 @@ export const zh = {
   htmlLang: "zh-CN",
   dateLocale: "zh-CN",
 
+  creation: {
+    label: "完成第一张笔记",
+    intro: "把自己的文字变成一张笔记。画布上展示的是示例，可先看看效果。",
+    start: "粘贴文字，开始创作",
+    sample: "也可以在撰写窗口选择“试用示例”，无需准备文字。",
+    generating: "正在整理内容，原文已保留。",
+    layout: "内容已生成，正在加载字体并检查排版。",
+    layoutBlocked: "内容已生成，请先处理画布上的字体或排版提示。",
+    failed: "生成未完成，原文仍在。可以重试，或选择本地快速排版。",
+    ready: "笔记已准备好，可继续修改、保存到笔记库或导出图片。",
+    export: "导出第一张图片",
+    localStorage: "草稿用于恢复当前工作；保存到笔记库后可再次打开。两者都只在此浏览器，重要内容请导出备份。",
+  },
+
   app: {
     name: "墨语笔记",
     tagline: "InkScribe · 把文字变成一页手写笔记",
