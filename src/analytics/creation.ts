@@ -14,11 +14,15 @@ let inputMethod: "text" | "file" = "text";
 let queue: CreationEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 let initialized = false;
+let sessionSuccess = false;
 
 export function hasCreatedSuccessfully(): boolean {
+  if (sessionSuccess) return true;
   try { return localStorage.getItem(SUCCESS_KEY) === "1"; } catch { return false; }
 }
 function markSuccess() {
+  // Persistence is optional: a successful action must dismiss this session’s guide.
+  sessionSuccess = true;
   try { localStorage.setItem(SUCCESS_KEY, "1"); } catch { /* Storage may be disabled. */ }
   try { if (typeof window !== "undefined") window.dispatchEvent(new Event("creation-success")); } catch { /* Notifications are best effort too. */ }
 }

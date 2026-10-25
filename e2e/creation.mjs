@@ -40,7 +40,13 @@ export async function verifyCreation({ newPage, check, url, outputDir }) {
     check(`FC-${width}-restore`, 'Reload restores work without reopening onboarding', await page.locator('.creation-guide').count() === 0 && await page.locator('.note-page').count() === 1);
     await context.close();
   }
-  const { page, context } = await newPage({ locale: 'en-US' });
+  const { page, context } = await newPage({ locale: 'en-US' }, () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'ink-scribe:creation-success') throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
   await page.route('**/api/creation-events', (route) => route.abort());
   await page.goto(url, { waitUntil: 'networkidle' });
   await openInput(page);
@@ -50,6 +56,8 @@ export async function verifyCreation({ newPage, check, url, outputDir }) {
   await page.locator('.library-bar button').first().click();
   await page.locator('[data-library-status="linked"]').waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  check('FC-offline-stats', 'Blocked statistics do not prevent library persistence', await page.evaluate(() => localStorage.getItem('ink-scribe:creation-success')) === '1');
+  check('FC-offline-stats', 'Blocked statistics do not prevent library persistence', await page.locator('[data-library-status="linked"]').count() === 1);
+  await page.locator('.creation-guide').waitFor({ state: 'hidden' });
+  check('FC-quota-guide', 'Successful saving dismisses guidance even when its marker cannot persist', await page.evaluate(() => localStorage.getItem('ink-scribe:creation-success')) === null);
   await context.close();
 }

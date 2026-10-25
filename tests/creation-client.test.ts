@@ -1,24 +1,22 @@
-import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
+import { beforeEach, afterAll, expect, it, vi } from "vitest";
 import type { CreationEvent } from "../shared/creation-events.ts";
 let tracking: typeof import("../src/analytics/creation.ts");
 let store: typeof import("../src/state/store.ts").useNoteStore;
 let sample: typeof import("../src/samples.ts");
 const memory = new Map<string, string>();
 let sent: CreationEvent[];
-beforeAll(async () => {
+beforeEach(async () => {
+  tracking?.flushCreationEvents();
+  vi.resetModules();
+  memory.clear();
+  sent = [];
+  vi.stubGlobal("fetch", vi.fn((_url, options) => { sent.push(...JSON.parse(options.body)); return Promise.resolve(new Response(null, { status: 204 })); }));
   vi.stubGlobal("localStorage", { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => memory.set(key, value), removeItem: (key: string) => memory.delete(key) });
   vi.stubGlobal("navigator", { doNotTrack: "0" });
   store = (await import("../src/state/store.ts")).useNoteStore;
   sample = await import("../src/samples.ts");
   tracking = await import("../src/analytics/creation.ts");
   tracking.startCreationTracking();
-});
-beforeEach(() => {
-  tracking.flushCreationEvents();
-  memory.clear();
-  sent = [];
-  vi.stubGlobal("fetch", vi.fn((_url, options) => { sent.push(...JSON.parse(options.body)); return Promise.resolve(new Response(null, { status: 204 })); }));
-  store.setState((s) => ({ documentSerial: s.documentSerial + 1, input: { ...s.input, text: "" }, note: null }));
 });
 afterAll(() => { tracking.flushCreationEvents(); vi.unstubAllGlobals(); });
 
@@ -94,4 +92,17 @@ it("honors Do Not Track while still completing local guidance", () => {
   expect(sent).toHaveLength(0);
   expect(tracking.hasCreatedSuccessfully()).toBe(true);
   vi.stubGlobal("navigator", { doNotTrack: "0" });
+});
+
+it.each(["library_save_completed", "export_completed", "share_completed"] as const)("dismisses session guidance after %s when persistent writes fail", (name) => {
+  generate();
+  const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Quota exceeded", "QuotaExceededError"); });
+  expect(tracking.hasCreatedSuccessfully()).toBe(false);
+  expect(() => tracking.captureCreationOutcome()(name)).not.toThrow();
+  expect(write).toHaveBeenCalledWith(tracking.SUCCESS_KEY, "1");
+  expect(memory.has(tracking.SUCCESS_KEY)).toBe(false);
+  expect(tracking.hasCreatedSuccessfully()).toBe(true);
+  // Blocked reads also cannot undo the already completed session outcome.
+  vi.spyOn(localStorage, "getItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+  expect(tracking.hasCreatedSuccessfully()).toBe(true);
 });

@@ -37,6 +37,6 @@ WITH durations AS (
     AND received_at >= (unixepoch('now') - 7 * 86400) * 1000
 )
 SELECT COUNT(*) AS completed_ai_attempts,
-  MAX(CASE WHEN rank = (total + 1) / 2 THEN ms END) AS median_ms,
+  AVG(CASE WHEN rank IN ((total + 1) / 2, (total + 2) / 2) THEN ms END) AS median_ms,
   MAX(CASE WHEN rank = (total * 95 + 99) / 100 THEN ms END) AS p95_ms
 FROM durations;
