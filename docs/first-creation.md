@@ -66,10 +66,9 @@ reflect missing telemetry and are not proof of abandonment.
 
 ### Enable in production
 
-1. Onboard the sender domain to Cloudflare Email Service and verify the recipient
-   as a destination address in the account. The checked-in binding has no address
-   override, so Cloudflare permits account-verified destinations only. Optionally
-   restrict its `destination_address` to the report recipient in `wrangler.jsonc`.
+1. Onboard `orangely.xyz` to Cloudflare Email Service and verify
+   `admin@orangely.xyz` as a destination address in the account. The checked-in
+   binding restricts delivery to this address using `destination_address`.
    See the official [sending API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/)
    and [binding configuration](https://developers.cloudflare.com/email-service/configuration/send-bindings/).
 2. Log in once if necessary and apply **all pending migrations**, including 0006
@@ -83,12 +82,9 @@ reflect missing telemetry and are not proof of abandonment.
    Use `npm run db:migrate` for local development. Wrangler tracks applied versions;
    do not run SQL files individually. 0007 is additive for databases that already
    applied 0006.
-3. Configure sender and single recipient as production Worker secrets:
-
-   ```sh
-   npx wrangler secret put WEEKLY_REPORT_FROM
-   npx wrangler secret put WEEKLY_REPORT_TO
-   ```
+3. Both sender and recipient are preconfigured as `admin@orangely.xyz` in the
+   production `vars` of `wrangler.jsonc`; no mail-address secrets are needed.
+   If changing the recipient later, also update the binding's `destination_address`.
 
 4. Set production `WEEKLY_REPORT_ENABLED` to `"true"` in `wrangler.jsonc` and deploy
    through the normal pipeline. Ships disabled. The production `send_email`
