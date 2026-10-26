@@ -7,6 +7,11 @@ export interface Env {
   /** 发布的笔记与 API 密钥。 */
   DB?: D1Database;
 
+  WEEKLY_REPORT_ENABLED?: string;
+  WEEKLY_REPORT_FROM?: string;
+  WEEKLY_REPORT_TO?: string;
+  WEEKLY_REPORT_EMAIL?: SendEmail;
+
   AI_MODEL?: string;
   AI_DOODLE_MODEL?: string;
   AI_API_STYLE?: string;

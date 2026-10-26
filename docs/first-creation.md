@@ -43,3 +43,87 @@ The bilingual editor guide distinguishes the initial example, organizing, font/l
 ## Validation
 
 Unit tests cover strict fields, duplicate delivery, retention, rate limits, failed persistence, mock exclusion, retry IDs, layout deduplication, async attribution and blocked transport. Browser acceptance covers narrow/wide English own-text generation, actual PNG download, private-text exclusion, reload and a blocked telemetry endpoint with successful local save. Existing suites cover Chinese UI, failed generation, storage conflicts, font recovery and clipboard/share flows. These local browser tests use mock AI and do not certify real model quality or native iOS sharing.
+
+## Weekly email report
+
+The Worker sends a Chinese plain-text report through the native **Cloudflare
+Email Service** `WEEKLY_REPORT_EMAIL` binding. No third-party mail API or API key
+is needed. The first scheduled attempt is Monday **13:17 UTC** (09:17 New York
+in summer, 08:17 in winter); hourly invocations through 23:17 provide a bounded
+retry window for explicit quota rejections.
+
+Reports cover the previous complete UTC Monday–Sunday week. They include
+own-content creations, generation/readiness/useful outcomes, browser-first
+markers, failure counts and successful AI median/P95. Zero activity still sends
+a report with unavailable rates/latency shown explicitly. Percentages use cohort
+creations as denominator, not attempts or unique users.
+
+Unlike the rolling SQL report above, the weekly funnel freezes both creation
+starts and their outcomes to that calendar week. Outcomes after Sunday are not
+retroactively included. Failures and latency use event receipt time and can
+include attempts from earlier creations. Samples are excluded. Low counts can
+reflect missing telemetry and are not proof of abandonment.
+
+### Enable in production
+
+1. Onboard `orangely.xyz` to Cloudflare Email Service and verify
+   `admin@orangely.xyz` as a destination address in the account. The checked-in
+   binding restricts delivery to this address using `destination_address`.
+   See the official [sending API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/)
+   and [binding configuration](https://developers.cloudflare.com/email-service/configuration/send-bindings/).
+2. Log in once if necessary and apply **all pending migrations**, including 0006
+   (report snapshot) and 0007 (atomic sending claim):
+
+   ```sh
+   npx wrangler login
+   npm run db:migrate:remote
+   ```
+
+   Use `npm run db:migrate` for local development. Wrangler tracks applied versions;
+   do not run SQL files individually. 0007 is additive for databases that already
+   applied 0006.
+3. Both sender and recipient are preconfigured as `admin@orangely.xyz` in the
+   production `vars` of `wrangler.jsonc`; no mail-address secrets are needed.
+   If changing the recipient later, also update the binding's `destination_address`.
+
+4. Set production `WEEKLY_REPORT_ENABLED` to `"true"` in `wrangler.jsonc` and deploy
+   through the normal pipeline. Ships disabled. The production `send_email`
+   binding is already declared; previews have no email binding/enable flag and
+   mock mode also prevents sending. No real delivery is attempted by tests.
+5. Confirm both crons: `17 13-23 * * MON` for reports and `17 3 * * *` for event cleanup.
+
+### Delivery safety and troubleshooting
+
+The first invocation freezes the report and recipient in D1. An atomic update
+claims that week before calling `WEEKLY_REPORT_EMAIL.send()`, so concurrent
+invocations cannot send duplicate messages. Successful responses store Cloudflare's
+`messageId` and acceptance time. These confirm service acceptance, not inbox delivery.
+
+Cloudflare's documented binding has no idempotency-key parameter. Only explicit
+`E_RATE_LIMIT_EXCEEDED` / `E_DAILY_LIMIT_EXCEEDED` rejections release the claim for
+a later hourly retry. Unknown errors, worker termination, malformed responses or
+failure to persist acceptance keep the claim. This favors avoiding duplicates:
+a crash between claiming and sending may result in no mail. Such weeks require
+operator reconciliation rather than a blind automatic retry. There is no backfill
+outside Monday's window; the handler uses actual execution time for delayed jobs.
+
+Inspect records without printing addresses or report contents:
+
+```sh
+npx wrangler d1 execute ink-scribe --remote --command "SELECT datetime(period_end / 1000, 'unixepoch') AS week_end_utc, datetime(attempted_at / 1000, 'unixepoch') AS claimed_utc, datetime(accepted_at / 1000, 'unixepoch') AS accepted_utc, provider_id FROM weekly_report_deliveries ORDER BY period_end DESC LIMIT 12"
+```
+
+If `attempted_at` is set but `accepted_at` is null, inspect Cloudflare Email
+activity before taking action. If accepted, reconcile the record with its real
+message ID; only after confirming **no acceptance and no invocation still in
+flight** may an operator clear that week's claim for another Monday-window retry.
+Do not delete snapshots to resend. Changes to recipients take effect next week
+because an existing snapshot stays frozen. Check Email activity/bounces for a
+missing message even when acceptance is recorded. Scheduled failures are visible
+in Worker logs; provider messages and mail addresses are not logged by the handler.
+
+Snapshots retain aggregate reports and configured mail addresses separately from
+the 30-day raw-event retention. They contain no note contents or user identities.
+Set the enable flag to `"false"` and redeploy to stop mail; historical records
+remain. Production activation still requires a verified domain/destination and
+an actual scheduled-delivery check; mocked binding tests are not delivery proof.

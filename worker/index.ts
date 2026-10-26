@@ -1,3 +1,4 @@
+import { REPORT_CRON, sendWeeklyReport } from "./weekly-report.ts";
 import { pruneCreationEvents } from "./routes/creation-events.ts";
 import { loadConfig } from "./config.ts";
 import type { Env } from "./env.ts";
@@ -7,8 +8,9 @@ import { handlePage } from "./pages.ts";
 import { listNotes, toSummary } from "./store.ts";
 
 export default {
-  async scheduled(_event, env): Promise<void> {
-    await pruneCreationEvents(env);
+  async scheduled(event, env): Promise<void> {
+    if (event.cron === REPORT_CRON) await sendWeeklyReport(env);
+    else await pruneCreationEvents(env);
   },
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
