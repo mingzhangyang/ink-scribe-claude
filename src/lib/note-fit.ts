@@ -56,7 +56,11 @@ function hasOrphanedTitleLine(title: HTMLElement, text: HTMLElement, baseSize: n
     .filter((rect) => rect.width > 0 && rect.height > 0)
     .sort((a, b) => (a.top + a.bottom) - (b.top + b.bottom));
   const lines: { center: number; left: number; right: number }[] = [];
-  const sameLineTolerance = baseSize * 0.4;
+  // getClientRects() reports rendered coordinates, but font-size is measured
+  // in unscaled CSS pixels. Match units under the preview's transform scale.
+  const layoutWidth = title.offsetWidth;
+  const previewScale = layoutWidth > 0 ? title.getBoundingClientRect().width / layoutWidth : 1;
+  const sameLineTolerance = baseSize * 0.4 * previewScale;
   for (const rect of fragments) {
     const center = (rect.top + rect.bottom) / 2;
     let line = lines.find((candidate) => Math.abs(candidate.center - center) < sameLineTolerance);

@@ -88,11 +88,13 @@ describe("near-fitting handwritten titles", () => {
     noMeasuredText?: boolean;
     lineWidths?: number[];
     fragments?: Array<[number, number, number]>;
+    previewScale?: number;
   };
 
   function titleHarness(initialAvailable: number, intrinsicWidth: number, options: TitleHarnessOptions = {}) {
     let available = initialAvailable;
     const baseSize = 39;
+    const previewScale = options.previewScale ?? 1;
     const style = {
       fontSize: "",
       whiteSpace: options.initialWhiteSpace ?? "",
@@ -102,15 +104,18 @@ describe("near-fitting handwritten titles", () => {
     };
     const size = () => Number.parseFloat(style.fontSize || String(baseSize));
     const width = () => options.flexWidth?.(size(), available) ?? available;
+    const renderedRect = (left: number, top: number, lineWidth: number) => ({
+      left: left * previewScale, right: (left + lineWidth) * previewScale,
+      top: top * previewScale, bottom: (top + 40) * previewScale,
+      width: lineWidth * previewScale, height: 40 * previewScale,
+    });
     const text = {
       // Reconstruct natural line fragments at the current size and flex width,
       // including per-character jitter spans in the handwritten title.
       getClientRects: () => {
         if (options.initialAlign === "center") expect(style.textAlign).toBe("left");
         if (options.initialTransform) expect(style.transform).toBe("none");
-        if (options.fragments) return options.fragments.map(([left, top, lineWidth]) => ({
-          left, right: left + lineWidth, top, bottom: top + 40, width: lineWidth, height: 40,
-        }));
+        if (options.fragments) return options.fragments.map(([left, top, lineWidth]) => renderedRect(left, top, lineWidth));
         const currentWidth = width();
         if (currentWidth <= 0) return [];
         const widths = options.lineWidths ?? (() => {
@@ -123,17 +128,16 @@ describe("near-fitting handwritten titles", () => {
           }
           return parts;
         })();
-        return widths.map((lineWidth, i) => ({
-          left: 0, right: lineWidth, top: i * 50, bottom: i * 50 + 40, width: lineWidth, height: 40,
-        }));
+        return widths.map((lineWidth, i) => renderedRect(0, i * 50, lineWidth));
       },
-      getBoundingClientRect: () => ({ width: intrinsicWidth * size() / baseSize }),
+      getBoundingClientRect: () => ({ width: intrinsicWidth * size() / baseSize * previewScale }),
     };
     const title = {
       style,
+      get offsetWidth() { return Math.round(width()); },
       get clientWidth() { return Math.round(width()); },
       get scrollWidth() { return Math.max(this.clientWidth, Math.round(intrinsicWidth * size() / baseSize)); },
-      getBoundingClientRect: () => ({ width: width() }),
+      getBoundingClientRect: () => ({ width: width() * previewScale }),
       querySelector: (selector: string) => selector === "[data-fit-text]" && !options.noMeasuredText ? text : null,
     };
     vi.stubGlobal("getComputedStyle", () => ({ fontSize: `${baseSize}px` }));
@@ -253,6 +257,31 @@ describe("near-fitting handwritten titles", () => {
     const h = titleHarness(568, 900, { lineWidths: [540, 330, 20] });
     fitNoteTitle(h.page);
     expect(h.style.fontSize).toBe("");
+  });
+
+  // The editor allows 30%-160% zoom via a transformed parent. The rects returned
+  // by the browser are scaled even though computed font-size is not.
+  it.each([0.3, 0.5, 1, 1.6])("detects a short Chinese orphan at %s× preview zoom", (previewScale) => {
+    const h = titleHarness(558, 632, { previewScale });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.style.whiteSpace).toBe("");
+  });
+
+  it.each([0.3, 0.5, 1, 1.6])("leaves balanced two-line titles unchanged at %s× zoom", (previewScale) => {
+    const h = titleHarness(568, 612, { previewScale, lineWidths: [300, 300] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("groups jittered glyphs into two lines at 30% zoom", () => {
+    const fragments: Array<[number, number, number]> = Array.from(
+      { length: 14 }, (_, i) => [i * 39, i % 3, 39],
+    );
+    fragments.push([0, 51, 39], [39, 52, 39]);
+    const h = titleHarness(558, 632, { previewScale: 0.3, fragments });
+    fitNoteTitle(h.page);
+    expectFitted(h);
   });
 
 });
