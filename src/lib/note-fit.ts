@@ -47,6 +47,52 @@ export function fitNote(settings: Settings, fits: (candidate: Settings) => boole
   return { status: "overflow", settings: smallest, expanded: false };
 }
 
+/**
+ * A handwritten title that only just overflows should not leave one or two characters
+ * on a second line. Measure after fonts load, then shrink the title alone (at most
+ * 20%). Truly long titles keep their intended wrapping and readable font size.
+ * The resulting inline size survives cloneNode() into the export snapshot.
+ */
+export function fitNoteTitle(page: HTMLElement): void {
+  const title = page.querySelector<HTMLElement>(".note-title");
+  if (!title) return;
+  // Recalculate from the authored typography for every layout candidate.
+  title.style.removeProperty("font-size");
+  const baseSize = Number.parseFloat(getComputedStyle(title).fontSize);
+  if (!Number.isFinite(baseSize) || baseSize <= 0) return;
+
+  const previousWhiteSpace = title.style.whiteSpace;
+  title.style.whiteSpace = "nowrap";
+  try {
+    const available = title.clientWidth;
+    const required = title.scrollWidth;
+    if (available <= 3 || required <= available) return;
+
+    const minimumScale = 0.8;
+    let scale = (available - 3) / required;
+    if (scale < minimumScale) return;
+
+    // The neighboring date can reclaim freed flex space. Re-check the
+    // actual single-line width rather than assuming one ratio is enough.
+    for (let pass = 0; pass < 3; pass++) {
+      title.style.fontSize = `${(baseSize * scale).toFixed(2)}px`;
+      const currentAvailable = title.clientWidth;
+      const currentRequired = title.scrollWidth;
+      if (currentRequired <= currentAvailable) break;
+      const corrected = scale * (currentAvailable - 3) / currentRequired;
+      if (corrected < minimumScale) {
+        title.style.removeProperty("font-size");
+        break;
+      }
+      scale = corrected;
+    }
+    // If the flex layout still cannot keep it on one line, prefer natural
+    // wrapping over a smaller title that nevertheless has an orphan.
+    if (title.scrollWidth > title.clientWidth) title.style.removeProperty("font-size");
+  } finally {
+    title.style.whiteSpace = previousWhiteSpace;
+  }
+}
 /** Both axes matter: a fixed-height multicolumn layout can overflow into hidden columns. */
 export function measureNoteOverflow(page: HTMLElement): boolean {
   const regions = [...page.querySelectorAll<HTMLElement>("[data-fit]")];

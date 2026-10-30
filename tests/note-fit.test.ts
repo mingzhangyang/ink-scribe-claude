@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, sanitizeSettings } from "../shared/settings.ts";
 import { ensureFontsLoaded } from "../src/export/fontEmbed.ts";
-import { fitCandidates, fitNote, measureNoteOverflow } from "../src/lib/note-fit.ts";
+import { fitCandidates, fitNote, fitNoteTitle, measureNoteOverflow } from "../src/lib/note-fit.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -79,6 +79,65 @@ describe("font readiness", () => {
   });
 });
 
+describe("near-fitting handwritten titles", () => {
+  function titleHarness(initialAvailable: number, intrinsicWidth: number) {
+    let available = initialAvailable;
+    const style = {
+      fontSize: "",
+      whiteSpace: "",
+      removeProperty(name: string) { if (name === "font-size") this.fontSize = ""; },
+    };
+    const title = {
+      style,
+      get clientWidth() { return available; },
+      get scrollWidth() {
+        const size = Number.parseFloat(style.fontSize || "39");
+        return Math.max(available, Math.ceil(intrinsicWidth * size / 39));
+      },
+    };
+    vi.stubGlobal("getComputedStyle", () => ({ fontSize: "39px" }));
+    const page = { querySelector: (selector: string) => selector === ".note-title" ? title : null } as unknown as HTMLElement;
+    return { page, title, style, setAvailable: (width: number) => { available = width; } };
+  }
+
+  it("reduces only the title to fit a near-overflowing Chinese line", () => {
+    const { page, title, style } = titleHarness(558, 632);
+    fitNoteTitle(page);
+    expect(Number.parseFloat(style.fontSize)).toBeGreaterThanOrEqual(39 * 0.8);
+    expect(Number.parseFloat(style.fontSize)).toBeLessThan(39);
+    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
+    expect(style.whiteSpace).toBe("");
+  });
+
+  it("keeps already-fitting and genuinely long titles at the authored size", () => {
+    for (const [available, required] of [[558, 400], [420, 950], [0, 600]]) {
+      const { page, style } = titleHarness(available, required);
+      fitNoteTitle(page);
+      expect(style.fontSize).toBe("");
+      expect(style.whiteSpace).toBe("");
+    }
+  });
+
+  it("clears a previous title adjustment after layout space increases", () => {
+    const { page, style, setAvailable } = titleHarness(558, 632);
+    fitNoteTitle(page);
+    expect(style.fontSize).not.toBe("");
+    setAvailable(700);
+    fitNoteTitle(page);
+    expect(style.fontSize).toBe("");
+  });
+
+  it("rechecks the width when flex layout reallocates space to the date", () => {
+    const { page, title, style } = titleHarness(558, 632);
+    const originalWidth = Object.getOwnPropertyDescriptor(title, "clientWidth");
+    Object.defineProperty(title, "clientWidth", {
+      get: () => style.fontSize ? 550 : originalWidth!.get!.call(title),
+    });
+    fitNoteTitle(page);
+    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
+    expect(style.whiteSpace).toBe("");
+  });
+});
 describe("canvas geometry", () => {
   const paper = { left: 0, top: 0, right: 840, bottom: 1188, width: 840 };
   function pageWith(regions: object[], textRects: object[]): HTMLElement {
