@@ -86,6 +86,8 @@ describe("near-fitting handwritten titles", () => {
     initialWhiteSpace?: string;
     initialTransform?: string;
     noMeasuredText?: boolean;
+    lineWidths?: number[];
+    fragments?: Array<[number, number, number]>;
   };
 
   function titleHarness(initialAvailable: number, intrinsicWidth: number, options: TitleHarnessOptions = {}) {
@@ -101,11 +103,31 @@ describe("near-fitting handwritten titles", () => {
     const size = () => Number.parseFloat(style.fontSize || String(baseSize));
     const width = () => options.flexWidth?.(size(), available) ?? available;
     const text = {
-      getBoundingClientRect: () => {
+      // Reconstruct natural line fragments at the current size and flex width,
+      // including per-character jitter spans in the handwritten title.
+      getClientRects: () => {
         if (options.initialAlign === "center") expect(style.textAlign).toBe("left");
         if (options.initialTransform) expect(style.transform).toBe("none");
-        return { width: intrinsicWidth * size() / baseSize };
+        if (options.fragments) return options.fragments.map(([left, top, lineWidth]) => ({
+          left, right: left + lineWidth, top, bottom: top + 40, width: lineWidth, height: 40,
+        }));
+        const currentWidth = width();
+        if (currentWidth <= 0) return [];
+        const widths = options.lineWidths ?? (() => {
+          const parts: number[] = [];
+          let remaining = intrinsicWidth * size() / baseSize;
+          while (remaining > 0 && parts.length < 20) {
+            const part = Math.min(currentWidth, remaining);
+            parts.push(part);
+            remaining -= part;
+          }
+          return parts;
+        })();
+        return widths.map((lineWidth, i) => ({
+          left: 0, right: lineWidth, top: i * 50, bottom: i * 50 + 40, width: lineWidth, height: 40,
+        }));
       },
+      getBoundingClientRect: () => ({ width: intrinsicWidth * size() / baseSize }),
     };
     const title = {
       style,
@@ -188,11 +210,51 @@ describe("near-fitting handwritten titles", () => {
     expectFitted(h);
   });
 
-  it("falls back to scroll measurements when text wrappers are absent", () => {
+  it("preserves typography when reliable line fragments are unavailable", () => {
     const h = titleHarness(558, 632, { noMeasuredText: true });
     fitNoteTitle(h.page);
-    expect(h.style.fontSize).not.toBe("");
+    expect(h.style.fontSize).toBe("");
   });
+
+  it("does not shrink two balanced word lines even when a 20 percent reduction would fit", () => {
+    const h = titleHarness(568, 612, { lineWidths: [300, 300] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+    expect(h.style.whiteSpace).toBe("");
+  });
+
+  it("preserves balanced centered titles and restores their alignment", () => {
+    const h = titleHarness(568, 612, {
+      lineWidths: [300, 300], initialAlign: "center", initialWhiteSpace: "normal",
+    });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+    expect(h.style.textAlign).toBe("center");
+    expect(h.style.whiteSpace).toBe("normal");
+  });
+
+  it("merges jittered per-character rectangles into two visual lines", () => {
+    const fragments: Array<[number, number, number]> = Array.from(
+      { length: 14 }, (_, i) => [i * 39, i % 3, 39],
+    );
+    fragments.push([0, 51, 39], [39, 52, 39]);
+    const h = titleHarness(558, 632, { fragments });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+  it("preserves a short orphan that cannot fit within the 20 percent limit", () => {
+    const h = titleHarness(560, 900, { lineWidths: [540, 50] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("preserves multi-line titles even if the last line is short", () => {
+    const h = titleHarness(568, 900, { lineWidths: [540, 330, 20] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
 });
 describe("canvas geometry", () => {
   const paper = { left: 0, top: 0, right: 840, bottom: 1188, width: 840 };

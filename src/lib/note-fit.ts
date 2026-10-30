@@ -48,8 +48,37 @@ export function fitNote(settings: Settings, fits: (candidate: Settings) => boole
 }
 
 /**
- * Keep nearly fitting handwritten headings on one line without shrinking the
- * rest of the note. The selected inline font size survives the export clone.
+ * Detect a short final line before forcing nowrap. Handwriting jitter creates
+ * multiple inline rectangles per visual line, so merge by vertical position.
+ */
+function hasOrphanedTitleLine(title: HTMLElement, text: HTMLElement, baseSize: number): boolean {
+  const fragments = Array.from(text.getClientRects())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .sort((a, b) => (a.top + a.bottom) - (b.top + b.bottom));
+  const lines: { center: number; left: number; right: number }[] = [];
+  const sameLineTolerance = baseSize * 0.4;
+  for (const rect of fragments) {
+    const center = (rect.top + rect.bottom) / 2;
+    let line = lines.find((candidate) => Math.abs(candidate.center - center) < sameLineTolerance);
+    if (!line) {
+      line = { center, left: rect.left, right: rect.right };
+      lines.push(line);
+    } else {
+      line.left = Math.min(line.left, rect.left);
+      line.right = Math.max(line.right, rect.right);
+    }
+  }
+  if (lines.length !== 2) return false;
+  const first = lines[0].right - lines[0].left;
+  const last = lines[1].right - lines[1].left;
+  const available = title.getBoundingClientRect().width;
+  // Do not shrink balanced two-line titles just because they could fit on one.
+  return available > 0 && first > 0 && last < available * 0.35 && last < first * 0.5;
+}
+
+/**
+ * Keep near-fitting titles on one line only if the natural wrap leaves a short
+ * orphan. The selected inline font size survives the export clone.
  */
 export function fitNoteTitle(page: HTMLElement): void {
   const title = page.querySelector<HTMLElement>(".note-title");
@@ -67,18 +96,18 @@ export function fitNoteTitle(page: HTMLElement): void {
     // A centered title may overflow in *both* directions; scrollWidth alone
     // can miss the overflow on the left. Measure at the natural left edge.
     // Disable decorative rotation only while taking subpixel measurements.
-    title.style.whiteSpace = "nowrap";
+    // Keep natural wrapping while looking for an orphan; neither left alignment
+    // nor removing decorative rotation changes where the line breaks occur.
     title.style.textAlign = "left";
     title.style.transform = "none";
     const text = title.querySelector<HTMLElement>("[data-fit-text]");
+    if (!text || !hasOrphanedTitleLine(title, text, baseSize)) return;
+
+    title.style.whiteSpace = "nowrap";
     const fits = () => {
-      if (text) {
-        const width = title.getBoundingClientRect().width;
-        // The epsilon absorbs arithmetic noise, not an actual CSS-pixel gap.
-        return width > 0 && text.getBoundingClientRect().width <= width + 1e-7;
-      }
-      // Older or custom markup: use the available DOM scroll measurement.
-      return title.clientWidth > 0 && title.scrollWidth <= title.clientWidth;
+      const width = title.getBoundingClientRect().width;
+      // The epsilon absorbs arithmetic noise, not an actual CSS-pixel gap.
+      return width > 0 && text.getBoundingClientRect().width <= width + 1e-7;
     };
     if (fits()) return;
 
