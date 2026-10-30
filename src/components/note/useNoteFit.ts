@@ -5,7 +5,7 @@ import type { Settings } from "../../../shared/settings.ts";
 import { byId, PAGE_SIZES, usedFamilies } from "../../config/appearance.ts";
 import { ensureFontsLoaded } from "../../export/fontEmbed.ts";
 import { loadFontCss } from "../../fonts.ts";
-import { fitNote, measureNoteOverflow, type FitResult } from "../../lib/note-fit.ts";
+import { fitNote, fitNoteTitle, measureNoteOverflow, type FitResult } from "../../lib/note-fit.ts";
 
 export type NoteFitState = {
   status: "pending" | "ready" | "overflow" | "font-error";
@@ -80,6 +80,8 @@ export function useNoteFit(
         if (controller.signal.aborted) return;
         const result: FitResult = fitNote(settings, (candidate) => {
           applyMeasurementSettings(node, candidate);
+          // Title fitting must use the loaded handwriting font at each candidate size.
+          fitNoteTitle(node);
           // Reading dimensions forces layout after the font and typography changes.
           return !measureNoteOverflow(node);
         });

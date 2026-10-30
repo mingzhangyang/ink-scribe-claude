@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, sanitizeSettings } from "../shared/settings.ts";
 import { ensureFontsLoaded } from "../src/export/fontEmbed.ts";
-import { fitCandidates, fitNote, measureNoteOverflow } from "../src/lib/note-fit.ts";
+import { fitCandidates, fitNote, fitNoteTitle, measureNoteOverflow } from "../src/lib/note-fit.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -79,6 +79,212 @@ describe("font readiness", () => {
   });
 });
 
+describe("near-fitting handwritten titles", () => {
+  type TitleHarnessOptions = {
+    flexWidth?: (size: number, available: number) => number;
+    initialAlign?: string;
+    initialWhiteSpace?: string;
+    initialTransform?: string;
+    noMeasuredText?: boolean;
+    lineWidths?: number[];
+    fragments?: Array<[number, number, number]>;
+    previewScale?: number;
+  };
+
+  function titleHarness(initialAvailable: number, intrinsicWidth: number, options: TitleHarnessOptions = {}) {
+    let available = initialAvailable;
+    const baseSize = 39;
+    const previewScale = options.previewScale ?? 1;
+    const style = {
+      fontSize: "",
+      whiteSpace: options.initialWhiteSpace ?? "",
+      textAlign: options.initialAlign ?? "",
+      transform: options.initialTransform ?? "",
+      removeProperty(name: string) { if (name === "font-size") this.fontSize = ""; },
+    };
+    const size = () => Number.parseFloat(style.fontSize || String(baseSize));
+    const width = () => options.flexWidth?.(size(), available) ?? available;
+    const renderedRect = (left: number, top: number, lineWidth: number) => ({
+      left: left * previewScale, right: (left + lineWidth) * previewScale,
+      top: top * previewScale, bottom: (top + 40) * previewScale,
+      width: lineWidth * previewScale, height: 40 * previewScale,
+    });
+    const text = {
+      // Reconstruct natural line fragments at the current size and flex width,
+      // including per-character jitter spans in the handwritten title.
+      getClientRects: () => {
+        if (options.initialAlign === "center") expect(style.textAlign).toBe("left");
+        if (options.initialTransform) expect(style.transform).toBe("none");
+        if (options.fragments) return options.fragments.map(([left, top, lineWidth]) => renderedRect(left, top, lineWidth));
+        const currentWidth = width();
+        if (currentWidth <= 0) return [];
+        const widths = options.lineWidths ?? (() => {
+          const parts: number[] = [];
+          let remaining = intrinsicWidth * size() / baseSize;
+          while (remaining > 0 && parts.length < 20) {
+            const part = Math.min(currentWidth, remaining);
+            parts.push(part);
+            remaining -= part;
+          }
+          return parts;
+        })();
+        return widths.map((lineWidth, i) => renderedRect(0, i * 50, lineWidth));
+      },
+      getBoundingClientRect: () => ({ width: intrinsicWidth * size() / baseSize * previewScale }),
+    };
+    const title = {
+      style,
+      get offsetWidth() { return Math.round(width()); },
+      get clientWidth() { return Math.round(width()); },
+      get scrollWidth() { return Math.max(this.clientWidth, Math.round(intrinsicWidth * size() / baseSize)); },
+      getBoundingClientRect: () => ({ width: width() * previewScale }),
+      querySelector: (selector: string) => selector === "[data-fit-text]" && !options.noMeasuredText ? text : null,
+    };
+    vi.stubGlobal("getComputedStyle", () => ({ fontSize: `${baseSize}px` }));
+    const page = { querySelector: (selector: string) => selector === ".note-title" ? title : null } as unknown as HTMLElement;
+    return { page, title, style, size, width, intrinsicWidth, baseSize, setAvailable: (w: number) => { available = w; } };
+  }
+
+  function expectFitted(h: ReturnType<typeof titleHarness>) {
+    expect(h.style.fontSize).not.toBe("");
+    expect(h.size()).toBeGreaterThanOrEqual(h.baseSize * 0.8 - 1e-8);
+    expect(h.size()).toBeLessThan(h.baseSize);
+    expect(h.intrinsicWidth * h.size() / h.baseSize).toBeLessThanOrEqual(h.width() + 1e-7);
+  }
+
+  it("keeps a near-fitting Chinese title on one line without shrinking the rest", () => {
+    const h = titleHarness(558, 632);
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.size()).toBeGreaterThan(34.3);
+    expect(h.style.whiteSpace).toBe("");
+  });
+
+  it("preserves authored font size when the title fits, is genuinely long, or has no width", () => {
+    for (const [available, required] of [[558, 400], [420, 950], [0, 600]]) {
+      const h = titleHarness(available, required);
+      fitNoteTitle(h.page);
+      expect(h.style.fontSize).toBe("");
+    }
+  });
+
+  it("recalculates from authored size when the canvas becomes wider", () => {
+    const h = titleHarness(558, 632);
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    h.setAvailable(700);
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("remeasures the current flex width when the date reclaims space", () => {
+    const h = titleHarness(558, 632, { flexWidth: (size, available) => size < 39 ? 550 : available });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+  it("measures centered journal text at the left edge and restores inline styles", () => {
+    const h = titleHarness(558, 632, {
+      initialAlign: "center", initialWhiteSpace: "normal", initialTransform: "translateX(1px) rotate(.2deg)",
+    });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.style.textAlign).toBe("center");
+    expect(h.style.whiteSpace).toBe("normal");
+    expect(h.style.transform).toBe("translateX(1px) rotate(.2deg)");
+  });
+
+  it("accepts a title fitting exactly at the 80 percent boundary", () => {
+    const h = titleHarness(560, 700);
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.size()).toBeCloseTo(39 * 0.8, 6);
+  });
+
+  it("applies later corrections when flex width changes near the cutoff", () => {
+    const h = titleHarness(558, 632, { flexWidth: (size, available) => size < 35 ? 550 : available });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+  it("uses fractional widths when rounded scrollWidth hides a wrap", () => {
+    const h = titleHarness(567.828125, 568.125);
+    expect(h.title.scrollWidth).toBe(h.title.clientWidth);
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+  it("preserves typography when reliable line fragments are unavailable", () => {
+    const h = titleHarness(558, 632, { noMeasuredText: true });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("does not shrink two balanced word lines even when a 20 percent reduction would fit", () => {
+    const h = titleHarness(568, 612, { lineWidths: [300, 300] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+    expect(h.style.whiteSpace).toBe("");
+  });
+
+  it("preserves balanced centered titles and restores their alignment", () => {
+    const h = titleHarness(568, 612, {
+      lineWidths: [300, 300], initialAlign: "center", initialWhiteSpace: "normal",
+    });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+    expect(h.style.textAlign).toBe("center");
+    expect(h.style.whiteSpace).toBe("normal");
+  });
+
+  it("merges jittered per-character rectangles into two visual lines", () => {
+    const fragments: Array<[number, number, number]> = Array.from(
+      { length: 14 }, (_, i) => [i * 39, i % 3, 39],
+    );
+    fragments.push([0, 51, 39], [39, 52, 39]);
+    const h = titleHarness(558, 632, { fragments });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+  it("preserves a short orphan that cannot fit within the 20 percent limit", () => {
+    const h = titleHarness(560, 900, { lineWidths: [540, 50] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("preserves multi-line titles even if the last line is short", () => {
+    const h = titleHarness(568, 900, { lineWidths: [540, 330, 20] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  // The editor allows 30%-160% zoom via a transformed parent. The rects returned
+  // by the browser are scaled even though computed font-size is not.
+  it.each([0.3, 0.5, 1, 1.6])("detects a short Chinese orphan at %s× preview zoom", (previewScale) => {
+    const h = titleHarness(558, 632, { previewScale });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.style.whiteSpace).toBe("");
+  });
+
+  it.each([0.3, 0.5, 1, 1.6])("leaves balanced two-line titles unchanged at %s× zoom", (previewScale) => {
+    const h = titleHarness(568, 612, { previewScale, lineWidths: [300, 300] });
+    fitNoteTitle(h.page);
+    expect(h.style.fontSize).toBe("");
+  });
+
+  it("groups jittered glyphs into two lines at 30% zoom", () => {
+    const fragments: Array<[number, number, number]> = Array.from(
+      { length: 14 }, (_, i) => [i * 39, i % 3, 39],
+    );
+    fragments.push([0, 51, 39], [39, 52, 39]);
+    const h = titleHarness(558, 632, { previewScale: 0.3, fragments });
+    fitNoteTitle(h.page);
+    expectFitted(h);
+  });
+
+});
 describe("canvas geometry", () => {
   const paper = { left: 0, top: 0, right: 840, bottom: 1188, width: 840 };
   function pageWith(regions: object[], textRects: object[]): HTMLElement {
