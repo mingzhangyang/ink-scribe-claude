@@ -955,6 +955,59 @@ if (process.env.E2E_API_KEY) {
   }));
   check("V6", "从查看页把笔记（含外观与贴纸）载入编辑器", editor.badge.includes("已发布") && editor.stickers === 1 && editor.cls.includes("paper-kraft"), JSON.stringify(editor));
 
+  // Loading another publication must not silently overwrite the unlinked, unsaved editor copy.
+  await p7.locator('[data-draft-status="saved"]').waitFor();
+  await p7.goto(englishNote.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(p7);
+  await p7.getByRole("button", { name: "在编辑器中打开" }).click();
+  const cancelledReplacement = await confirmInPage(p7, "取消");
+  check("V6-guard-cancel", "已有未保存的公开笔记副本时必须确认，取消后停留原页",
+    cancelledReplacement.includes("尚未保存到笔记库") && p7.url() === englishNote.url);
+  await p7.goto(URL, { waitUntil: "networkidle" });
+  check("V6-guard-preserve", "取消替换保留原工作区的笔记",
+    (await p7.locator(".note-title").first().innerText()).includes(title));
+  await p7.goto(englishNote.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(p7);
+  await p7.getByRole("button", { name: "在编辑器中打开" }).click();
+  await confirmInPage(p7, "仍然打开");
+  await p7.waitForURL(URL);
+  check("V6-guard-confirm", "明确确认后才将新公开笔记载入编辑器",
+    (await p7.locator(".note-title").first().innerText()).includes("Study Methods"));
+
+  // A typed source is work even when the initial sample remains on canvas; a saved library entry needs no prompt.
+  const { page: pDraftOnly, context: cDraftOnly } = await newPage();
+  await pDraftOnly.goto(URL, { waitUntil: "networkidle" });
+  const textOnly = "这是尚未生成笔记的原文，不能被公开作品替换";
+  await fillSource(pDraftOnly, textOnly);
+  await pDraftOnly.locator('[data-draft-status="saved"]').waitFor();
+  await pDraftOnly.goto(note.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(pDraftOnly);
+  await pDraftOnly.getByRole("button", { name: "在编辑器中打开" }).click();
+  const textWarning = await confirmInPage(pDraftOnly, "取消");
+  await pDraftOnly.goto(URL, { waitUntil: "networkidle" });
+  await openInput(pDraftOnly);
+  const preservedText = await pDraftOnly.locator(".source-text").inputValue();
+  await closeInput(pDraftOnly);
+  check("V6-guard-text", "未生成笔记的原文受保护，取消不会改写草稿",
+    textWarning.includes("尚未保存到笔记库") && preservedText === textOnly);
+  // A draft with only source text cannot be saved to the library directly: generate a local note first.
+  await openInput(pDraftOnly);
+  await pDraftOnly.getByRole("button", { name: "本地快速排版" }).click();
+  await waitForNoteReady(pDraftOnly);
+  await pDraftOnly.getByRole("button", { name: "保存到笔记库", exact: true }).click();
+  // LibraryBar maps a saved, unmodified linked entry to its visible "linked" status.
+  await pDraftOnly.locator('[data-library-status="linked"]').waitFor();
+  await pDraftOnly.goto(note.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(pDraftOnly);
+  await pDraftOnly.getByRole("button", { name: "在编辑器中打开" }).click();
+  await pDraftOnly.waitForURL(URL);
+  await openInput(pDraftOnly);
+  const sourceAfterOpen = await pDraftOnly.locator(".source-text").inputValue();
+  await closeInput(pDraftOnly);
+  check("V6-guard-saved", "已保存到笔记库的编辑不需确认，且不带入之前的原文",
+    (await pDraftOnly.locator(".note-title").first().innerText()).includes(title) && sourceAfterOpen === "");
+  await cDraftOnly.close();
+
   const unlisted = await (await p7.request.post(`${URL}api/v1/notes`, {
     headers: auth,
     data: { schemaVersion: 1, note: { title: `E2E 隐藏 ${Date.now()}`, cues: [], sections: [{ content: "仅链接可见", highlights: [] }], summary: "" } },
