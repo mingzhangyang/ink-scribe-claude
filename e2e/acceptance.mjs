@@ -56,6 +56,29 @@ async function waitForNoteReady(page) {
   await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30_000 });
 }
 
+/** CSS geometry check: the header must not depend on the published note's paper dimensions. */
+async function viewHeaderGeometry(page) {
+  return page.evaluate(() => {
+    const rect = (element) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+        centerY: (box.top + box.bottom) / 2, width: box.width, height: box.height };
+    };
+    const find = (selector) => rect(document.querySelector(selector));
+    return {
+      topbar: find(".view-topbar"),
+      back: find(".view-gallery-link"),
+      actions: find(".view-actions"),
+      buttons: [...document.querySelectorAll(".view-actions button")].map(rect),
+      meta: find(".view-meta"),
+      title: find(".view-meta h2"),
+      frame: find(".view-frame"),
+      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+}
+
 async function openAppMenu(page) {
   const toggle = page.locator(".app-menu-toggle");
   if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
@@ -893,6 +916,31 @@ if (process.env.E2E_API_KEY) {
   check("V4-nav", "公开笔记直接访问时显示可点击的图库入口",
     (await galleryNav.count()) === 1 && (await galleryNav.getAttribute("href")) === "/gallery" &&
     (await galleryNav.innerText()).includes("浏览公开图库") && (galleryNavBounds?.height ?? 0) >= 44);
+  const desktopHeader = await viewHeaderGeometry(p7);
+  check("V4-header-desktop", "宽屏导航与操作按钮同一水平线，标题独立左对齐",
+    !!desktopHeader.back && !!desktopHeader.actions && !!desktopHeader.topbar && !!desktopHeader.meta &&
+    !!desktopHeader.title && !!desktopHeader.frame &&
+    Math.abs(desktopHeader.back.centerY - desktopHeader.actions.centerY) < 3 &&
+    Math.abs(desktopHeader.title.left - desktopHeader.back.left) < 2 &&
+    desktopHeader.meta.top >= desktopHeader.topbar.bottom &&
+    desktopHeader.frame.top >= desktopHeader.meta.bottom &&
+    !desktopHeader.horizontalOverflow, JSON.stringify(desktopHeader));
+  await p7.locator(".view-header").screenshot({ path: `${SP}/note-header-desktop.png` });
+  await p7.setViewportSize({ width: 375, height: 812 });
+  await waitForNoteReady(p7);
+  const mobileHeader = await viewHeaderGeometry(p7);
+  check("V4-header-mobile", "手机端返回图库在上、三按钮同排、标题在下且无横向溢出",
+    !!mobileHeader.back && !!mobileHeader.actions && !!mobileHeader.topbar && !!mobileHeader.meta &&
+    !!mobileHeader.title && !!mobileHeader.frame &&
+    mobileHeader.back.bottom <= mobileHeader.actions.top + 2 &&
+    mobileHeader.meta.top >= mobileHeader.topbar.bottom &&
+    Math.abs(mobileHeader.title.left - mobileHeader.back.left) < 2 &&
+    mobileHeader.buttons.length === 3 &&
+    mobileHeader.buttons.every((b) => b.height >= 44 && b.left >= mobileHeader.topbar.left - 1 && b.right <= mobileHeader.topbar.right + 1 && Math.abs(b.top - mobileHeader.buttons[0].top) < 2) &&
+    !mobileHeader.horizontalOverflow, JSON.stringify(mobileHeader));
+  await p7.locator(".view-header").screenshot({ path: `${SP}/note-header-mobile.png` });
+  await p7.setViewportSize({ width: 1600, height: 1000 });
+  await waitForNoteReady(p7);
   await verifyFontRetry({ newPage, check, url: note.url, outputDir: SP, mode: "view" });
 
   // 回归：浏览器带缓存校验头（If-None-Match）再次打开链接时仍应返回完整页面（曾因转发该头而得到 Not Found）
@@ -1019,6 +1067,12 @@ if (process.env.E2E_API_KEY) {
   await p7.goto(unlisted.url, { waitUntil: "networkidle" });
   await waitForNoteReady(p7);
   check("V7-nav", "仅链接可见的笔记不显示公开图库入口", (await p7.locator(".view-gallery-link").count()) === 0);
+  const unlistedHeader = await viewHeaderGeometry(p7);
+  check("V7-header", "仅链接可见的笔记操作区靠右且标题在下",
+    !unlistedHeader.back && !!unlistedHeader.actions && !!unlistedHeader.topbar && !!unlistedHeader.meta &&
+    unlistedHeader.meta.top >= unlistedHeader.topbar.bottom &&
+    Math.abs(unlistedHeader.actions.right - unlistedHeader.topbar.right) < 2 &&
+    !unlistedHeader.horizontalOverflow, JSON.stringify(unlistedHeader));
 
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
   const englishRemoved = await p7.request.delete(`${URL}api/v1/notes/${englishNote.id}`, { headers: auth });

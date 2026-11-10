@@ -168,14 +168,27 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
 
   return (
     <main className="view-main">
-      <div className="view-toolbar">
-        <div className="view-meta">
+      <header className="view-header">
+        <div className="view-topbar">
           {data.summary.visibility === "public" ? (
-            <a className="btn btn-small btn-secondary view-gallery-link" {...linkProps("/gallery")}>
+            <a className="view-gallery-link" {...linkProps("/gallery")}>
               <span aria-hidden="true">←</span>
               {t.view.browseGallery}
             </a>
           ) : null}
+          <div className="button-row view-actions">
+            <button type="button" className="btn btn-small btn-secondary" onClick={() => void copyLink()}>
+              {t.view.copyLink}
+            </button>
+            <button type="button" className="btn btn-small btn-secondary" disabled={exporting || fit?.status !== "ready"} onClick={() => void download()}>
+              {exporting ? t.view.exporting : t.view.download}
+            </button>
+            <button type="button" className="btn btn-small btn-primary" onClick={() => void openInEditor()}>
+              {t.view.openInEditor}
+            </button>
+          </div>
+        </div>
+        <div className="view-meta">
           <h2>{data.note.title}</h2>
           <p className="hint">
             {template}
@@ -183,18 +196,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
             {data.summary.visibility === "unlisted" ? t.view.unlisted : ""}
           </p>
         </div>
-        <div className="button-row">
-          <button type="button" className="btn btn-small btn-secondary" onClick={() => void copyLink()}>
-            {t.view.copyLink}
-          </button>
-          <button type="button" className="btn btn-small btn-secondary" disabled={exporting || fit?.status !== "ready"} onClick={() => void download()}>
-            {exporting ? t.view.exporting : t.view.download}
-          </button>
-          <button type="button" className="btn btn-small" onClick={() => void openInEditor()}>
-            {t.view.openInEditor}
-          </button>
-        </div>
-      </div>
+      </header>
       <NoteFitStatus fit={fit} />
       <NoteFitNotice fit={fit} fixed />
       <div className="view-frame" ref={frameRef}>
