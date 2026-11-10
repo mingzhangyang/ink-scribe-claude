@@ -928,6 +928,16 @@ if (process.env.E2E_API_KEY) {
   await p7.locator(".view-header").screenshot({ path: `${SP}/note-header-desktop.png` });
   await p7.setViewportSize({ width: 375, height: 812 });
   await waitForNoteReady(p7);
+  // Note readiness does not wait for the ResizeObserver to apply the new preview scale.
+  await p7.waitForFunction(() => {
+    const frame = document.querySelector(".view-frame");
+    const preview = frame?.querySelector(".page-frame");
+    const scaler = preview?.querySelector(".page-scaler");
+    if (!frame || !preview || !scaler) return false;
+    const expectedWidth = Math.min(frame.clientWidth, scaler.offsetWidth);
+    return Math.abs(preview.getBoundingClientRect().width - expectedWidth) < 1 &&
+      Math.abs(scaler.getBoundingClientRect().width - expectedWidth) < 1;
+  });
   const mobileHeader = await viewHeaderGeometry(p7);
   check("V4-header-mobile", "手机端返回图库在上、三按钮同排、标题在下且无横向溢出",
     !!mobileHeader.back && !!mobileHeader.actions && !!mobileHeader.topbar && !!mobileHeader.meta &&
@@ -1040,7 +1050,7 @@ if (process.env.E2E_API_KEY) {
     textWarning.includes("尚未保存到笔记库") && preservedText === textOnly);
   // A draft with only source text cannot be saved to the library directly: generate a local note first.
   await openInput(pDraftOnly);
-  await pDraftOnly.getByRole("button", { name: "本地快速排版" }).click();
+  await pDraftOnly.getByRole("button", { name: "不使用 AI，按段落快速排版", exact: true }).click();
   await waitForNoteReady(pDraftOnly);
   await pDraftOnly.getByRole("button", { name: "保存到笔记库", exact: true }).click();
   // LibraryBar maps a saved, unmodified linked entry to its visible "linked" status.
