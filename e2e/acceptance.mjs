@@ -974,7 +974,7 @@ if (process.env.E2E_API_KEY) {
   check("V6-guard-confirm", "明确确认后才将新公开笔记载入编辑器",
     (await p7.locator(".note-title").first().innerText()).includes("Study Methods"));
 
-  // A text-only draft is also work: cancel must keep its original content. A saved library entry needs no prompt.
+  // A typed source is work even when the initial sample remains on canvas; a saved library entry needs no prompt.
   const { page: pDraftOnly, context: cDraftOnly } = await newPage();
   await pDraftOnly.goto(URL, { waitUntil: "networkidle" });
   const textOnly = "这是尚未生成笔记的原文，不能被公开作品替换";
@@ -990,6 +990,10 @@ if (process.env.E2E_API_KEY) {
   await closeInput(pDraftOnly);
   check("V6-guard-text", "未生成笔记的原文受保护，取消不会改写草稿",
     textWarning.includes("尚未保存到笔记库") && preservedText === textOnly);
+  // A draft with only source text cannot be saved to the library directly: generate a local note first.
+  await openInput(pDraftOnly);
+  await pDraftOnly.getByRole("button", { name: "本地快速排版" }).click();
+  await waitForNoteReady(pDraftOnly);
   await pDraftOnly.getByRole("button", { name: "保存到笔记库", exact: true }).click();
   await pDraftOnly.locator('[data-library-status="saved"]').waitFor();
   await pDraftOnly.goto(note.url, { waitUntil: "networkidle" });
