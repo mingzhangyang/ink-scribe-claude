@@ -995,7 +995,8 @@ if (process.env.E2E_API_KEY) {
   await pDraftOnly.getByRole("button", { name: "本地快速排版" }).click();
   await waitForNoteReady(pDraftOnly);
   await pDraftOnly.getByRole("button", { name: "保存到笔记库", exact: true }).click();
-  await pDraftOnly.locator('[data-library-status="saved"]').waitFor();
+  // LibraryBar maps a saved, unmodified linked entry to its visible "linked" status.
+  await pDraftOnly.locator('[data-library-status="linked"]').waitFor();
   await pDraftOnly.goto(note.url, { waitUntil: "networkidle" });
   await waitForNoteReady(pDraftOnly);
   await pDraftOnly.getByRole("button", { name: "在编辑器中打开" }).click();
