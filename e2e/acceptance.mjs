@@ -1040,7 +1040,7 @@ if (process.env.E2E_API_KEY) {
     textWarning.includes("尚未保存到笔记库") && preservedText === textOnly);
   // A draft with only source text cannot be saved to the library directly: generate a local note first.
   await openInput(pDraftOnly);
-  await pDraftOnly.getByRole("button", { name: "本地快速排版" }).click();
+  await pDraftOnly.getByRole("button", { name: "不使用 AI，按段落快速排版", exact: true }).click();
   await waitForNoteReady(pDraftOnly);
   await pDraftOnly.getByRole("button", { name: "保存到笔记库", exact: true }).click();
   // LibraryBar maps a saved, unmodified linked entry to its visible "linked" status.
