@@ -928,6 +928,16 @@ if (process.env.E2E_API_KEY) {
   await p7.locator(".view-header").screenshot({ path: `${SP}/note-header-desktop.png` });
   await p7.setViewportSize({ width: 375, height: 812 });
   await waitForNoteReady(p7);
+  // Note readiness does not wait for the ResizeObserver to apply the new preview scale.
+  await p7.waitForFunction(() => {
+    const frame = document.querySelector(".view-frame");
+    const preview = frame?.querySelector(".page-frame");
+    const scaler = preview?.querySelector(".page-scaler");
+    if (!frame || !preview || !scaler) return false;
+    const expectedWidth = Math.min(frame.clientWidth, scaler.offsetWidth);
+    return Math.abs(preview.getBoundingClientRect().width - expectedWidth) < 1 &&
+      Math.abs(scaler.getBoundingClientRect().width - expectedWidth) < 1;
+  });
   const mobileHeader = await viewHeaderGeometry(p7);
   check("V4-header-mobile", "手机端返回图库在上、三按钮同排、标题在下且无横向溢出",
     !!mobileHeader.back && !!mobileHeader.actions && !!mobileHeader.topbar && !!mobileHeader.meta &&
