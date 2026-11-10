@@ -285,6 +285,31 @@ describe("library in the editor", () => {
     expect(c.store.getState().libraryLink?.id).not.toBe(entry.id);
   });
 
+  it("treats a linked note as unsafe while saving or when its storage status is unresolved", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    await c.saveToLibrary();
+    expect(c.hasUnsavedWork()).toBe(false);
+    for (const status of ["saving", "conflict", "deleted", "error"] as const) {
+      c.useLibraryStatus.setState({ status });
+      expect(c.hasUnsavedWork()).toBe(true);
+    }
+    c.useLibraryStatus.setState({ status: "saved" });
+    expect(c.hasUnsavedWork()).toBe(false);
+  });
+
+  it("clears the previous source text when loading a published note into the editor", async () => {
+    const c = await boot();
+    c.store.getState().loadDocument(document, null);
+    const serial = c.store.getState().documentSerial;
+    c.store.getState().loadShared({ note: edited("公开笔记").note!, settings: document.settings, stickers: [], doodle: null });
+    expect(c.store.getState()).toMatchObject({
+      input: { text: "" }, note: { title: "公开笔记" }, source: "shared", generatedFrom: "", libraryLink: null,
+      documentSerial: serial + 1,
+    });
+    expect(c.hasUnsavedWork()).toBe(true);
+  });
+
   it("treats a restored text-only draft as unsaved work before the editor loads a sample", async () => {
     await writeDraft(null, { ...document, note: null, stickers: [] }, true);
     const c = await boot();

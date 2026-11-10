@@ -105,6 +105,8 @@ export const useNoteStore = create<State>()(
         })),
       loadShared: ({ note, settings, stickers, doodle }) =>
         set((s) => ({
+          // A published note has no source text; never carry an unrelated editor input into it.
+          input: { ...s.input, text: "" },
           note,
           settings,
           stickers,

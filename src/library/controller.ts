@@ -72,7 +72,12 @@ export function isModified(document: NoteDocument, link: LibraryLink, baseline: 
 /** Whether replacing the editor would lose work that is not in the library. */
 export function hasUnsavedWork(): boolean {
   const state = useNoteStore.getState();
-  if (state.libraryLink) return isModified(currentDocument(), state.libraryLink, useLibraryStatus.getState().baseline);
+  if (state.libraryLink) {
+    const { status, baseline } = useLibraryStatus.getState();
+    // Until a save finishes, or after a conflict/deletion/read failure, the linked copy is not proven safe.
+    return status === "saving" || status === "conflict" || status === "deleted" || status === "error"
+      || isModified(currentDocument(), state.libraryLink, baseline);
+  }
   // Typed text counts before any note is generated: a restored draft may hold only that.
   return (!!state.note || !!state.input.text.trim()) && !isUntouchedSample(state);
 }

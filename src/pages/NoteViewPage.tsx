@@ -2,13 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { noteLanguage } from "../../shared/note.ts";
 import { templateLabel } from "../../shared/options.ts";
 import { ApiRequestError, fetchPublishedNote, type ViewableNote } from "../api.ts";
+import { confirmAction } from "../components/ConfirmDialog.tsx";
 import { NotePage } from "../components/note/NotePage.tsx";
 import { NoteFitNotice, NoteFitStatus } from "../components/note/NoteFitStatus.tsx";
 import type { NoteFitState } from "../components/note/useNoteFit.ts";
 import { byId, PAGE_WIDTH, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
-import { linkProps, navigate } from "../router.ts";
+import { checkLibraryLink, hasUnsavedWork } from "../library/controller.ts";
+import { linkProps, navigate, parseRoute } from "../router.ts";
 import { useNoteStore, type RequestError } from "../state/store.ts";
 
 const noop = () => {};
@@ -20,6 +22,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
   const [state, setState] = useState<State>({ kind: "loading" });
   const pageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const openingRef = useRef(false);
   const [width, setWidth] = useState(PAGE_WIDTH);
   const [pageHeight, setPageHeight] = useState(1188);
   const [exporting, setExporting] = useState(false);
@@ -137,9 +140,30 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
     }
   }
 
-  function openInEditor() {
-    loadShared(data);
-    navigate("/");
+  async function openInEditor() {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    const before = useNoteStore.getState();
+    // An in-flight library check or confirmation must never replace a document edited/opened meanwhile.
+    const stillCurrent = () => {
+      const route = parseRoute(location.pathname);
+      const now = useNoteStore.getState();
+      return route.name === "note" && route.id === id && now.documentSerial === before.documentSerial
+        && now.libraryLink === before.libraryLink && now.input === before.input
+        && now.note === before.note && now.settings === before.settings
+        && now.stickers === before.stickers && now.aiDoodle === before.aiDoodle;
+    };
+    try {
+      // The editor is unmounted here: a linked note may have been changed or deleted in another tab.
+      if (before.libraryLink) await checkLibraryLink(true);
+      if (!stillCurrent()) return;
+      if (hasUnsavedWork() && !(await confirmAction(t.library.replaceConfirm, t.library.replaceAction, { danger: true }))) return;
+      if (!stillCurrent()) return;
+      loadShared(data);
+      navigate("/");
+    } finally {
+      openingRef.current = false;
+    }
   }
 
   return (
@@ -166,7 +190,7 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
           <button type="button" className="btn btn-small btn-secondary" disabled={exporting || fit?.status !== "ready"} onClick={() => void download()}>
             {exporting ? t.view.exporting : t.view.download}
           </button>
-          <button type="button" className="btn btn-small" onClick={openInEditor}>
+          <button type="button" className="btn btn-small" onClick={() => void openInEditor()}>
             {t.view.openInEditor}
           </button>
         </div>
