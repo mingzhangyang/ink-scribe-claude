@@ -146,6 +146,12 @@ export function NoteViewPage({ id, onToast }: { id: string; onToast: (message: s
     <main className="view-main">
       <div className="view-toolbar">
         <div className="view-meta">
+          {data.summary.visibility === "public" ? (
+            <a className="btn btn-small btn-secondary view-gallery-link" {...linkProps("/gallery")}>
+              <span aria-hidden="true">←</span>
+              {t.view.browseGallery}
+            </a>
+          ) : null}
           <h2>{data.note.title}</h2>
           <p className="hint">
             {template}

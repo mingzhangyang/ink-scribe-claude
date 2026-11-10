@@ -690,6 +690,7 @@ export const en: Messages = {
     loadFailed: "Couldn't load. Please try again later.",
     notFound: "This note doesn't exist or has been deleted",
     toGallery: "Browse the gallery",
+    browseGallery: "Browse gallery",
     note: "Note",
     unlisted: " · Only people with the link",
     copyLink: "Copy link",

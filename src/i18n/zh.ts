@@ -411,6 +411,7 @@ export const zh = {
     loadFailed: "加载失败，请稍后重试。",
     notFound: "这条笔记不存在或已被删除",
     toGallery: "去图库看看",
+    browseGallery: "浏览公开图库",
     note: "笔记",
     unlisted: " · 仅持有链接可见",
     copyLink: "复制链接",

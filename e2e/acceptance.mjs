@@ -888,6 +888,11 @@ if (process.env.E2E_API_KEY) {
     handles: document.querySelectorAll(".sticker-selection").length,
   }));
   check("V4", "查看页按发布时的外观只读渲染", view.title.includes("E2E") && view.cls.includes("paper-kraft") && view.cls.includes("layout-free-journal") && view.stickers === 1 && view.handles === 0, JSON.stringify(view));
+  const galleryNav = p7.locator(".view-gallery-link");
+  const galleryNavBounds = await galleryNav.boundingBox();
+  check("V4-nav", "公开笔记直接访问时显示可点击的图库入口",
+    (await galleryNav.count()) === 1 && (await galleryNav.getAttribute("href")) === "/gallery" &&
+    (await galleryNav.innerText()).includes("浏览公开图库") && (galleryNavBounds?.height ?? 0) >= 44);
   await verifyFontRetry({ newPage, check, url: note.url, outputDir: SP, mode: "view" });
 
   // 回归：浏览器带缓存校验头（If-None-Match）再次打开链接时仍应返回完整页面（曾因转发该头而得到 Not Found）
@@ -923,14 +928,21 @@ if (process.env.E2E_API_KEY) {
   await waitForNoteReady(p7);
   await setAppPreference(p7, "locale", "en");
   const englishChrome = await p7.locator(".view-meta .hint").innerText();
+  const englishGalleryNav = await p7.locator(".view-gallery-link").innerText();
   await setAppPreference(p7, "locale", "zh");
   const chineseChrome = await p7.locator(".view-meta .hint").innerText();
+  const chineseGalleryNav = await p7.locator(".view-gallery-link").innerText();
   check("V4d", "英文笔记 chrome 模板名称不受界面语言切换影响",
     englishChrome.includes("Lecture summary") && chineseChrome.includes("Lecture summary") &&
     !chineseChrome.includes("课程总结"), `en: ${englishChrome}; zh: ${chineseChrome}`);
 
-  await p7.goto(`${URL}gallery`, { waitUntil: "networkidle" });
+  check("V4-nav-i18n", "图库入口跟随界面语言而非笔记语言",
+    englishGalleryNav.includes("Browse gallery") && chineseGalleryNav.includes("浏览公开图库"));
+  await p7.locator(".view-gallery-link").click();
+  await p7.waitForURL(`${URL}gallery`);
+  check("V4-nav-route", "点击公开笔记上的图库入口后导航到图库", p7.url().endsWith("/gallery"));
   const card = p7.locator(".gallery-card").filter({ hasText: title });
+  await card.waitFor({ state: "visible" });
   check("V5", "公开笔记出现在图库", (await card.count()) === 1);
   await card.click();
   await p7.waitForURL(note.url);
@@ -950,6 +962,10 @@ if (process.env.E2E_API_KEY) {
   const gallery = await (await p7.request.get(`${URL}api/gallery?limit=50`)).json();
   const unlistedHtml = await (await p7.request.get(unlisted.url)).text();
   check("V7", "仅链接可见的笔记不进入图库且禁止搜索引擎收录", unlisted.visibility === "unlisted" && !gallery.items.some((i) => i.id === unlisted.id) && unlistedHtml.includes("noindex"));
+
+  await p7.goto(unlisted.url, { waitUntil: "networkidle" });
+  await waitForNoteReady(p7);
+  check("V7-nav", "仅链接可见的笔记不显示公开图库入口", (await p7.locator(".view-gallery-link").count()) === 0);
 
   const removed = await p7.request.delete(`${URL}api/v1/notes/${note.id}`, { headers: auth });
   const englishRemoved = await p7.request.delete(`${URL}api/v1/notes/${englishNote.id}`, { headers: auth });
