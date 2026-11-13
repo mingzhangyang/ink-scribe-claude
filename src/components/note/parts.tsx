@@ -68,8 +68,11 @@ export function CueList({
       <div className={`cue-${variant}`} data-fit>
         {cues.map((cue, i) => (
           <span key={i} className={`cue-chip cue-chip-${i % 3}`} style={blockJitter(seed + i * 17, naturalness, 2.2, 1)}>
-            {variant === "tags" ? "#" : null}
-            <HandText text={cue.keyword} seed={seed + i} naturalness={naturalness} />
+            {/* 包成一个盒子：芯片是纵向 flex，裸文本 "#" 会单独占一行。 */}
+            <span className="cue-chip-keyword">
+              {variant === "tags" ? "#" : null}
+              <HandText text={cue.keyword} seed={seed + i} naturalness={naturalness} />
+            </span>
             {cue.note ? (
               <small>
                 <HandText text={cue.note} seed={seed + i + 50} naturalness={naturalness} />
