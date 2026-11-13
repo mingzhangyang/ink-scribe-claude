@@ -132,8 +132,12 @@ describe("near-fitting handwritten titles", () => {
       },
       getBoundingClientRect: () => ({ width: intrinsicWidth * size() / baseSize * previewScale }),
     };
+    const attributes = new Set<string>();
     const title = {
       style,
+      attributes,
+      setAttribute: (name: string) => { attributes.add(name); },
+      removeAttribute: (name: string) => { attributes.delete(name); },
       get offsetWidth() { return Math.round(width()); },
       get clientWidth() { return Math.round(width()); },
       get scrollWidth() { return Math.max(this.clientWidth, Math.round(intrinsicWidth * size() / baseSize)); },
@@ -158,6 +162,16 @@ describe("near-fitting handwritten titles", () => {
     expectFitted(h);
     expect(h.size()).toBeGreaterThan(34.3);
     expect(h.style.whiteSpace).toBe("");
+  });
+
+  it("pins a fitted title to one line so a re-layout cannot wrap it, and unpins it when refit", () => {
+    const h = titleHarness(558, 632);
+    fitNoteTitle(h.page);
+    expectFitted(h);
+    expect(h.title.attributes.has("data-single-line")).toBe(true);
+    h.setAvailable(700);
+    fitNoteTitle(h.page);
+    expect(h.title.attributes.has("data-single-line")).toBe(false);
   });
 
   it("preserves authored font size when the title fits, is genuinely long, or has no width", () => {

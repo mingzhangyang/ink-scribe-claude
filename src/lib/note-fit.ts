@@ -83,12 +83,19 @@ function hasOrphanedTitleLine(title: HTMLElement, text: HTMLElement, baseSize: n
 /**
  * Keep near-fitting titles on one line only if the natural wrap leaves a short
  * orphan. The selected inline font size survives the export clone.
+ *
+ * A fitted title fills its line to the subpixel, so the decision is recorded
+ * (and styled as nowrap) rather than left to be re-derived from widths: the
+ * export re-lays the text out and may measure it a hair wider than the preview.
  */
+const SINGLE_LINE_TITLE_ATTRIBUTE = "data-single-line";
+
 export function fitNoteTitle(page: HTMLElement): void {
   const title = page.querySelector<HTMLElement>(".note-title");
   if (!title) return;
   // Re-measure from authored typography for every page-fit candidate.
   title.style.removeProperty("font-size");
+  title.removeAttribute(SINGLE_LINE_TITLE_ATTRIBUTE);
   const baseSize = Number.parseFloat(getComputedStyle(title).fontSize);
   if (!Number.isFinite(baseSize) || baseSize <= 0) return;
 
@@ -96,6 +103,7 @@ export function fitNoteTitle(page: HTMLElement): void {
   const previousTextAlign = title.style.textAlign;
   const previousTransform = title.style.transform;
   let keepSize = false;
+  let singleLine = false;
   try {
     // A centered title may overflow in *both* directions; scrollWidth alone
     // can miss the overflow on the left. Measure at the natural left edge.
@@ -113,7 +121,10 @@ export function fitNoteTitle(page: HTMLElement): void {
       // The epsilon absorbs arithmetic noise, not an actual CSS-pixel gap.
       return width > 0 && text.getBoundingClientRect().width <= width + 1e-7;
     };
-    if (fits()) return;
+    if (fits()) {
+      singleLine = true;
+      return;
+    }
 
     const minimumSize = baseSize * 0.8;
     title.style.fontSize = `${minimumSize}px`;
@@ -132,8 +143,10 @@ export function fitNoteTitle(page: HTMLElement): void {
     }
     title.style.fontSize = `${fittingSize}px`;
     keepSize = fits();
+    singleLine = keepSize;
   } finally {
     if (!keepSize) title.style.removeProperty("font-size");
+    if (singleLine) title.setAttribute(SINGLE_LINE_TITLE_ATTRIBUTE, "");
     title.style.whiteSpace = previousWhiteSpace;
     title.style.textAlign = previousTextAlign;
     title.style.transform = previousTransform;
