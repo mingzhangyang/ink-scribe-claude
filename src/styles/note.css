@@ -214,6 +214,11 @@
   transform-origin: left bottom;
 }
 
+/* 标题已按字号适配为恰好一行（见 fitNoteTitle）：导出重新排版时不能再折行。 */
+.note-title[data-single-line] {
+  white-space: nowrap;
+}
+
 .note-date {
   flex: 0 1 auto;
   min-width: 0;

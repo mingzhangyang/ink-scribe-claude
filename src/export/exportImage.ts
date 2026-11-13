@@ -38,6 +38,43 @@ function snapshotNode(node: HTMLElement): HTMLElement {
   return clone;
 }
 
+const AUTO_SIZE_ATTRIBUTE = "data-export-auto-size";
+const REPLACED_ELEMENTS = new Set(["IMG", "CANVAS", "VIDEO", "IFRAME", "OBJECT", "EMBED"]);
+
+/**
+ * modern-screenshot 把每个元素的计算样式写成内联样式，其中 width/height 是预览里量出的像素值。
+ * 对于尺寸本来由内容决定（auto）的盒子，这会把导出锁死在预览的测量结果上：导出的 SVG 环境里
+ * 文字只要宽出一丝（iOS Safari 上会发生），刚好容纳文字的盒子就会多折一行并叠到后面的内容上；
+ * 被固定高度的父级还会吞掉子元素本应折叠出去的外边距。这里记录哪些盒子的尺寸是 auto，
+ * 导出时放开它们，让导出按与预览相同的规则重新排版。
+ *
+ * 元素不渲染时，getComputedStyle 返回的是计算值（auto、百分比）而不是布局后的像素值。
+ */
+function markAutoSizes(snapshot: HTMLElement): void {
+  const display = snapshot.style.display;
+  snapshot.style.display = "none";
+  try {
+    for (const element of snapshot.querySelectorAll<HTMLElement>("*")) {
+      if (!(element instanceof HTMLElement) || REPLACED_ELEMENTS.has(element.tagName)) continue;
+      const style = getComputedStyle(element);
+      const axes = `${style.width === "auto" ? "w" : ""}${style.height === "auto" ? "h" : ""}`;
+      if (axes) element.setAttribute(AUTO_SIZE_ATTRIBUTE, axes);
+    }
+  } finally {
+    snapshot.style.display = display;
+  }
+}
+
+function releaseAutoSizes(cloned: Node): void {
+  if (!(cloned instanceof HTMLElement)) return;
+  const axes = cloned.getAttribute(AUTO_SIZE_ATTRIBUTE);
+  if (!axes) return;
+  cloned.removeAttribute(AUTO_SIZE_ATTRIBUTE);
+  // 笔记只使用横排书写，逻辑尺寸与物理尺寸一一对应。
+  if (axes.includes("w")) for (const name of ["width", "inline-size"]) cloned.style.removeProperty(name);
+  if (axes.includes("h")) for (const name of ["height", "block-size"]) cloned.style.removeProperty(name);
+}
+
 export async function renderNoteBlob(node: HTMLElement, options: ExportOptions): Promise<{ blob: Blob; scale: number }> {
   if (node.dataset.renderStatus !== "ready") throw new Error("Note layout is not ready for export");
   const snapshot = snapshotNode(node);
@@ -49,6 +86,7 @@ export async function renderNoteBlob(node: HTMLElement, options: ExportOptions):
     const [cssText] = await Promise.all([buildFontEmbedCss(options.families, text), preparePaperTexture(snapshot)]);
     const width = snapshot.offsetWidth;
     const height = snapshot.offsetHeight;
+    markAutoSizes(snapshot);
     const scale = effectiveScale(width, height, options.scale);
     const blob = await domToBlob(snapshot, {
       width,
@@ -60,6 +98,7 @@ export async function renderNoteBlob(node: HTMLElement, options: ExportOptions):
       filter: excludeEditorChrome,
       font: { cssText },
       timeout: 30_000,
+      onCloneEachNode: releaseAutoSizes,
       // 快照位于视口外，渲染时去掉定位样式
       style: { position: "static", left: "auto", top: "auto" },
     });
