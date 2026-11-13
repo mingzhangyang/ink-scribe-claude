@@ -7,7 +7,7 @@ const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://127.0.0.1:${PORT}/`;
 // 各场景使用独立的测试密钥，保留真实的每密钥限流阈值，避免验收互相消耗额度。
 // 所有密钥只写入本地 D1 的哈希，不使用生产密钥。
-const API_KEYS = Object.fromEntries(["main", "contract", "dense"].map((name) => [name, `isk_e2e_${randomBytes(16).toString("hex")}`]));
+const API_KEYS = Object.fromEntries(["main", "contract", "dense", "drift"].map((name) => [name, `isk_e2e_${randomBytes(16).toString("hex")}`]));
 // 下载的文件名包含中文，需要 UTF-8 locale，否则浏览器会改名为 "download"
 const env = {
   ...process.env,
@@ -16,6 +16,7 @@ const env = {
   E2E_API_KEY: API_KEYS.main,
   E2E_CONTRACT_API_KEY: API_KEYS.contract,
   E2E_DENSE_API_KEY: API_KEYS.dense,
+  E2E_DRIFT_API_KEY: API_KEYS.drift,
 };
 
 function run(command, args) {

@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
 import { verifyFontRetry } from "./font-retry.mjs";
+import { verifyExportDrift } from "./export-drift.mjs";
 import { closeInput, fillSource, openInput } from "./input.mjs";
 import { addDecorSticker, paletteTile } from "./stickers.mjs";
 
@@ -1175,6 +1176,14 @@ if (process.env.E2E_API_KEY) {
   for (const id of ids) cleanupStatuses.push((await p12.request.delete(`${URL}api/v1/notes/${id}`, { headers: auth })).status());
   check("W-cleanup", "全部长内容测试笔记成功删除", cleanupStatuses.every((status) => status === 204), cleanupStatuses.join(", "));
   await c12.close();
+}
+
+// ---------- XD. 导出环境的文字宽度偏差 ----------
+if (process.env.E2E_DRIFT_API_KEY ?? process.env.E2E_API_KEY) {
+  await verifyExportDrift({
+    newPage, check, url: URL, outputDir: SP,
+    auth: { Authorization: `Bearer ${process.env.E2E_DRIFT_API_KEY ?? process.env.E2E_API_KEY}` },
+  });
 }
 
 // ---------- S. SEO 与 GEO ----------

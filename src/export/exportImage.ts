@@ -5,6 +5,7 @@ import { buildFontEmbedCss, ensureFontsLoaded } from "./fontEmbed.ts";
 import { effectiveScale } from "./scale.ts";
 import { preparePaperTexture } from "./paperTexture.ts";
 import { measureNoteOverflow } from "../lib/note-fit.ts";
+import { applyExportLetterSpacing, correctTextDrift } from "./textDrift.ts";
 
 export type ExportFormat = "png" | "jpeg";
 export type ExportScale = 1 | 2 | 3;
@@ -84,6 +85,11 @@ export async function renderNoteBlob(node: HTMLElement, options: ExportOptions):
     await ensureFontsLoaded(options.families, text);
     if (measureNoteOverflow(snapshot)) throw new Error("Note content does not fit the export canvas");
     const [cssText] = await Promise.all([buildFontEmbedCss(options.families, text), preparePaperTexture(snapshot)]);
+    // 导出在 SVG 中重新排版，那里的几何信息读不到。先测出导出环境的文字宽度偏差并抵消；
+    // 抵消不掉时 snapshot 已被调整为导出的实际排版，必须按它重新检查溢出、重新取画布尺寸。
+    if (await correctTextDrift(snapshot, cssText) && measureNoteOverflow(snapshot)) {
+      throw new Error("Note content does not fit the export canvas");
+    }
     const width = snapshot.offsetWidth;
     const height = snapshot.offsetHeight;
     markAutoSizes(snapshot);
@@ -98,7 +104,10 @@ export async function renderNoteBlob(node: HTMLElement, options: ExportOptions):
       filter: excludeEditorChrome,
       font: { cssText },
       timeout: 30_000,
-      onCloneEachNode: releaseAutoSizes,
+      onCloneEachNode: (cloned) => {
+        releaseAutoSizes(cloned);
+        applyExportLetterSpacing(cloned);
+      },
       // 快照位于视口外，渲染时去掉定位样式
       style: { position: "static", left: "auto", top: "auto" },
     });
