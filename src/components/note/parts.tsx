@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
+import type { DiagramBlock } from "../../../shared/diagram.ts";
 import { noteLanguage, NOTE_LABELS, type NoteCue, type NoteSection, type NoteStructure } from "../../../shared/note.ts";
 import { blockJitter, HandContent, HandText } from "./HandText.tsx";
 import { DoodleArt } from "./DoodleArt.tsx";
+import { DiagramBlockView } from "./DiagramBlock.tsx";
 
 export type Labels = { lang: "zh-CN" | "en"; cues: string; summary: string; notes: string; topic: string; date: string; keywords: string };
 
@@ -114,6 +116,7 @@ export function SectionBlock({
   seed,
   naturalness,
   className,
+  diagrams,
 }: {
   section: NoteSection;
   index: number;
@@ -122,6 +125,7 @@ export function SectionBlock({
   seed: number;
   naturalness: number;
   className?: string;
+  diagrams?: DiagramBlock[];
 }) {
   const s = seed + index * 977;
   return (
@@ -133,6 +137,7 @@ export function SectionBlock({
         </h2>
       ) : null}
       <HandContent text={section.content} highlights={section.highlights} seed={s + 2} naturalness={naturalness} />
+      {diagrams?.map((block, i) => <DiagramBlockView key={i} block={block} seed={s + i * 271} />)}
     </section>
   );
 }
