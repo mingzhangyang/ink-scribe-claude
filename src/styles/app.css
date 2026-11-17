@@ -1276,7 +1276,7 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 4px 8px;
 }
 .diagram-expand {
@@ -1285,6 +1285,7 @@ input[type="range"] {
   gap: 8px;
   flex: 1;
   min-width: 0;
+  min-height: 44px;
   padding: 6px 2px;
   color: var(--text);
   background: transparent;
@@ -1303,7 +1304,7 @@ input[type="range"] {
   border-top: 1px solid var(--border);
 }
 .diagram-edit-preview {
-  --ink: var(--text);
+  --ink: #292524;
   --paper: var(--paper-ui);
   --hand-font: cursive;
   --fs: 18px;
@@ -1327,7 +1328,7 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 44px;
   cursor: pointer;
 }
 .diagram-check input { flex: none; accent-color: var(--primary-bg); }
