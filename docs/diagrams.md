@@ -54,7 +54,7 @@ No schema version bump is needed (schemaVersion remains 1). The existing JSON pu
 - DiagramBlockView is rendered from SectionBlock after its visible section text, never in the cue column, in all four layouts.
 - A block occupies full available content width, with an aspect ratio of 4:3 and ordinary flow height. Existing page fitting and long-page expansion should prevent silent clipping; browser regression is required before v1 release.
 - D1 regression tests are in tests/diagram.test.ts: contract validation, deterministic geometry, local draft round-trip and four layout render paths.
-- **D2**: template picker, caption and parameter editing, add/remove interactions, fast insertion targets.
+- **D2**: implemented — template picker, caption and parameter editing, add/remove interactions, fast insertion targets.
 - **D3**: shape handles, moving/resizing/rotation, grid snapping, label collision avoidance, undo/redo and full export/performance acceptance.
 
 Full v1 release is blocked until the long-note worst-case (8 cues, 6 long sections and 2 diagrams, minimal and classic-cornell), exported labels, cross-view consistency and 1.5x export-performance target are verified in the browser. D1 alone does not certify those targets.
@@ -66,3 +66,29 @@ Local-only verification (no CI):
     npm test -- tests/diagram.test.ts
     npm run build
     npm run test:e2e
+
+
+## D2 — Quick template insertion and parameter editing
+
+Implemented after D1's merge (2026-11-17). The **Content** tab now shows an **Insert diagram** action under every section. Choose one of four visual template cards to place the diagram immediately after that section's body text. The newly inserted block automatically opens an inline preview and inspector.
+
+The inspector includes:
+- Inclined plane: θ 5–60° slider and optional uphill-friction arrow (use only for a downhill-sliding/tending object).
+- Right triangle: leg ratio slider 0.25–4.
+- Number line: numeric start/end/interval inputs. Each edit is accepted only if it keeps the entire block valid (finite range, ascending values, interval at least 0.1, at most 19 ticks), otherwise an error is shown and the authored note is preserved.
+- Coordinate axes: optional grid and first/all quadrants selector.
+- All templates and existing assembled blocks: optional plain-text caption (40 Unicode characters), natural-hand-drawn style toggle, and delete.
+- Existing manually assembled diagrams are visible and removable, but their individual primitives remain read-only until D3.
+
+The visual picker, inspector and validation messages are localized for Chinese and English, and the picker adapts to narrow devices. The template list is disabled when a note already has two diagrams; deleting a block immediately frees a slot. Reordering sections moves their attached diagrams, and deleting a section removes its attached diagrams without leaving broken indices.
+
+D2 uses pure validated functions in src/diagrams/editor.ts and the existing note store; no parallel canvas or persistence format is introduced. Data remains compatible with schemaVersion 1, local drafts, public detail pages and PNG export.
+
+Local-only checks:
+- npm run typecheck
+- npm test -- tests/diagram-editor.test.ts
+- npm test -- tests/diagram.test.ts
+- npm run build
+- npm run test:e2e — includes 390px Chinese and 1280px English D2 browser smoke tests, screenshots, live SVG/caption/slider, invalid ranges, two-block limit and section reorder.
+
+**Not part of D2:** shape manipulation, snapping, geometry history/undo/redo, end-to-end 1.5× PNG-performance benchmarking, and full six-section worst-case clipping acceptance (D3).
