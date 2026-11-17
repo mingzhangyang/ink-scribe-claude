@@ -100,7 +100,11 @@ export function ContentEditor() {
                   className="icon-btn"
                   aria-label={t.content.removeSection(i + 1)}
                   disabled={note.sections.length <= 1}
-                  onClick={() => patch({ sections: note.sections.filter((_, j) => j !== i) })}
+                  onClick={() => patch({
+                    sections: note.sections.filter((_, j) => j !== i),
+                    diagrams: note.diagrams?.filter((d) => d.afterSection !== i)
+                      .map((d) => ({ ...d, afterSection: d.afterSection > i ? d.afterSection - 1 : d.afterSection })),
+                  })}
                 >
                   ×
                 </button>
