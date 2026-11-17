@@ -27,7 +27,8 @@ export function ContentEditor() {
     if (target < 0 || target >= note.sections.length) return;
     const sections = [...note.sections];
     [sections[i], sections[target]] = [sections[target], sections[i]];
-    patch({ sections });
+    patch({ sections, diagrams: note.diagrams?.map((diagram) => ({ ...diagram,
+      afterSection: diagram.afterSection === i ? target : diagram.afterSection === target ? i : diagram.afterSection })) });
   };
 
   return (
