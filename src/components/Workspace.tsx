@@ -8,11 +8,12 @@ import { NoteFitNotice, NoteFitStatus } from "./note/NoteFitStatus.tsx";
 import { ShareButton } from "./ShareButton.tsx";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
-export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
+export function Workspace({ pageRef, fit, onFitChange, onEditInput, onAddDiagram, onToast }: {
   pageRef: RefObject<HTMLDivElement | null>;
   fit: NoteFitState | null;
   onFitChange: (fit: NoteFitState) => void;
   onEditInput: () => void;
+  onAddDiagram: () => void;
   onToast: (message: string) => void;
 }) {
   const note = useNoteStore((s) => s.note);
@@ -137,6 +138,13 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
         </div>
       ) : null}
 
+      <div className="workspace-tools">
+        <button type="button" className="btn diagram-workspace-add" onClick={onAddDiagram}>
+          <span aria-hidden="true">＋</span>
+          {note.diagrams?.length === 2 ? t.workspace.manageDiagrams : t.workspace.addDiagram}
+          <span className="diagram-limit">({note.diagrams?.length ?? 0}/2)</span>
+        </button>
+      </div>
       <div className="canvas">
         <div className="workspace-status">
           {source === "sample" ? <span className="badge">{t.workspace.sample}</span> : null}

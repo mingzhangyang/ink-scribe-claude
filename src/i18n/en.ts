@@ -431,6 +431,8 @@ export const en: Messages = {
 
   workspace: {
     label: "Note canvas",
+    addDiagram: "Insert diagram",
+    manageDiagrams: "Manage diagrams",
     sample: "Sample note",
     local: "Quick local layout",
     shared: "From a published note",
@@ -568,6 +570,13 @@ export const en: Messages = {
     newSectionContent: "Write something here.",
     summary: "Summary",
     diagrams: {
+      quickTitle: "Diagrams · Choose a template",
+      quickLocation: "Insert after",
+      quickSection: (i, heading) => "Section " + i + (heading ? " · " + heading : ""),
+      quickHelp: "Choose a section, then tap a template to insert. You can also insert beneath each section.",
+      quickAdded: "Diagram added to this note.",
+      quickEdit: "Edit parameters",
+      quickManage: "Expand or remove a diagram under its corresponding section below.",
       add: "+ Insert diagram",
       chooseTemplate: "Choose a diagram template",
       insertTemplate: (name) => "Insert " + name,

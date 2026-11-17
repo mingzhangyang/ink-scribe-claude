@@ -152,6 +152,8 @@ export const zh = {
 
   workspace: {
     label: "笔记画布",
+    addDiagram: "插入示意图",
+    manageDiagrams: "管理示意图",
     sample: "示例笔记",
     local: "本地快速排版",
     shared: "来自已发布的笔记",
@@ -289,6 +291,13 @@ export const zh = {
     newSectionContent: "在这里写下内容。",
     summary: "总结",
     diagrams: {
+      quickTitle: "示意图 · 选择模板",
+      quickLocation: "插入位置",
+      quickSection: (i: number, heading: string) => "第 " + i + " 段之后" + (heading ? " · " + heading : ""),
+      quickHelp: "选好段落，点击下面的模板即可插入。也可在正文各段落下单独添加。",
+      quickAdded: "示意图已加入笔记。",
+      quickEdit: "编辑参数",
+      quickManage: "请在下方对应段落展开或删除已有图块。",
       add: "＋ 插入示意图",
       chooseTemplate: "选择示意图模板",
       insertTemplate: (name: string) => "插入" + name,

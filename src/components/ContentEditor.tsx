@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { NoteCue, NoteSection, NoteStructure } from "../../shared/note.ts";
 import { NOTE_LIMITS } from "../../shared/note.ts";
-import { removeSection, reorderSection } from "../diagrams/editor.ts";
-import { DiagramSectionEditor } from "./DiagramSectionEditor.tsx";
+import { DIAGRAM_LIMITS, DIAGRAM_TEMPLATES, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
+import { insertDiagram, removeSection, reorderSection } from "../diagrams/editor.ts";
+import { DiagramSectionEditor, TemplateGlyph } from "./DiagramSectionEditor.tsx";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 
@@ -12,6 +13,64 @@ function splitHighlights(value: string): string[] {
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, NOTE_LIMITS.maxHighlights);
+}
+
+/** Quick insert is intentionally at the TOP of Content, not buried after every cue. */
+function DiagramQuickInsert() {
+  const note = useNoteStore((s) => s.note);
+  const updateDiagram = useNoteStore((s) => s.updateDiagram);
+  const t = useT().content.diagrams;
+  const [selectedSection, setSelectedSection] = useState(0);
+  const [lastAdded, setLastAdded] = useState<{ block: DiagramBlock; index: number } | null>(null);
+  if (!note) return null;
+
+  const section = Math.min(selectedSection, Math.max(0, note.sections.length - 1));
+  const total = note.diagrams?.length ?? 0;
+  const full = total >= DIAGRAM_LIMITS.maxBlocks;
+  const inserted = lastAdded && note.diagrams?.[lastAdded.index] === lastAdded.block ? lastAdded : null;
+  const add = (template: DiagramTemplate) => {
+    const nextIndex = useNoteStore.getState().note?.diagrams?.length ?? 0;
+    updateDiagram((current) => insertDiagram(current, section, template));
+    const saved = useNoteStore.getState().note?.diagrams;
+    if (saved?.length === nextIndex + 1) setLastAdded({ block: saved[nextIndex], index: nextIndex });
+  };
+
+  return <fieldset className="diagram-quick-insert" id="diagram-quick-insert">
+    <legend>{t.quickTitle} ({total}/{DIAGRAM_LIMITS.maxBlocks})</legend>
+    {full
+      ? <p className="hint">{t.limitReached} {t.quickManage}</p>
+      : <>
+        <label className="field diagram-quick-location">
+          <span>{t.quickLocation}</span>
+          <select value={section} onChange={(event) => setSelectedSection(Number(event.target.value))}
+            aria-label={t.quickLocation}>
+            {note.sections.map((item, i) => <option key={i} value={i}>
+              {t.quickSection(i + 1, item.heading || "")}
+            </option>)}
+          </select>
+        </label>
+        <div className="diagram-template-picker diagram-quick-templates" role="group" aria-label={t.chooseTemplate}>
+          {DIAGRAM_TEMPLATES.map((template) => <button
+            type="button" key={template} className="diagram-template-choice"
+            aria-label={t.insertTemplate(t.templateNames[template])}
+            onClick={() => add(template)}>
+            <TemplateGlyph template={template} />
+            <span>{t.templateNames[template]}</span>
+          </button>)}
+        </div>
+        <p className="hint">{t.quickHelp}</p>
+      </>}
+    {inserted ? <p className="hint is-ok" role="status">
+      {t.quickAdded} <button type="button" className="btn btn-link" onClick={() => {
+        const node = document.querySelector<HTMLElement>(
+          '.diagram-section-controls[data-diagram-section="' + inserted.block.afterSection + '"] .diagram-editor-card[data-diagram-index="' + inserted.index + '"] .diagram-expand',
+        );
+        node?.scrollIntoView({ block: "center", behavior: "smooth" });
+        node?.click();
+        node?.focus({ preventScroll: true });
+      }}>{t.quickEdit}</button>
+    </p> : null}
+  </fieldset>;
 }
 
 /** 结构化编辑：直接修改画布使用的 NoteStructure，便于修正 AI 的遗漏或措辞。 */
@@ -34,6 +93,7 @@ export function ContentEditor() {
 
   return (
     <div className="panel-body content-editor">
+      <DiagramQuickInsert />
       <label className="field">
         <span>{t.content.title}</span>
         <input type="text" value={note.title} maxLength={NOTE_LIMITS.title} onChange={(e) => patch({ title: e.target.value })} />

@@ -1,5 +1,26 @@
 # InkScribe Diagram Blocks · D1–D3
 
+## User entry point and production-build recovery (2026-11-17)
+
+The D1/D2/D3 implementations were merged in PRs #30/#31/#32, but **all three post-merge main CI jobs failed at TypeScript typecheck**, so their checks and builds are not certified. The underlying source already placed Insert diagram at the bottom of every section within the **Content** tab. It was difficult to find, especially on mobile because the entire editing panel is below the canvas.
+
+The recovery PR adds a high-visibility **+ Insert diagram** button directly **above the live note canvas**. Clicking it selects the Content tab and scrolls to a **top-of-panel** template picker, with a section dropdown (after section 1, after section 2, etc.). A template click inserts a diagram; the success confirmation navigates to that diagram's parameter inspector. Existing per-section placement buttons remain available. The displayed count is 0/2, 1/2 or 2/2; with two existing blocks the action becomes **Manage diagrams** instead.
+
+The same recovery PR fixes the errors seen in the GitHub Actions logs: unknown polyline-point property within a callback, generic TypeScript parameter-update mismatch, template-vs-primitives discriminated union violations in geometry methods, and an unused test import. It also changes the production build command to **run typecheck before Vite**, preventing a future deploy that bypasses the TypeScript gate.
+
+Release checklist (do not merge / redeploy on a red check):
+
+    npm ci
+    npm run typecheck
+    npm test
+    npm run build
+    npm run test:e2e
+    npx wrangler deploy
+
+The tests and browser export acceptance must run in an environment with the real repository dependencies. Check the new service worker's update notification when opening an already-installed PWA: a waiting worker deliberately keeps the previous version running until the user accepts the refresh. For a fresh smoke test, use a new/incognito browser session, open the editor and confirm the canvas-level Insert diagram button and four-template picker.
+
+
+
 Date: 2026-11-17. This document covers D1 (contract and flow), D2 (template insertion) and D3 (direct primitive editing and release gates).
 
 ## Model

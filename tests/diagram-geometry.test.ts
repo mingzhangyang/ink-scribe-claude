@@ -7,7 +7,7 @@ import { diagramArcPath, diagramLabelLayout } from "../src/diagrams/svg-geometry
 import { expandDiagram, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 import {
-  DIAGRAM_GRID, DIAGRAM_HISTORY_LIMIT, addShape, clearLabel, defaultShape, deleteShape,
+  DIAGRAM_GRID, DIAGRAM_HISTORY_LIMIT, addShape, defaultShape, deleteShape,
   editShape, materializeDiagram, moveFromPointers, moveShape,
   resizeShape, rotateFromPointers, rotateShape, shapeCenter, shapeHandles,
   snapAngle, snapToGrid,

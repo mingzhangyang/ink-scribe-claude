@@ -30,6 +30,7 @@ export function EditorPage({ config, headerActions, onToast }: {
 }) {
   const pageRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TabId>("style");
+  const [diagramEntrySerial, setDiagramEntrySerial] = useState(0);
   const [fit, setFit] = useState<NoteFitState | null>(null);
   const [inputOpen, setInputOpen] = useState(false);
   const [pageDrop, setPageDrop] = useState(false);
@@ -70,6 +71,22 @@ export function EditorPage({ config, headerActions, onToast }: {
     }
   }
 
+  // Canvas action jumps directly to the section-aware diagram chooser, even on
+  // mobile where the editor panel is below the note and easy to overlook.
+  function openDiagramChooser() {
+    setTab("content");
+    setDiagramEntrySerial((value) => value + 1);
+  }
+  useEffect(() => {
+    if (tab !== "content" || diagramEntrySerial === 0) return;
+    const frame = requestAnimationFrame(() => {
+      const node = document.getElementById("diagram-quick-insert");
+      node?.scrollIntoView({ block: "start", behavior: "smooth" });
+      (node?.querySelector("select") ?? node?.querySelector("button"))?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab, diagramEntrySerial]);
+
   const openInput = () => setInputOpen(true);
   const closeInput = () => setInputOpen(false);
 
@@ -97,7 +114,7 @@ export function EditorPage({ config, headerActions, onToast }: {
     >
       {/* 宽屏上“撰写”位于顶栏菜单左侧，窄屏上固定在屏幕底部 */}
       {headerActions ? createPortal(<InputTrigger onOpen={openInput} />, headerActions) : null}
-      {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} onEditInput={openInput} onToast={onToast} /> : <section className="workspace" />}
+      {hasNote ? <Workspace pageRef={pageRef} fit={fit} onFitChange={setFit} onEditInput={openInput} onAddDiagram={openDiagramChooser} onToast={onToast} /> : <section className="workspace" />}
       <aside className="panel side-panel" aria-label={t.editor.panelLabel}>
         <CreationGuide fit={fit} onCompose={openInput} onExport={() => {
           setTab("export");

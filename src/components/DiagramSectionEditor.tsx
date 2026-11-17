@@ -7,7 +7,7 @@ import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
 import { PrimitiveEditor } from "./PrimitiveEditor.tsx";
 
-function TemplateGlyph({ template }: { template: DiagramTemplate }) {
+export function TemplateGlyph({ template }: { template: DiagramTemplate }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (template) {
     case "inclined-plane":
@@ -110,9 +110,14 @@ function CaptionParameter({ caption, label, placeholder, onCommit }: {
 function DiagramParameters({ block, index }: { block: DiagramBlock; index: number }) {
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
-  const update = <T extends DiagramTemplate>(
-    template: T, patch: Partial<Extract<DiagramBlock, { template: T }>["params"]>,
-  ) => updateDiagram((note) => updateTemplateParams(note, index, template, patch));
+  // Pass concrete discriminants to the shared editor. Generic Extract<T> at a
+  // higher-order callback boundary is not reliably assignable under TypeScript 7.
+  const changeSlope = (patch: Partial<Extract<DiagramBlock, { template: "inclined-plane" }>["params"]>) =>
+    updateDiagram((note) => updateTemplateParams(note, index, "inclined-plane", patch));
+  const changeTriangle = (patch: Partial<Extract<DiagramBlock, { template: "right-triangle" }>["params"]>) =>
+    updateDiagram((note) => updateTemplateParams(note, index, "right-triangle", patch));
+  const changeAxes = (patch: Partial<Extract<DiagramBlock, { template: "coordinate-plane" }>["params"]>) =>
+    updateDiagram((note) => updateTemplateParams(note, index, "coordinate-plane", patch));
   const changeNumberLine = (key: "start" | "end" | "step", value: number) => {
     let accepted = false;
     updateDiagram((note) => {
@@ -130,11 +135,11 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
           <span>{t.angle}: <strong>{block.params.thetaDeg}°</strong></span>
           <input type="range" min={5} max={60} step={1} value={block.params.thetaDeg}
             aria-label={t.angle} onChange={(event) =>
-              update("inclined-plane", { thetaDeg: Number(event.target.value) })} />
+              changeSlope({ thetaDeg: Number(event.target.value) })} />
         </label>
         <label className="diagram-check">
           <input type="checkbox" checked={block.params.friction}
-            onChange={(event) => update("inclined-plane", { friction: event.target.checked })} />
+            onChange={(event) => changeSlope({ friction: event.target.checked })} />
           <span>{t.friction}</span>
         </label>
         <p className="hint">{t.frictionTip}</p>
@@ -145,7 +150,7 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
           <span>{t.legRatio}: <strong>{block.params.legRatio.toFixed(2)}</strong></span>
           <input type="range" min={0.25} max={4} step={0.05} value={block.params.legRatio}
             aria-label={t.legRatio} onChange={(event) =>
-              update("right-triangle", { legRatio: Number(Number(event.target.value).toFixed(2)) })} />
+              changeTriangle({ legRatio: Number(Number(event.target.value).toFixed(2)) })} />
         </label>
       </div>;
     case "number-line":
@@ -164,14 +169,13 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
       return <div className="diagram-parameters">
         <label className="diagram-check">
           <input type="checkbox" checked={block.params.grid}
-            onChange={(event) => update("coordinate-plane", { grid: event.target.checked })} />
+            onChange={(event) => changeAxes({ grid: event.target.checked })} />
           <span>{t.showGrid}</span>
         </label>
         <label className="diagram-select">
           <span>{t.quadrants}</span>
           <select value={block.params.quadrants} aria-label={t.quadrants}
-            onChange={(event) => update("coordinate-plane",
-              { quadrants: event.target.value as "all" | "first" })}>
+            onChange={(event) => changeAxes({ quadrants: event.target.value as "all" | "first" })}>
             <option value="all">{t.allQuadrants}</option>
             <option value="first">{t.firstQuadrant}</option>
           </select>
@@ -215,7 +219,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
 
   return <div className="diagram-section-controls" data-diagram-section={sectionIndex}>
     {attached.map(({ block, index }) => (
-      <div key={index} className="diagram-editor-card">
+      <div key={index} className="diagram-editor-card" data-diagram-index={index}>
         <div className="diagram-editor-heading">
           <button type="button" className="diagram-expand" aria-expanded={expanded === index}
             aria-controls={"diagram-inspector-" + sectionIndex + "-" + index}
