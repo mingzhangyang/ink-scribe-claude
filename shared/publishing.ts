@@ -218,9 +218,12 @@ const SCHEMA_KEYWORDS = new Set([
 function assertSupported(schema: Schema): void {
   if (Object.keys(schema).some((key) => !SCHEMA_KEYWORDS.has(key))) throw new Error("Unsupported publication schema keyword");
   if (schema.oneOf) {
-    const types = schema.oneOf.map((branch) => branch.properties?.type.const);
-    if (types.some((type) => typeof type !== "string") || new Set(types).size !== types.length) {
-      throw new Error("Publication unions must have distinct string type discriminators");
+    const discriminators = schema.oneOf.map((branch) =>
+      branch.properties?.type?.const !== undefined ? "type:" + branch.properties.type.const
+        : branch.properties?.template?.const !== undefined ? "template:" + branch.properties.template.const
+          : branch.properties?.primitives ? "primitives:present" : null);
+    if (discriminators.some((value) => !value) || new Set(discriminators).size !== discriminators.length) {
+      throw new Error("Publication unions must have distinct type/template discriminators");
     }
     schema.oneOf.forEach(assertSupported);
   } else if (schema.type === "object") {
@@ -228,8 +231,9 @@ function assertSupported(schema: Schema): void {
       || schema.required?.some((key) => !Object.hasOwn(schema.properties!, key))) throw new Error("Invalid publication object schema");
     Object.values(schema.properties).forEach(assertSupported);
   } else if (schema.type === "array") {
-    if (!schema.items) throw new Error("Publication arrays require an item schema");
-    assertSupported(schema.items);
+    if (!schema.items && !schema.prefixItems?.length) throw new Error("Publication arrays require item or tuple schemas");
+    if (schema.items) assertSupported(schema.items);
+    schema.prefixItems?.forEach(assertSupported);
   } else if (!["string", "number", "integer", "boolean"].includes(schema.type ?? "")) {
     throw new Error("Unsupported publication schema type");
   }
@@ -251,8 +255,12 @@ function check(schema: Schema, value: unknown, path: string, issues: ValidationI
   if (issues.length >= MAX_ISSUES) return;
   if (schema.oneOf) {
     // Every union in this contract is discriminated by an exact type field.
-    const branch = isRecord(value) && schema.oneOf.find((s) => s.properties?.type.const === value.type);
-    if (!branch) issue(issues, propertyPath(path, "type"), "INVALID_TYPE", "Expected a supported drawing or sticker type.");
+    const branch = isRecord(value) && schema.oneOf.find((s) =>
+      s.properties?.type?.const !== undefined ? s.properties.type.const === value.type
+        : s.properties?.template?.const !== undefined ? s.properties.template.const === value.template
+          : !!s.properties?.primitives && Object.hasOwn(value, "primitives") && !Object.hasOwn(value, "template"));
+    if (!branch) issue(issues, propertyPath(path, isRecord(value) && Object.hasOwn(value, "type") ? "type" : "template"),
+      "INVALID_TYPE", "Expected a supported diagram, drawing, or sticker type.");
     else check(branch, value, path, issues);
     return;
   }
@@ -278,7 +286,10 @@ function check(schema: Schema, value: unknown, path: string, issues: ValidationI
       if (!Array.isArray(value)) return issue(issues, path, "INVALID_TYPE", "Expected an array.");
       if (schema.minItems !== undefined && value.length < schema.minItems) issue(issues, path, "TOO_FEW_ITEMS", `Provide at least ${schema.minItems} items.`);
       if (schema.maxItems !== undefined && value.length > schema.maxItems) issue(issues, path, "TOO_MANY_ITEMS", `Provide no more than ${schema.maxItems} items.`);
-      value.slice(0, schema.maxItems ?? value.length).forEach((item, index) => check(schema.items!, item, `${path}[${index}]`, issues));
+      value.slice(0, schema.maxItems ?? value.length).forEach((item, index) => {
+        const itemSchema = schema.prefixItems?.[index] ?? schema.items;
+        if (itemSchema) check(itemSchema, item, `${path}[${index}]`, issues);
+      });
       return;
     case "string": {
       if (typeof value !== "string") return issue(issues, path, "INVALID_TYPE", "Expected a string.");
@@ -342,6 +353,19 @@ function checkNote(note: NoteStructure, path: string, issues: ValidationIssue[])
         seen.add(actual);
         if (!renderedHighlights.has(highlightIndex)) issue(issues, p, "HIGHLIGHT_SHADOWED", "Every matching occurrence overlaps an earlier highlight. Remove or revise this phrase so at least one non-overlapping occurrence remains.");
       }
+    });
+  });
+  note.diagrams?.forEach((diagram: DiagramBlock, index) => {
+    const p = `${path}.diagrams[${index}]`;
+    if (diagram.afterSection >= note.sections.length) issue(issues, `${p}.afterSection`, "OUT_OF_RANGE", "The referenced section does not exist.");
+    if (diagram.template === "number-line") {
+      if (diagram.params.end <= diagram.params.start) issue(issues, `${p}.params.end`, "OUT_OF_RANGE", "End must exceed start.");
+      else if ((diagram.params.end - diagram.params.start) / diagram.params.step > 18 + 1e-8)
+        issue(issues, `${p}.params.step`, "TOO_MANY_TICKS", "Use 19 or fewer tick marks.");
+    }
+    diagram.primitives?.forEach((primitive, i) => {
+      if (!validDiagramPrimitive(primitive)) issue(issues, `${p}.primitives[${i}]`, "INVALID_GEOMETRY",
+        "Shape must be nondegenerate and fit completely within the diagram canvas.");
     });
   });
   if (note.doodleSpec) checkDoodle(note.doodleSpec, `${path}.doodleSpec`, issues);
