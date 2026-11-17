@@ -1230,46 +1230,33 @@ input[type="range"] {
 .section-remove-confirmation .btn { min-height: 44px; }
 
 
-/* Diagram discoverability: a single visible canvas action opens the Content chooser. */
-.workspace-tools {
-  display: flex;
-  align-items: center;
-  padding: 0 2px;
-  min-height: 44px;
-  flex: none;
-}
-.diagram-workspace-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-}
-.diagram-workspace-add:hover,
-.diagram-workspace-add:focus-visible {
-  border-color: var(--primary-bg);
-  background: var(--surface);
-}
+/* Compact insertion control belongs to the Content editor; the canvas stays clean. */
 .diagram-quick-insert {
   min-width: 0;
   margin: 0;
-  padding: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--surface-2);
-  scroll-margin-top: 20px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
 }
-.diagram-quick-insert legend {
-  padding: 0 5px;
-  font-weight: 650;
+.diagram-quick-trigger {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.diagram-quick-options {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.diagram-quick-existing {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  text-align: left;
+}
+.diagram-quick-added {
+  margin: 4px 0;
 }
 .diagram-quick-location {
   display: flex;
@@ -1290,16 +1277,6 @@ input[type="range"] {
 }
 .diagram-quick-insert .btn-link {
   min-height: 40px;
-}
-@media (max-width: 900px) {
-  .workspace-tools {
-    padding: 0 4px;
-  }
-  .diagram-workspace-add {
-    width: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-  }
 }
 
 /* D2: Diagram insertion belongs to a section, not the floating-sticker layer. */
