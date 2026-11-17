@@ -376,7 +376,8 @@
   width: 100%;
   height: auto;
   aspect-ratio: 4 / 3;
-  overflow: visible;
+  /* Keep deterministic sketch strokes inside this block; never leak into adjacent text. */
+  overflow: hidden;
   color: var(--ink);
 }
 .diagram-ink .diagram-label {
