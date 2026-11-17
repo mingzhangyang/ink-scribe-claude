@@ -27,8 +27,8 @@ export function ContentEditor() {
     if (target < 0 || target >= note.sections.length) return;
     const sections = [...note.sections];
     [sections[i], sections[target]] = [sections[target], sections[i]];
-    patch({ sections, diagrams: note.diagrams?.map((diagram) => ({ ...diagram,
-      afterSection: diagram.afterSection === i ? target : diagram.afterSection === target ? i : diagram.afterSection })) });
+    patch({ sections, ...(note.diagrams ? { diagrams: note.diagrams.map((diagram) => ({ ...diagram,
+      afterSection: diagram.afterSection === i ? target : diagram.afterSection === target ? i : diagram.afterSection })) } : {}) });
   };
 
   return (
@@ -102,8 +102,8 @@ export function ContentEditor() {
                   disabled={note.sections.length <= 1}
                   onClick={() => patch({
                     sections: note.sections.filter((_, j) => j !== i),
-                    diagrams: note.diagrams?.filter((d) => d.afterSection !== i)
-                      .map((d) => ({ ...d, afterSection: d.afterSection > i ? d.afterSection - 1 : d.afterSection })),
+                    ...(note.diagrams ? { diagrams: note.diagrams.filter((d) => d.afterSection !== i)
+                      .map((d) => ({ ...d, afterSection: d.afterSection > i ? d.afterSection - 1 : d.afterSection })) } : {}),
                   })}
                 >
                   ×
