@@ -20,6 +20,7 @@ function DiagramQuickInsert() {
   const note = useNoteStore((s) => s.note);
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
+  const [expanded, setExpanded] = useState(false);
   const [selectedSection, setSelectedSection] = useState(0);
   const [lastAdded, setLastAdded] = useState<{ block: DiagramBlock; index: number } | null>(null);
   if (!note) return null;
@@ -32,14 +33,40 @@ function DiagramQuickInsert() {
     const nextIndex = useNoteStore.getState().note?.diagrams?.length ?? 0;
     updateDiagram((current) => insertDiagram(current, section, template));
     const saved = useNoteStore.getState().note?.diagrams;
-    if (saved?.length === nextIndex + 1) setLastAdded({ block: saved[nextIndex], index: nextIndex });
+    if (saved?.length === nextIndex + 1) {
+      setLastAdded({ block: saved[nextIndex], index: nextIndex });
+      setExpanded(false);
+    }
   };
 
-  return <fieldset className="diagram-quick-insert" id="diagram-quick-insert">
-    <legend>{t.quickTitle} ({total}/{DIAGRAM_LIMITS.maxBlocks})</legend>
-    {full
-      ? <p className="hint">{t.limitReached} {t.quickManage}</p>
-      : <>
+  const openEditor = (diagram: DiagramBlock, index: number) => {
+    const node = document.querySelector<HTMLElement>(
+      '.diagram-section-controls[data-diagram-section="' + diagram.afterSection
+      + '"] .diagram-editor-card[data-diagram-index="' + index + '"] .diagram-expand',
+    );
+    node?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (node?.getAttribute("aria-expanded") !== "true") node?.click();
+    node?.focus({ preventScroll: true });
+  };
+
+  return <section className="diagram-quick-insert" id="diagram-quick-insert" aria-label={t.quickTitle}>
+    <button type="button" className="btn btn-link diagram-quick-trigger"
+      aria-expanded={expanded} aria-controls="diagram-quick-options"
+      onClick={() => setExpanded((value) => !value)}>
+      <span aria-hidden="true">{expanded ? "−" : "＋"}</span>
+      {full ? t.quickManageButton : t.add}
+      <span className="diagram-limit">({total}/{DIAGRAM_LIMITS.maxBlocks})</span>
+    </button>
+    {expanded ? <div className="diagram-quick-options" id="diagram-quick-options">
+      {full ? <>
+        <p className="hint">{t.limitReached}</p>
+        {note.diagrams?.map((diagram, index) => <button key={index} type="button"
+          className="btn btn-link diagram-quick-existing"
+          onClick={() => openEditor(diagram, index)}>
+          {diagram.template ? t.templateNames[diagram.template] : t.customTitle}
+          · {t.quickSection(diagram.afterSection + 1, "")}
+        </button>)}
+      </> : <>
         <label className="field diagram-quick-location">
           <span>{t.quickLocation}</span>
           <select value={section} onChange={(event) => setSelectedSection(Number(event.target.value))}
@@ -58,19 +85,13 @@ function DiagramQuickInsert() {
             <span>{t.templateNames[template]}</span>
           </button>)}
         </div>
-        <p className="hint">{t.quickHelp}</p>
       </>}
-    {inserted ? <p className="hint is-ok" role="status">
-      {t.quickAdded} <button type="button" className="btn btn-link" onClick={() => {
-        const node = document.querySelector<HTMLElement>(
-          '.diagram-section-controls[data-diagram-section="' + inserted.block.afterSection + '"] .diagram-editor-card[data-diagram-index="' + inserted.index + '"] .diagram-expand',
-        );
-        node?.scrollIntoView({ block: "center", behavior: "smooth" });
-        node?.click();
-        node?.focus({ preventScroll: true });
-      }}>{t.quickEdit}</button>
+    </div> : null}
+    {inserted && !expanded ? <p className="hint is-ok diagram-quick-added" role="status">
+      {t.quickAdded} <button type="button" className="btn btn-link"
+        onClick={() => openEditor(inserted.block, inserted.index)}>{t.quickEdit}</button>
     </p> : null}
-  </fieldset>;
+  </section>;
 }
 
 /** 结构化编辑：直接修改画布使用的 NoteStructure，便于修正 AI 的遗漏或措辞。 */
