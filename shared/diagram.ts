@@ -1,3 +1,5 @@
+import { cleanText } from "./text.ts";
+
 /** Structured, dimensionless note diagrams. All values use a 1000 x 750 (4:3) coordinate plane. */
 export const DIAGRAM_LIMITS = {
   width: 1000, height: 750, maxBlocks: 2, maxPrimitives: 40,
@@ -136,8 +138,8 @@ const finite = (value: unknown, min: number, max: number): value is number => ty
 const isPoint = (value: unknown): value is DiagramPoint => Array.isArray(value) && value.length === 2
   && finite(value[0], 0, DIAGRAM_LIMITS.width) && finite(value[1], 0, DIAGRAM_LIMITS.height);
 const text = (value: unknown, max: number, allowEmpty = false): value is string =>
-  typeof value === "string" && Array.from(value).length <= max && (allowEmpty || value.length > 0)
-  && !/[\x00-\x1f\x7f<>]/.test(value) && value.trim() === value;
+  typeof value === "string" && (allowEmpty || value.length > 0)
+  && Array.from(value).length <= max && cleanText(value, max) === value;
 const boolOrMissing = (value: unknown) => value === undefined || typeof value === "boolean";
 const labelOrMissing = (value: unknown) => value === undefined || text(value, DIAGRAM_LIMITS.maxLabel);
 
