@@ -21,6 +21,8 @@ export const INKS = [
   { id: "magenta", label: "洋红", color: "#86198F" },
   { id: "teal", label: "深青", color: "#0D5552" },
   { id: "violet", label: "紫罗兰", color: "#5B21B6" },
+  // Dark enough to read on kraft paper while noticeably softer than carbon black.
+  { id: "graphite", label: "石墨灰", color: "#465058" },
 ] as const;
 export type InkId = (typeof INKS)[number]["id"];
 
