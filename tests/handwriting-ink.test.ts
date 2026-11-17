@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EN_FONTS, INKS, PAPERS, ZH_FONTS, fontStack } from "../shared/appearance.ts";
 import { DEFAULT_SETTINGS, sanitizeSettings } from "../shared/settings.ts";
+import { validatePublishAppearance } from "../shared/publishing.ts";
 import { nextHandwritingStyle } from "../src/lib/handwriting-style.ts";
 
 const newInks = {
@@ -30,6 +31,7 @@ describe("InkScribe nine-ink palette", () => {
     for (const [id, color] of Object.entries(newInks)) {
       expect(INKS.find((ink) => ink.id === id)?.color).toBe(color);
       expect(sanitizeSettings({ ink: id }).ink).toBe(id);
+      expect(validatePublishAppearance({ ink: id }).ok).toBe(true);
     }
     expect(sanitizeSettings({ ink: "unknown" }).ink).toBe(DEFAULT_SETTINGS.ink);
   });
