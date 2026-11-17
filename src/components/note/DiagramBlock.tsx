@@ -94,6 +94,8 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
       const points: DiagramPoint[] = [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
       return <path d={polyPath(points, seed, jitter)} transform={shape.rotation ? "rotate(" + shape.rotation + " " + (x + w / 2) + " " + (y + h / 2) + ")" : undefined} />;
     }
+    case "circle":
+      return <path d={ellipsePath(shape.center, shape.r, shape.r, seed, jitter)} />;
     case "ellipse":
       return <path d={ellipsePath(shape.center, shape.rx, shape.ry, seed, jitter)}
         transform={shape.rotation ? "rotate(" + shape.rotation + " " + shape.center[0] + " " + shape.center[1] + ")" : undefined} />;
