@@ -138,7 +138,9 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed }: 
   const jitter = block.handDrawn === false ? 0 : block.jitterPx ?? 1.2;
   const caption = block.caption || "";
   const accessible = caption || (block.template ? templateNames[block.template] : "Notebook diagram");
-  const baseSeed = seed ^ hashString(JSON.stringify(block));
+  // Keep the hand-drawn jitter stable while a primitive moves or a template
+  // materializes; the original full-block hash made every stroke flicker per pointermove.
+  const baseSeed = seed ^ hashString(`inline-diagram:${block.afterSection}`);
   return (
     <figure className="diagram-block" data-fit data-diagram-after-section={block.afterSection}>
       <svg className="diagram-art" viewBox={"0 0 " + DIAGRAM_LIMITS.width + " " + DIAGRAM_LIMITS.height}

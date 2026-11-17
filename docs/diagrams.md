@@ -1,6 +1,6 @@
-# InkScribe Diagram Blocks · D1 Contract
+# InkScribe Diagram Blocks · D1–D3
 
-Date: 2026-11-17. This document covers **D1 (contract + flow rendering)** and **D2 (template insertion + parameters)** from the InkScribe Diagram v0.1 specification. D3's interactive shape editor is still planned.
+Date: 2026-11-17. This document covers D1 (contract and flow), D2 (template insertion) and D3 (direct primitive editing and release gates).
 
 ## Model
 
@@ -26,7 +26,7 @@ Optional handDrawn defaults true; jitterPx defaults 1.2 (accepted range 0–3, 0
 | number-line | start, end, step | values -1000 to 1000, end > start, step >= 0.1 and <= 19 tick marks |
 | coordinate-plane | grid, quadrants | grid boolean; quadrants is all or first |
 
-Templates expand into deterministic primitives at render time. Edits in D3 will materialize primitives; D1 never converts or changes the stored template parameters.
+Templates expand into deterministic primitives at render time. Direct primitive edits in D3 materialize templates into plain primitives only after an actual geometric change; D1 and D2 parameter adjustments preserve the template.
 
 Example optional field in a note with at least two sections:
 
@@ -55,7 +55,7 @@ No schema version bump is needed (schemaVersion remains 1). The existing JSON pu
 - A block occupies full available content width, with an aspect ratio of 4:3 and ordinary flow height. Existing page fitting and long-page expansion should prevent silent clipping; browser regression is required before v1 release.
 - D1 regression tests are in tests/diagram.test.ts: contract validation, deterministic geometry, local draft round-trip and four layout render paths.
 - **D2**: implemented — template picker, caption and parameter editing, add/remove interactions, fast insertion targets.
-- **D3**: shape handles, moving/resizing/rotation, grid snapping, label collision avoidance, undo/redo and full export/performance acceptance.
+- **D3**: primitive editing and undo/redo implemented; browser, PNG and performance gates instrumented but not yet executed.
 
 Full v1 release is blocked until the long-note worst-case (8 cues, 6 long sections and 2 diagrams, minimal and classic-cornell), exported labels, cross-view consistency and 1.5x export-performance target are verified in the browser. D1 alone does not certify those targets.
 
@@ -91,4 +91,41 @@ Local-only checks:
 - npm run build
 - npm run test:e2e — includes 390px Chinese and 1280px English D2 browser smoke tests, screenshots, live SVG/caption/slider, invalid ranges, Escape cancel vs Enter commit, protected section removal, two-block limit and section reorder.
 
-**Not part of D2:** shape manipulation, snapping, geometry history/undo/redo, end-to-end 1.5× PNG-performance benchmarking, and full six-section worst-case clipping acceptance (D3).
+**Not part of D2:** primitive manipulation, snapping, history/undo/redo, full browser export and performance validation, which belong to D3 below.
+
+
+## D3: Direct primitive editing and release acceptance
+
+### Fine editing
+
+- In the Content tab, expand a diagram and select Fine edit shapes. The original SVG diagram is covered by a separate touch-friendly editor overlay. The overlay is NOT part of the public/PNG NotePage.
+- Select a shape by its stroke or center marker; drag to move it, or drag its visible shape handles to resize endpoints, polygon vertices, or radii. Rotate with a dedicated handle in 15-degree increments.
+- Grid positions are 25 normalized units (1/40 of the 1000-unit width). Disabling grid also disables position snapping. Alignment guides follow the selected shape.
+- Add line, arrow, polyline, rectangle, circle, ellipse, angle arc and label from a compact tool strip. Selected text labels and line/arrow/arc annotations can be edited. Every edit uses the original closed primitive schema; invalid geometry is rejected.
+- A parameterized template remains parameterized until the first effective shape change; only then is it expanded into editable primitives, without losing the caption, section anchor or hand-drawn style.
+- Authored text labels reflow away from overlapping strokes where space permits, while the existing D1 label renderer protects text near the canvas edges. The jitter seed stays stable when moving a shape.
+
+### Undo, redo and data safety
+
+- Gesture preview is local; releasing the pointer commits a single validated change with one undo snapshot. This avoids one history entry per pointer-move event.
+- All diagram edits use one bounded 30-step undo/redo stack in the note store, including D2 insertion, parameter changes and deletion. Keyboard arrow keys nudge the selected shape; Delete removes; Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes. Native keyboard input remains intact.
+- Undo history is in memory only, never saved into the publication schema or draft JSON. Loading/replacing a document and editing unrelated text/section layout clears history; redo is invalidated by a fresh edit.
+- Prior D2 deletion/section confirmation remains in place. No new schema version or second export renderer is introduced.
+
+### Verification and release gate
+
+- Pure tests: tests/diagram-geometry.test.ts and tests/diagram-history.test.ts cover transform geometry, invalid bounds, template conversion, history isolation and label clearance.
+- Browser acceptance: e2e/diagram-primitive.mjs covers mobile (390px, Chinese) and desktop (1280px, English) shape editing, keyboard, undo/redo and SVG preview consistency.
+- Worst-case fixture: 8 cues, 6 long body sections, 2 diagrams in minimal and classic Cornell; measure overflow, label ratio >=0.9 of small body, and execute actual PNG exports.
+- Export performance fixture compares a two-diagram document with its zero-diagram baseline. Acceptance criterion is <=1.5x elapsed PNG rendering time, with metrics saved in e2e-results/diagram-d3-export-metrics.json.
+- These tests are wired to the existing local e2e/acceptance.mjs runner; the entire npm test/typecheck/build/browser suite must still be executed locally before declaring the D3 release gate passed. Changes have been made without launching CI.
+
+Local-only commands:
+
+    npm ci
+    npm run typecheck
+    npm test
+    npm run build
+    npm run test:e2e
+
+Any measured overflow, label-size or export performance failure remains a release blocker, not an exception silently waived by PR merge.

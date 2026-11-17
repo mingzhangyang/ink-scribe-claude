@@ -5,6 +5,7 @@ import { editDiagram, insertDiagram, removeDiagram, setDiagramCaption, updateTem
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
+import { PrimitiveEditor } from "./PrimitiveEditor.tsx";
 
 function TemplateGlyph({ template }: { template: DiagramTemplate }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -107,14 +108,14 @@ function CaptionParameter({ caption, label, placeholder, onCommit }: {
 }
 
 function DiagramParameters({ block, index }: { block: DiagramBlock; index: number }) {
-  const updateNote = useNoteStore((s) => s.updateNote);
+  const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
   const update = <T extends DiagramTemplate>(
     template: T, patch: Partial<Extract<DiagramBlock, { template: T }>["params"]>,
-  ) => updateNote((note) => updateTemplateParams(note, index, template, patch));
+  ) => updateDiagram((note) => updateTemplateParams(note, index, template, patch));
   const changeNumberLine = (key: "start" | "end" | "step", value: number) => {
     let accepted = false;
-    updateNote((note) => {
+    updateDiagram((note) => {
       const next = updateTemplateParams(note, index, "number-line", { [key]: value });
       accepted = next !== note;
       return next;
@@ -187,11 +188,12 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
  */
 export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number }) {
   const note = useNoteStore((s) => s.note);
-  const updateNote = useNoteStore((s) => s.updateNote);
+  const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
+  const [shapeMode, setShapeMode] = useState<number | null>(null);
   // A section reorder, undo (D3) or document reload must never confirm deletion of another block.
   useEffect(() => { setConfirmRemoval(null); }, [note?.diagrams]);
   if (!note) return null;
@@ -204,10 +206,11 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
 
   const add = (template: DiagramTemplate) => {
     const index = diagrams.length;
-    updateNote((current) => insertDiagram(current, sectionIndex, template));
+    updateDiagram((current) => insertDiagram(current, sectionIndex, template));
     setPickerOpen(false);
     setConfirmRemoval(null);
     setExpanded(index);
+    setShapeMode(null);
   };
 
   return <div className="diagram-section-controls" data-diagram-section={sectionIndex}>
@@ -224,8 +227,9 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
             aria-label={confirmRemoval === index ? t.confirmRemoveDiagram(index + 1) : t.removeDiagram(index + 1)}
             onClick={() => {
               if (confirmRemoval !== index) { setConfirmRemoval(index); return; }
-              updateNote((current) => removeDiagram(current, index));
+              updateDiagram((current) => removeDiagram(current, index));
               setExpanded(null);
+              setShapeMode(null);
               setConfirmRemoval(null);
             }}>{confirmRemoval === index ? t.confirmRemove : t.remove}</button>
           {confirmRemoval === index ? <button type="button" className="btn btn-link diagram-cancel-remove"
@@ -233,16 +237,23 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
         </div>
         {expanded === index ? <div id={"diagram-inspector-" + sectionIndex + "-" + index}
           className="diagram-inspector">
-          <div className="diagram-edit-preview" aria-label={t.preview}>
-            <DiagramBlockView block={block} seed={1978} />
-          </div>
+          <button type="button" className="btn btn-link diagram-shape-mode"
+            aria-expanded={shapeMode === index}
+            onClick={() => setShapeMode((current) => current === index ? null : index)}>
+            {shapeMode === index ? t.closeShapeEdit : t.editShapes}
+          </button>
+          {shapeMode === index
+            ? <PrimitiveEditor block={block} index={index} />
+            : <div className="diagram-edit-preview" aria-label={t.preview}>
+              <DiagramBlockView block={block} seed={1978} />
+            </div>}
           <DiagramParameters block={block} index={index} />
           <CaptionParameter key={"caption-" + index} caption={block.caption ?? ""}
             label={t.caption} placeholder={t.captionPlaceholder}
-            onCommit={(value) => updateNote((current) => setDiagramCaption(current, index, value))} />
+            onCommit={(value) => updateDiagram((current) => setDiagramCaption(current, index, value))} />
           <label className="diagram-check">
             <input type="checkbox" checked={block.handDrawn !== false}
-              onChange={(event) => updateNote((current) =>
+              onChange={(event) => updateDiagram((current) =>
                 editDiagram(current, index, (existing) => ({ ...existing, handDrawn: event.target.checked })))} />
             <span>{t.handDrawn}</span>
           </label>

@@ -3,6 +3,7 @@
 //   E2E_BASE_URL=http://127.0.0.1:4173/ node e2e/acceptance.mjs
 import { verifyCreation } from "./creation.mjs";
 import { verifyDiagramEditor } from "./diagram-editor.mjs";
+import { verifyDiagramD3 } from "./diagram-primitive.mjs";
 import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
@@ -2472,6 +2473,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
 
 await verifyCreation({ newPage, check, url: URL, outputDir: SP });
 await verifyDiagramEditor({ newPage, check, url: URL, outputDir: SP });
+await verifyDiagramD3({ newPage, check, url: URL, outputDir: SP });
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
