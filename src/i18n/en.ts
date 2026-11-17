@@ -486,6 +486,7 @@ export const en: Messages = {
     accentLabel: "Highlight color",
     naturalness: "Handwriting variation",
     reseed: "Try another handwriting",
+    reseedHint: "Switch both fonts and stroke details",
     doodle: "Illustration",
     doodleSource: "Illustration source",
     doodleModes: { auto: "Pick from note content", theme: "Choose a built-in one", ai: "AI-generated", none: "No illustration" },
