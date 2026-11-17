@@ -11,10 +11,11 @@ export type DiagramPoint = [number, number];
 type Line = { type: "line" | "arrow"; from: DiagramPoint; to: DiagramPoint; label?: string; dashed?: boolean; double?: boolean; guide?: boolean };
 type Polyline = { type: "polyline"; points: DiagramPoint[]; dashed?: boolean; guide?: boolean };
 type Rect = { type: "rect"; at: DiagramPoint; width: number; height: number; rotation?: number };
+type Circle = { type: "circle"; center: DiagramPoint; r: number };
 type Ellipse = { type: "ellipse"; center: DiagramPoint; rx: number; ry: number; rotation?: number };
 type Arc = { type: "arc"; center: DiagramPoint; radius: number; startDeg: number; sweepDeg: number; label?: string };
 type Label = { type: "label"; at: DiagramPoint; text: string };
-export type DiagramPrimitive = Line | Polyline | Rect | Ellipse | Arc | Label;
+export type DiagramPrimitive = Line | Polyline | Rect | Circle | Ellipse | Arc | Label;
 
 type DiagramBase = { afterSection: number; caption?: string; handDrawn?: boolean; jitterPx?: number };
 export type DiagramBlock = DiagramBase & (
@@ -153,12 +154,19 @@ export function validDiagramPrimitive(value: unknown): value is DiagramPrimitive
     case "polyline":
       return keys(value, ["type", "points", "dashed", "guide"])
         && Array.isArray(value.points) && value.points.length >= 2 && value.points.length <= DIAGRAM_LIMITS.maxPoints
-        && value.points.every(isPoint) && boolOrMissing(value.dashed) && boolOrMissing(value.guide);
+        && value.points.every(isPoint) && value.points.some((p, i) => i > 0
+          && (p[0] !== value.points[i - 1][0] || p[1] !== value.points[i - 1][1]))
+        && boolOrMissing(value.dashed) && boolOrMissing(value.guide);
     case "rect":
       if (!keys(value, ["type", "at", "width", "height", "rotation"]) || !isPoint(value.at)
         || !finite(value.width, 1, DIAGRAM_LIMITS.width) || !finite(value.height, 1, DIAGRAM_LIMITS.height)
         || (value.rotation !== undefined && !finite(value.rotation, -180, 180))) return false;
       return rectCornersWithin(value.at, value.width, value.height, value.rotation ?? 0);
+    case "circle":
+      return keys(value, ["type", "center", "r"]) && isPoint(value.center)
+        && finite(value.r, 1, DIAGRAM_LIMITS.height / 2)
+        && isPoint([value.center[0] - value.r, value.center[1] - value.r])
+        && isPoint([value.center[0] + value.r, value.center[1] + value.r]);
     case "ellipse":
       if (!keys(value, ["type", "center", "rx", "ry", "rotation"]) || !isPoint(value.center)
         || !finite(value.rx, 1, DIAGRAM_LIMITS.width / 2) || !finite(value.ry, 1, DIAGRAM_LIMITS.height / 2)
