@@ -40,6 +40,16 @@ export function editDiagram(
   return validDiagramBlocks(diagrams, note.sections.length) ? { ...note, diagrams } : note;
 }
 
+export function updateTemplateParams<T extends DiagramTemplate>(
+  note: NoteStructure, index: number, template: T,
+  patch: Partial<Extract<DiagramBlock, { template: T }>["params"]>,
+): NoteStructure {
+  return editDiagram(note, index, (block) => {
+    if (block.template !== template) return block;
+    return { ...block, params: { ...block.params, ...patch } } as DiagramBlock;
+  });
+}
+
 export function setDiagramCaption(note: NoteStructure, index: number, raw: string): NoteStructure {
   const caption = cleanText(raw, DIAGRAM_LIMITS.maxCaption);
   return editDiagram(note, index, (diagram) => ({ ...diagram, caption }));
