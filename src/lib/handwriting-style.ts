@@ -17,8 +17,8 @@ const HANDWRITING_PAIRS = [
 
 type HandwritingSettings = { zhFont: ZhFontId; enFont: EnFontId; seed: number };
 
-/** Always changes the Chinese font, changes the Latin font whenever possible,
- * and shifts the deterministic stroke offsets. Leaves ink, paper and sizing alone.
+/** Always changes both font families and shifts the deterministic stroke offsets.
+ * Leaves ink, paper and sizing alone.
  */
 export function nextHandwritingStyle(current: HandwritingSettings): HandwritingSettings {
   const exact = HANDWRITING_PAIRS.findIndex(
@@ -26,7 +26,14 @@ export function nextHandwritingStyle(current: HandwritingSettings): HandwritingS
   );
   const byChinese = HANDWRITING_PAIRS.findIndex(({ zhFont }) => zhFont === current.zhFont);
   const index = exact >= 0 ? exact : byChinese;
-  const next = HANDWRITING_PAIRS[(index + 1) % HANDWRITING_PAIRS.length];
-  const seed = ((current.seed + 7919) % 100_000 + 100_000) % 100_000;
-  return { zhFont: next.zhFont, enFont: next.enFont, seed };
+  // A manual mixed pair may share its Latin font with the next preset. Skip it
+  // rather than changing Chinese alone, which is invisible in English-only notes.
+  for (let step = 1; step <= HANDWRITING_PAIRS.length; step++) {
+    const candidate = HANDWRITING_PAIRS[(index + step) % HANDWRITING_PAIRS.length];
+    if (candidate.zhFont !== current.zhFont && candidate.enFont !== current.enFont) {
+      const seed = ((current.seed + 7919) % 100_000 + 100_000) % 100_000;
+      return { zhFont: candidate.zhFont, enFont: candidate.enFont, seed };
+    }
+  }
+  throw new Error("No handwriting preset changes both font families");
 }

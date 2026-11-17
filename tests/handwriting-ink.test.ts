@@ -76,6 +76,18 @@ describe("Try another handwriting", () => {
     expect(first.enFont).not.toBe(manuallyChosen.enFont);
   });
 
+  it("changes both font families for every supported manual combination", () => {
+    for (const zh of ZH_FONTS) {
+      for (const en of EN_FONTS) {
+        const manual = { ...DEFAULT_SETTINGS, zhFont: zh.id, enFont: en.id };
+        const next = nextHandwritingStyle(manual);
+        expect(next.zhFont, zh.id + "/" + en.id).not.toBe(manual.zhFont);
+        expect(next.enFont, zh.id + "/" + en.id).not.toBe(manual.enFont);
+        expect(nextHandwritingStyle(manual)).toEqual(next);
+      }
+    }
+  });
+
   it("changes only fonts and the jitter seed, leaving the note style and ink untouched", () => {
     const settings = { ...DEFAULT_SETTINGS, ink: "graphite" as const, naturalness: 0 };
     const next = { ...settings, ...nextHandwritingStyle(settings) };

@@ -56,6 +56,10 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
       check("D2-" + viewport + "-position", "Quick picker anchors to the chosen section",
         await page.locator('.note-page .diagram-block[data-diagram-after-section="1"]').count() === 1);
       await second.locator(".diagram-expand").click();
+      const fullTrigger = await quick.locator(".diagram-quick-trigger").innerText();
+      check("D2-" + viewport + "-manage-trigger", "At 2/2, the trigger says Manage diagrams",
+        fullTrigger.includes(cn ? "管理示意图" : "Manage diagrams")
+        && fullTrigger.includes("(2/2)"), fullTrigger);
       await quick.locator(".diagram-quick-trigger").click();
       check("D2-" + viewport + "-limit", "Two diagrams switch the compact entry to management",
         await page.locator(".note-page .diagram-block").count() === 2
