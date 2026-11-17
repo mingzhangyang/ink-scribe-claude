@@ -18,6 +18,9 @@ export const INKS = [
   { id: "brown", label: "复古棕", color: "#451A03" },
   { id: "green", label: "黛绿", color: "#14532D" },
   { id: "bordeaux", label: "波尔多红", color: "#7F1D1D" },
+  { id: "magenta", label: "洋红", color: "#86198F" },
+  { id: "teal", label: "深青", color: "#0D5552" },
+  { id: "violet", label: "紫罗兰", color: "#5B21B6" },
 ] as const;
 export type InkId = (typeof INKS)[number]["id"];
 
