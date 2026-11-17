@@ -207,6 +207,7 @@ export const zh = {
     accentLabel: "重点颜色",
     naturalness: "自然手写感",
     reseed: "换一种笔迹",
+    reseedHint: "切换中英字体及笔画细节",
     doodle: "插图",
     doodleSource: "插图来源",
     doodleModes: { auto: "按笔记内容自动选择", theme: "指定内置插图", ai: "AI 生成插图", none: "不显示插图" },
