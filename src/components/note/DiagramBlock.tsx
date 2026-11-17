@@ -67,8 +67,21 @@ const templateNames: Record<NonNullable<DiagramBlock["template"]>, string> = {
 };
 
 function InkLabel({ at, children }: { at: DiagramPoint; children: string }) {
+  // Positions may be valid at the canvas boundary, but text and its paper outline need room.
+  // Keep the natural font size whenever possible and cap it only if the text cannot fit.
+  const inset = 20;
+  const units = Array.from(children).reduce((sum, character) => sum + (character.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+  const estimatedWidth = Math.min(DIAGRAM_LIMITS.width - 2 * inset, units * 48);
+  const minX = Math.max(90, inset + estimatedWidth / 2);
+  const x = Math.max(minX, Math.min(DIAGRAM_LIMITS.width - minX, at[0]));
+  const y = Math.max(70, Math.min(DIAGRAM_LIMITS.height - 70, at[1]));
+  const horizontalRoom = 2 * (Math.min(x, DIAGRAM_LIMITS.width - x) - inset);
+  const verticalRoom = 2 * (Math.min(y, DIAGRAM_LIMITS.height - y) - inset);
+  const fontCap = Math.max(1, Math.floor(100 * Math.min(horizontalRoom / units, verticalRoom / 1.5)) / 100);
+  const fontSize = `min(calc(var(--fs) * var(--diagram-label-scale, 2.4)), ${fontCap}px)`;
   return (
-    <text x={at[0]} y={at[1]} textAnchor="middle" dominantBaseline="middle" className="diagram-label">
+    <text x={x} y={y} textAnchor="middle" dominantBaseline="middle" className="diagram-label"
+      style={{ fontSize }}>
       {children}
     </text>
   );

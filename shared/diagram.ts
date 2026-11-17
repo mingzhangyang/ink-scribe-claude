@@ -92,10 +92,20 @@ function rightTriangle(legRatio: number): DiagramPrimitive[] {
 function numberLine(start: number, end: number, step: number): DiagramPrimitive[] {
   const left = 125, right = 885, y = 365;
   const result: DiagramPrimitive[] = [arrow(point(left, y), point(right, y))];
-  // The strict publication contract rejects more than 20 intervals.
-  const count = Math.min(19, Math.floor((end - start) / step + 1e-9) + 1);
-  for (let i = 0; i < count; i++) {
-    const value = start + step * i;
+  // Reserve room for the requested end if the step does not divide the range.
+  // At most 19 ticks: one axis arrow plus 2 primitives per tick stays under 40.
+  const count = Math.max(1, Math.min(19, Math.floor((end - start) / step + 1e-9) + 1));
+  const ticks = Array.from({ length: count }, (_, i) => start + step * i);
+  const last = ticks.length - 1;
+  if (Math.abs(end - ticks[last]) <= Math.max(1e-8, step * 1e-8)) {
+    ticks[last] = end;
+  } else {
+    // Drop a near-duplicate terminal tick so the end label remains readable.
+    while (ticks.length > 1 && (end - ticks[ticks.length - 1]) / (end - start) * (right - left - 85) < 60) ticks.pop();
+    if (ticks.length < 19) ticks.push(end);
+    else ticks[ticks.length - 1] = end; // Defensive cap for direct callers with invalid parameters.
+  }
+  for (const value of ticks) {
     const x = left + 34 + (right - left - 85) * (value - start) / (end - start);
     result.push(line(point(x, y - 16), point(x, y + 16)));
     result.push(label(point(x, y + 62), String(Number(value.toFixed(5)))));

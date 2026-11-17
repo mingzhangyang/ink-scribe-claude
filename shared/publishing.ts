@@ -256,12 +256,13 @@ const issue = (issues: ValidationIssue[], path: string, code: string, message: s
 function check(schema: Schema, value: unknown, path: string, issues: ValidationIssue[]): void {
   if (issues.length >= MAX_ISSUES) return;
   if (schema.oneOf) {
-    // Every union in this contract is discriminated by an exact type field.
+    // Select the expected discriminator from the schema, including when the payload omits it.
     const branch = isRecord(value) && schema.oneOf.find((s) =>
       s.properties?.type?.const !== undefined ? s.properties.type.const === value.type
         : s.properties?.template?.const !== undefined ? s.properties.template.const === value.template
           : !!s.properties?.primitives && Object.hasOwn(value, "primitives") && !Object.hasOwn(value, "template"));
-    if (!branch) issue(issues, propertyPath(path, isRecord(value) && Object.hasOwn(value, "type") ? "type" : "template"),
+    const discriminator = schema.oneOf.some((s) => s.properties?.type?.const !== undefined) ? "type" : "template";
+    if (!branch) issue(issues, propertyPath(path, discriminator),
       "INVALID_TYPE", "Expected a supported diagram, drawing, or sticker type.");
     else check(branch, value, path, issues);
     return;

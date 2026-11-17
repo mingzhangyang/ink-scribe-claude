@@ -88,6 +88,20 @@ describe("diagram blocks: immutable, backwards-compatible data", () => {
       expect.objectContaining({ path: "note.diagrams[0].params.step", code: "TOO_MANY_TICKS" }),
     ]));
   });
+  it("keeps existing sticker and doodle discriminator errors on .type", () => {
+    expect(errors({ ...request(), stickers: [{ id: "s1", x: 0, y: 0, rotation: 0, scale: 1 }] }))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "stickers[0].type", code: "INVALID_TYPE" }),
+      ]));
+    expect(errors({ ...request(), note: { ...note(), doodleSpec: { concept: "sketch", elements: [{}] } } }))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "note.doodleSpec.elements[0].type", code: "INVALID_TYPE" }),
+      ]));
+    expect(errors(request([{ afterSection: 0, params: { thetaDeg: 30, friction: false } } as unknown as DiagramBlock])))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "note.diagrams[0].template", code: "INVALID_TYPE" }),
+      ]));
+  });
 });
 
 describe("diagram template geometry", () => {
@@ -114,6 +128,56 @@ describe("diagram template geometry", () => {
       expect(elements.length).toBeLessThanOrEqual(40);
       expect(validDiagramBlocks([{ afterSection: 0, primitives: elements }], 1)).toBe(true);
     }
+  });
+
+  it("always marks the requested number-line end without exceeding the 40-primitive cap", () => {
+    const cases = [
+      { params: { start: 0, end: 10, step: 20 }, labels: ["0", "10"] },
+      { params: { start: 0, end: 10, step: 6 }, labels: ["0", "6", "10"] },
+      { params: { start: 0, end: 10, step: 9.9 }, labels: ["0", "10"] },
+      { params: { start: -9, end: 9, step: 1 }, labels: Array.from({ length: 19 }, (_, i) => String(i - 9)) },
+      { params: { start: 0, end: 18, step: 1.05 }, labels: [...Array.from({ length: 16 }, (_, i) => String(Number((i * 1.05).toFixed(5)))), "18"] },
+    ];
+    for (const { params, labels } of cases) {
+      const block: DiagramBlock = { afterSection: 0, template: "number-line", params };
+      expect(validDiagramBlocks([block], 1)).toBe(true);
+      expect(validatePublishRequest(request([block])).ok).toBe(true);
+      expect(validatePublishedNote(note([block])).ok).toBe(true);
+      const shapes = expandDiagram(block);
+      expect(shapes.filter((shape) => shape.type === "label").map((shape) => (shape as Extract<DiagramPrimitive, { type: "label" }>).text)).toEqual(labels);
+      expect(shapes.length).toBeLessThanOrEqual(40);
+      expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+    }
+  });
+
+  it("keeps labels and their font-size bounds inside all four canvas edges", () => {
+    const shapes: DiagramPrimitive[] = [
+      { type: "arrow", from: [100, 15], to: [900, 15], label: "F" },
+      { type: "arrow", from: [100, 735], to: [900, 735], label: "F" },
+      { type: "arrow", from: [15, 100], to: [15, 650], label: "F" },
+      { type: "arrow", from: [985, 650], to: [985, 100], label: "F" },
+      { type: "arc", center: [625, 375], radius: 375, startDeg: -60, sweepDeg: 120, label: "east" },
+      { type: "arc", center: [375, 375], radius: 375, startDeg: 120, sweepDeg: 120, label: "west" },
+      { type: "arc", center: [500, 375], radius: 375, startDeg: -120, sweepDeg: 60, label: "north" },
+      { type: "arc", center: [500, 375], radius: 375, startDeg: 60, sweepDeg: 60, label: "south" },
+      { type: "label", at: [0, 0], text: "重".repeat(40) },
+    ];
+    expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+    expect(validatePublishRequest(request([{ afterSection: 0, primitives: shapes }])).ok).toBe(true);
+    expect(validatePublishedNote(note([{ afterSection: 0, primitives: shapes }])).ok).toBe(true);
+    const html = renderToStaticMarkup(createElement(DiagramBlockView, {
+      block: { afterSection: 0, primitives: shapes }, seed: 2,
+    }));
+    const positions = [...html.matchAll(/<text x="([0-9.]+)" y="([0-9.]+)"/g)];
+    expect(positions).toHaveLength(shapes.length);
+    for (const [, rawX, rawY] of positions) {
+      const x = Number(rawX), y = Number(rawY);
+      expect(x).toBeGreaterThanOrEqual(70);
+      expect(x).toBeLessThanOrEqual(930);
+      expect(y).toBeGreaterThanOrEqual(70);
+      expect(y).toBeLessThanOrEqual(680);
+    }
+    expect(html).toContain("font-size:min(calc(");
   });
 
   it("renders the same deterministic SVG and flow placement across all four layouts", () => {
