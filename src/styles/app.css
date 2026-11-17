@@ -1216,6 +1216,142 @@ input[type="range"] {
   line-height: 1.6;
 }
 
+
+/* D2: Diagram insertion belongs to a section, not the floating-sticker layer. */
+.diagram-section-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  min-width: 0;
+}
+.diagram-add { align-self: flex-start; min-height: 36px; }
+.diagram-limit { font-size: 0.85em; color: var(--muted); }
+.diagram-limit-reached { margin: 0; }
+.diagram-template-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.diagram-template-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 104px;
+  padding: 9px 6px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 0.86em;
+  text-align: center;
+}
+.diagram-template-choice:hover,
+.diagram-template-choice:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--surface);
+}
+.diagram-template-choice svg {
+  display: block;
+  width: min(100%, 100px);
+  height: 56px;
+  flex: none;
+}
+.diagram-editor-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  min-width: 0;
+  overflow: hidden;
+}
+.diagram-editor-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 4px 8px;
+}
+.diagram-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.diagram-remove { flex: none; color: var(--danger); }
+.diagram-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+.diagram-edit-preview {
+  --ink: var(--text);
+  --paper: var(--paper-ui);
+  --hand-font: cursive;
+  --fs: 18px;
+  align-self: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 320px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--paper-ui);
+}
+.diagram-edit-preview .diagram-block { margin: 0; }
+.diagram-edit-preview .diagram-art { width: 100%; }
+.diagram-edit-preview .diagram-block figcaption { font-size: 12px; }
+.diagram-parameters { display: flex; flex-direction: column; gap: 10px; }
+.diagram-range { display: flex; flex-direction: column; gap: 4px; }
+.diagram-range > span { display: flex; justify-content: space-between; gap: 8px; }
+.diagram-range input[type="range"] { width: 100%; accent-color: var(--primary-bg); }
+.diagram-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.diagram-check input { flex: none; accent-color: var(--primary-bg); }
+.diagram-select { display: flex; flex-direction: column; gap: 4px; }
+.diagram-select select { max-width: 100%; min-height: 38px; }
+.diagram-number-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.diagram-number {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.88em;
+}
+.diagram-number input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; }
+.diagram-number .hint { grid-column: 1 / -1; font-size: 0.93em; }
+.diagram-caption input { box-sizing: border-box; width: 100%; }
+@media (max-width: 400px) {
+  .diagram-number-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .toast {
   position: fixed;
   left: 50%;
