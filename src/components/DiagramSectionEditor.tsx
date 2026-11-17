@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { DIAGRAM_LIMITS, DIAGRAM_TEMPLATES, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
-import { insertDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
+import { editDiagram, insertDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -224,7 +224,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
           <label className="diagram-check">
             <input type="checkbox" checked={block.handDrawn !== false}
               onChange={(event) => updateNote((current) =>
-                editHandDrawn(current, index, event.target.checked))} />
+                editDiagram(current, index, (existing) => ({ ...existing, handDrawn: event.target.checked })))} />
             <span>{t.handDrawn}</span>
           </label>
         </div> : null}
@@ -247,7 +247,3 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   </div>;
 }
 
-function editHandDrawn(note: NonNullable<ReturnType<typeof useNoteStore.getState>["note"]>,
-  index: number, handDrawn: boolean) {
-  return editDiagram(note, index, (block) => ({ ...block, handDrawn }));
-}
