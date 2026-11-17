@@ -180,6 +180,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const t = useT().content.diagrams;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
   if (!note) return null;
 
   const diagrams = note.diagrams ?? [];
@@ -192,6 +193,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
     const index = diagrams.length;
     updateNote((current) => insertDiagram(current, sectionIndex, template));
     setPickerOpen(false);
+    setConfirmRemoval(null);
     setExpanded(index);
   };
 
@@ -206,11 +208,15 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
             <span>{block.template ? t.templateNames[block.template] : t.customTitle}</span>
           </button>
           <button type="button" className="btn btn-link diagram-remove"
-            aria-label={t.removeDiagram(index + 1)}
+            aria-label={confirmRemoval === index ? t.confirmRemoveDiagram(index + 1) : t.removeDiagram(index + 1)}
             onClick={() => {
+              if (confirmRemoval !== index) { setConfirmRemoval(index); return; }
               updateNote((current) => removeDiagram(current, index));
               setExpanded(null);
-            }}>{t.remove}</button>
+              setConfirmRemoval(null);
+            }}>{confirmRemoval === index ? t.confirmRemove : t.remove}</button>
+          {confirmRemoval === index ? <button type="button" className="btn btn-link diagram-cancel-remove"
+            onClick={() => setConfirmRemoval(null)}>{t.cancelRemove}</button> : null}
         </div>
         {expanded === index ? <div id={"diagram-inspector-" + sectionIndex + "-" + index}
           className="diagram-inspector">
