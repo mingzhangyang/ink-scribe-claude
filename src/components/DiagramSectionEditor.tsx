@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import { editDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
 import { useT } from "../i18n/index.ts";
