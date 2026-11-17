@@ -49,7 +49,8 @@ const ellipsePath = (center: DiagramPoint, rx: number, ry: number, seed: number,
   const points: DiagramPoint[] = [];
   for (let i = 0; i <= 32; i++) {
     const a = 2 * Math.PI * i / 32, delta = i === 0 || i === 32 ? 0 : random() * jitter * 2;
-    points.push([center[0] + (rx + delta) * Math.cos(a), center[1] + (ry + delta) * Math.sin(a)]);
+    points.push([center[0] + Math.max(0.5, rx + delta) * Math.cos(a),
+      center[1] + Math.max(0.5, ry + delta) * Math.sin(a)]);
   }
   return points.map((p, i) => (i ? "L" : "M") + coords(p)).join(" ") + " Z";
 };
