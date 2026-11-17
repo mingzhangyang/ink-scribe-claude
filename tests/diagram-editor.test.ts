@@ -60,8 +60,7 @@ describe("D2 diagram authoring commands", () => {
     });
     expect(updateTemplateParams(friction, 0, "inclined-plane", { thetaDeg: 61 })).toBe(friction);
     expect(updateTemplateParams(friction, 0, "inclined-plane", { thetaDeg: 4 })).toBe(friction);
-    expect(updateTemplateParams(friction, 0, "right-triangle", { legRatio: 1 })).not.toEqual(
-      expect.objectContaining({ diagrams: [expect.objectContaining({ template: "right-triangle" })] }));
+    expect(updateTemplateParams(friction, 0, "right-triangle", { legRatio: 1 })).toBe(friction);
     expect(published(friction)).toBe(true);
   });
 
@@ -87,7 +86,7 @@ describe("D2 diagram authoring commands", () => {
     expect(updateTemplateParams(small, 0, "number-line", { step: 0 })).toBe(small);
     const wider = updateTemplateParams(base, 0, "number-line", { end: 12 });
     expect(updateTemplateParams(wider, 0, "number-line", { start: -30 })).toBe(wider);
-    expect(updateTemplateParams(base, 0, "number-line", { end: 10, step: 1 })).toBe(base);
+    expect(updateTemplateParams(base, 0, "number-line", { end: 100, step: 1 })).toBe(base);
     expect(published(wider)).toBe(true);
   });
 
