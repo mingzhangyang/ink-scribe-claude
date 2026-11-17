@@ -181,6 +181,8 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
+  // A section reorder, undo (D3) or document reload must never confirm deletion of another block.
+  useEffect(() => { setConfirmRemoval(null); }, [note?.diagrams]);
   if (!note) return null;
 
   const diagrams = note.diagrams ?? [];
@@ -203,7 +205,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
         <div className="diagram-editor-heading">
           <button type="button" className="diagram-expand" aria-expanded={expanded === index}
             aria-controls={"diagram-inspector-" + sectionIndex + "-" + index}
-            onClick={() => setExpanded(expanded === index ? null : index)}>
+            onClick={() => { setConfirmRemoval(null); setExpanded(expanded === index ? null : index); }}>
             <span aria-hidden="true">{expanded === index ? "▾" : "▸"}</span>
             <span>{block.template ? t.templateNames[block.template] : t.customTitle}</span>
           </button>
@@ -238,7 +240,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
     ))}
     {canAdd ? <>
       <button type="button" className="btn btn-link diagram-add" aria-expanded={pickerOpen}
-        onClick={() => setPickerOpen(!pickerOpen)}>
+        onClick={() => { setConfirmRemoval(null); setPickerOpen(!pickerOpen); }}>
         {t.add} <span className="diagram-limit">({diagrams.length}/{DIAGRAM_LIMITS.maxBlocks})</span>
       </button>
       {pickerOpen ? <div className="diagram-template-picker" role="group" aria-label={t.chooseTemplate}>
