@@ -84,7 +84,7 @@ export const en: Messages = {
       parchment: "Parchment",
       "mist-cotton": "Mist blue cotton",
     },
-    inks: { carbon: "Carbon black", blue: "Fountain blue", brown: "Vintage brown", green: "Ink green", bordeaux: "Bordeaux" },
+    inks: { carbon: "Carbon black", blue: "Fountain blue", brown: "Vintage brown", green: "Ink green", bordeaux: "Bordeaux", magenta: "Magenta", teal: "Deep teal", violet: "Violet" },
     accents: { yellow: "Lemon", green: "Mint", orange: "Apricot" },
     pageSizes: { a4: "A4 portrait", portrait: "3:4 portrait", square: "1:1 square", long: "Long (fits content)" },
     zhFonts: {
