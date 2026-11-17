@@ -290,9 +290,10 @@ export const zh = {
     summary: "总结",
     diagrams: {
       quickTitle: "示意图 · 选择模板",
+      quickManageButton: "管理示意图",
       quickLocation: "插入位置",
       quickSection: (i: number, heading: string) => "第 " + i + " 段之后" + (heading ? " · " + heading : ""),
-      quickHelp: "选好段落，点击下面的模板即可插入。也可在正文各段落下单独添加。",
+      quickHelp: "选好段落，点击模板即可插入。",
       quickAdded: "示意图已加入笔记。",
       quickEdit: "编辑参数",
       quickManage: "请在下方对应段落展开或删除已有图块。",
