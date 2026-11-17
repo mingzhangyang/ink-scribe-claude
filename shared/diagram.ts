@@ -90,7 +90,7 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
   const left = 125, right = 885, y = 365;
   const result: DiagramPrimitive[] = [arrow(point(left, y), point(right, y))];
   // The strict publication contract rejects more than 20 intervals.
-  const count = Math.min(21, Math.floor((end - start) / step + 1e-9) + 1);
+  const count = Math.min(19, Math.floor((end - start) / step + 1e-9) + 1);
   for (let i = 0; i < count; i++) {
     const value = start + step * i;
     const x = left + 34 + (right - left - 85) * (value - start) / (end - start);
@@ -126,4 +126,99 @@ export function expandDiagram(block: DiagramBlock): DiagramPrimitive[] {
     case "number-line": return numberLine(block.params.start, block.params.end, block.params.step);
     case "coordinate-plane": return coordinatePlane(block.params.grid, block.params.quadrants);
   }
+}
+
+
+const obj = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+const keys = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).every((key) => allowed.includes(key));
+const finite = (value: unknown, min: number, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+const isPoint = (value: unknown): value is DiagramPoint => Array.isArray(value) && value.length === 2
+  && finite(value[0], 0, DIAGRAM_LIMITS.width) && finite(value[1], 0, DIAGRAM_LIMITS.height);
+const text = (value: unknown, max: number, allowEmpty = false): value is string =>
+  typeof value === "string" && Array.from(value).length <= max && (allowEmpty || value.length > 0)
+  && !/[\x00-\x1f\x7f<>]/.test(value) && value.trim() === value;
+const boolOrMissing = (value: unknown) => value === undefined || typeof value === "boolean";
+const labelOrMissing = (value: unknown) => value === undefined || text(value, DIAGRAM_LIMITS.maxLabel);
+
+export function validDiagramPrimitive(value: unknown): value is DiagramPrimitive {
+  if (!obj(value)) return false;
+  switch (value.type) {
+    case "line":
+    case "arrow":
+      return keys(value, ["type", "from", "to", "label", "dashed", "double", "guide"])
+        && isPoint(value.from) && isPoint(value.to)
+        && (value.from[0] !== value.to[0] || value.from[1] !== value.to[1])
+        && labelOrMissing(value.label) && boolOrMissing(value.dashed)
+        && boolOrMissing(value.double) && boolOrMissing(value.guide);
+    case "polyline":
+      return keys(value, ["type", "points", "dashed", "guide"])
+        && Array.isArray(value.points) && value.points.length >= 2 && value.points.length <= DIAGRAM_LIMITS.maxPoints
+        && value.points.every(isPoint) && boolOrMissing(value.dashed) && boolOrMissing(value.guide);
+    case "rect":
+      if (!keys(value, ["type", "at", "width", "height", "rotation"]) || !isPoint(value.at)
+        || !finite(value.width, 1, DIAGRAM_LIMITS.width) || !finite(value.height, 1, DIAGRAM_LIMITS.height)
+        || (value.rotation !== undefined && !finite(value.rotation, -180, 180))) return false;
+      return rectCornersWithin(value.at, value.width, value.height, value.rotation ?? 0);
+    case "ellipse":
+      if (!keys(value, ["type", "center", "rx", "ry", "rotation"]) || !isPoint(value.center)
+        || !finite(value.rx, 1, DIAGRAM_LIMITS.width / 2) || !finite(value.ry, 1, DIAGRAM_LIMITS.height / 2)
+        || (value.rotation !== undefined && !finite(value.rotation, -180, 180))) return false;
+      const a = (value.rotation ?? 0) * Math.PI / 180;
+      const dx = Math.hypot(value.rx * Math.cos(a), value.ry * Math.sin(a));
+      const dy = Math.hypot(value.rx * Math.sin(a), value.ry * Math.cos(a));
+      return isPoint([value.center[0] - dx, value.center[1] - dy]) && isPoint([value.center[0] + dx, value.center[1] + dy]);
+    case "arc":
+      return keys(value, ["type", "center", "radius", "startDeg", "sweepDeg", "label"])
+        && isPoint(value.center) && finite(value.radius, 1, 375)
+        && finite(value.startDeg, -360, 360) && finite(value.sweepDeg, -360, 360) && value.sweepDeg !== 0
+        && isPoint([value.center[0] - value.radius, value.center[1] - value.radius])
+        && isPoint([value.center[0] + value.radius, value.center[1] + value.radius])
+        && labelOrMissing(value.label);
+    case "label":
+      return keys(value, ["type", "at", "text"]) && isPoint(value.at) && text(value.text, DIAGRAM_LIMITS.maxLabel);
+    default:
+      return false;
+  }
+}
+
+function rectCornersWithin(at: DiagramPoint, width: number, height: number, rotation: number): boolean {
+  const cx = at[0] + width / 2, cy = at[1] + height / 2, a = rotation * Math.PI / 180;
+  const dx = Math.abs(width / 2 * Math.cos(a)) + Math.abs(height / 2 * Math.sin(a));
+  const dy = Math.abs(width / 2 * Math.sin(a)) + Math.abs(height / 2 * Math.cos(a));
+  return isPoint([cx - dx, cy - dy]) && isPoint([cx + dx, cy + dy]);
+}
+
+/** Strict draft-reader guard; the publication schema supplies user-facing paths and issue codes. */
+export function validDiagramBlocks(value: unknown, sectionCount: number): value is DiagramBlock[] {
+  if (!Array.isArray(value) || value.length > DIAGRAM_LIMITS.maxBlocks) return false;
+  return value.every((block: unknown) => {
+    if (!obj(block) || !keys(block, ["afterSection", "caption", "handDrawn", "jitterPx", "template", "params", "primitives"])
+      || !Number.isSafeInteger(block.afterSection) || !finite(block.afterSection, 0, sectionCount - 1)
+      || (block.caption !== undefined && !text(block.caption, DIAGRAM_LIMITS.maxCaption, true))
+      || !boolOrMissing(block.handDrawn)
+      || (block.jitterPx !== undefined && !finite(block.jitterPx, 0, 3))) return false;
+
+    if (Object.hasOwn(block, "primitives")) {
+      return !Object.hasOwn(block, "template") && !Object.hasOwn(block, "params")
+        && Array.isArray(block.primitives) && block.primitives.length >= 1
+        && block.primitives.length <= DIAGRAM_LIMITS.maxPrimitives
+        && block.primitives.every(validDiagramPrimitive);
+    }
+    if (!Object.hasOwn(block, "template") || !obj(block.params)) return false;
+    const p = block.params;
+    switch (block.template) {
+      case "inclined-plane":
+        return keys(p, ["thetaDeg", "friction"]) && finite(p.thetaDeg, 5, 60) && typeof p.friction === "boolean";
+      case "right-triangle":
+        return keys(p, ["legRatio"]) && finite(p.legRatio, 0.25, 4);
+      case "number-line":
+        return keys(p, ["start", "end", "step"])
+          && finite(p.start, -1000, 1000) && finite(p.end, -1000, 1000) && finite(p.step, 0.1, 1000)
+          && p.end > p.start && (p.end - p.start) / p.step <= 18 + 1e-8;
+      case "coordinate-plane":
+        return keys(p, ["grid", "quadrants"]) && typeof p.grid === "boolean" && ["all", "first"].includes(String(p.quadrants));
+      default:
+        return false;
+    }
+  });
 }
