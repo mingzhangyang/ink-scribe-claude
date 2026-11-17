@@ -54,7 +54,7 @@ function DiagramQuickInsert() {
       aria-expanded={expanded} aria-controls="diagram-quick-options"
       onClick={() => setExpanded((value) => !value)}>
       <span aria-hidden="true">{expanded ? "−" : "＋"}</span>
-      {full ? t.quickManageButton : t.add}
+      {full ? t.quickTitle : t.add.replace(/^[＋+]\s*/, "")}
       <span className="diagram-limit">({total}/{DIAGRAM_LIMITS.maxBlocks})</span>
     </button>
     {expanded ? <div className="diagram-quick-options" id="diagram-quick-options">
