@@ -418,7 +418,11 @@ export function notePage(origin: string, published: PublishedNote): PageMeta {
     ? `<aside><h2>${labels.cues}</h2><dl>${note.cues.map((cue) => `<dt>${escapeHtml(cue.keyword)}</dt>${cue.note ? `<dd>${escapeHtml(cue.note)}</dd>` : ""}`).join("")}</dl></aside>`
     : "";
   const sections = note.sections
-    .map((s) => `<section>${s.heading ? `<h2>${escapeHtml(s.heading)}</h2>` : ""}${contentToHtml(s.content)}</section>`)
+    .map((s, index) => {
+      const captions = (note.diagrams ?? []).filter((diagram) => diagram.afterSection === index)
+        .map((diagram) => `<figure aria-label="${escapeHtml(diagram.template ?? "diagram")}"><figcaption>${escapeHtml(diagram.caption ?? "")}</figcaption></figure>`).join("");
+      return `<section>${s.heading ? `<h2>${escapeHtml(s.heading)}</h2>` : ""}${contentToHtml(s.content)}${captions}</section>`;
+    })
     .join("");
   const summary = note.summary ? `<section><h2>${labels.summary}</h2><p>${escapeHtml(note.summary)}</p></section>` : "";
   const attribution = locale === "en"
