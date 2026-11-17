@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
+import { PrimitiveEditor } from "../src/components/PrimitiveEditor.tsx";
+import { diagramArcPath, diagramLabelLayout } from "../src/diagrams/svg-geometry.ts";
 import { expandDiagram, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 import {
@@ -151,4 +153,82 @@ describe("D3 shapes and geometry", () => {
     expect(addShape(full, defaultShape("arc"))).toBe(full);
     expect(validDiagramBlocks([full], 1)).toBe(true);
   });
+  it("uses the displayed (clamped) label anchor for selection and edit handles", () => {
+    const boundary: DiagramPrimitive = { type: "label", at: [0, 375], text: "A" };
+    const long: DiagramPrimitive = { type: "label", at: [0, 750], text: "非常长的中文文字标签用于边界测试" };
+    for (const shape of [boundary, long]) {
+      if (shape.type !== "label") throw new Error("Expected label");
+      const layout = diagramLabelLayout(shape.at, shape.text);
+      expect(shapeCenter(shape)).toEqual(layout.at);
+      expect(shapeHandles(shape)[0].point).toEqual(layout.at);
+      const block: DiagramBlock = { afterSection: 0, primitives: [shape] };
+      const rendered = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 1978 }));
+      const editor = renderToStaticMarkup(createElement(PrimitiveEditor, { block, index: 0 }));
+      expect(rendered).toContain(`<text x="${layout.at[0]}" y="${layout.at[1]}"`);
+      expect(editor).toContain(`cx="${layout.at[0]}" cy="${layout.at[1]}" r="75"`);
+      expect(editor).toContain("data-label-hit-target");
+      expect(editor).toContain(`<text x="${layout.at[0]}" y="${layout.at[1]}" text-anchor="middle"`);
+    }
+    expect(shapeCenter(boundary)).toEqual([90, 375]);
+    expect(moveFromPointers(boundary, [0, 0], [25, 0])).toEqual({ ...boundary, at: [115, 375] });
+    expect(moveFromPointers(boundary, [0, 0], [-25, 0])).toBe(boundary);
+    expect(moveFromPointers(boundary, [0, 0], [0, 0])).toBe(boundary);
+    expect(shapeCenter(long)[0]).toBeGreaterThan(90);
+    expect(shapeCenter(long)[1]).toBe(680);
+  });
+
+  it("uses only the rendered arc sweep for the transparent touch target", () => {
+    const arc: DiagramPrimitive = { type: "arc", center: [500, 375], radius: 160, startDeg: -90, sweepDeg: 75 };
+    const block: DiagramBlock = { afterSection: 0, primitives: [arc] };
+    const d = diagramArcPath(arc.center, arc.radius, arc.startDeg, arc.sweepDeg);
+    const visible = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 1978 }));
+    const editor = renderToStaticMarkup(createElement(PrimitiveEditor, { block, index: 0 }));
+    expect(visible).toContain(`d="${d}"`);
+    expect(editor).toContain(`<path d="${d}" fill="none" stroke="transparent" stroke-width="75" pointer-events="stroke"`);
+    expect(editor).not.toContain(`<circle cx="500" cy="375" r="160" fill="none" stroke="transparent"`);
+    // The omitted 285-degree span is absent from the single 75-degree SVG arc.
+    expect(d.match(/ A/g)).toHaveLength(1);
+    expect(d).toContain(" 0 0 1 ");
+  });
+
+  it("preserves signed arcs longer than 180 degrees when moving either endpoint", () => {
+    const fromAngle = (deg: number): [number, number] => [
+      500 + 160 * Math.cos(deg * Math.PI / 180),
+      375 + 160 * Math.sin(deg * Math.PI / 180),
+    ];
+    const positive: DiagramPrimitive = {
+      type: "arc", center: [500, 375], radius: 160, startDeg: -90, sweepDeg: 270,
+    };
+    const shorterEnd = resizeShape(positive, "end", fromAngle(175), false);
+    expect(shorterEnd.type).toBe("arc");
+    if (shorterEnd.type !== "arc") throw new Error("Expected arc");
+    expect(shorterEnd.sweepDeg).toBeCloseTo(265, 3);
+    const laterStart = resizeShape(positive, "start", fromAngle(-85), false);
+    if (laterStart.type !== "arc") throw new Error("Expected arc");
+    expect(laterStart.sweepDeg).toBeCloseTo(265, 3);
+    const wrappedEnd = resizeShape(positive, "end", fromAngle(-179), false);
+    if (wrappedEnd.type !== "arc") throw new Error("Expected arc");
+    expect(wrappedEnd.sweepDeg).toBeCloseTo(271, 3);
+
+    const negative: DiagramPrimitive = { ...positive, startDeg: 90, sweepDeg: -270 };
+    const movedNegative = resizeShape(negative, "end", fromAngle(-175), false);
+    if (movedNegative.type !== "arc") throw new Error("Expected arc");
+    expect(movedNegative.sweepDeg).toBeCloseTo(-265, 3);
+    const negStart = resizeShape(negative, "start", fromAngle(85), false);
+    if (negStart.type !== "arc") throw new Error("Expected arc");
+    expect(negStart.sweepDeg).toBeCloseTo(-265, 3);
+
+    const seam: DiagramPrimitive = { ...positive, startDeg: 170, sweepDeg: 270 };
+    const crossingStart = resizeShape(seam, "start", fromAngle(-175), false);
+    if (crossingStart.type !== "arc") throw new Error("Expected arc");
+    expect(crossingStart.startDeg).toBe(-175);
+    expect(crossingStart.sweepDeg).toBeCloseTo(255, 3);
+
+    const nearFull: DiagramPrimitive = { ...positive, sweepDeg: 355 };
+    const clamped = resizeShape(nearFull, "end", fromAngle(-80), false);
+    expect(validDiagramPrimitive(clamped)).toBe(true);
+    if (clamped.type !== "arc") throw new Error("Expected arc");
+    expect(clamped.sweepDeg).toBe(360);
+  });
+
 });

@@ -2,6 +2,7 @@ import {
   DIAGRAM_LIMITS, expandDiagram, validDiagramPrimitive,
   type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../shared/diagram.ts";
+import { diagramLabelLayout } from "./svg-geometry.ts";
 
 export const DIAGRAM_GRID = DIAGRAM_LIMITS.width / 40; // 25 normalized units
 export const DIAGRAM_HISTORY_LIMIT = 30;
@@ -32,6 +33,14 @@ const normAngle = (n: number) => {
   const angle = ((n + 180) % 360 + 360) % 360 - 180;
   return round(angle === -180 ? 180 : angle);
 };
+// Pointer angles are modulo 360, whereas an authored arc may span a full turn.
+// Choose the equivalent pointer angle nearest its previous unwrapped endpoint.
+const unwrapNear = (angle: number, reference: number) =>
+  angle + 360 * Math.round((reference - angle) / 360);
+const boundedSweep = (sweep: number, previous: number) => {
+  const bounded = Math.max(-360, Math.min(360, round(sweep)));
+  return Math.abs(bounded) < 0.1 ? (previous > 0 ? 0.1 : -0.1) : bounded;
+};
 export const snapAngle = (degrees: number): number => Math.round(degrees / 15) * 15;
 export const snapToGrid = (at: Point): Point => point(
   Math.round(at[0] / DIAGRAM_GRID) * DIAGRAM_GRID,
@@ -60,7 +69,7 @@ export function shapeCenter(shape: Shape): Point {
     case "circle":
     case "ellipse":
     case "arc": return shape.center;
-    case "label": return shape.at;
+    case "label": return diagramLabelLayout(shape.at, shape.text).at;
   }
 }
 
@@ -137,7 +146,7 @@ export function shapeHandles(shape: Shape): ShapeHandle[] {
       ];
       break;
     case "label":
-      handles = [{ id: "at", kind: "resize", point: shape.at }];
+      handles = [{ id: "at", kind: "resize", point: center }];
       break;
   }
   if (["line", "arrow", "polyline", "rect", "ellipse", "arc"].includes(shape.type)) {
@@ -182,15 +191,12 @@ export function resizeShape(shape: Shape, handle: string, at: Point, snapping = 
       if (handle === "radius") return { ...shape, radius: round(Math.hypot(next[0] - shape.center[0], next[1] - shape.center[1])) };
       if (handle === "start") {
         const end = shape.startDeg + shape.sweepDeg;
-        const startDeg = normAngle(angle);
-        let sweepDeg = normAngle(end - startDeg);
-        if (sweepDeg === 0) sweepDeg = shape.sweepDeg > 0 ? 0.1 : -0.1;
-        return { ...shape, startDeg, sweepDeg };
+        const start = unwrapNear(angle, shape.startDeg);
+        return { ...shape, startDeg: normAngle(start), sweepDeg: boundedSweep(end - start, shape.sweepDeg) };
       }
       if (handle === "end") {
-        let sweepDeg = normAngle(angle - shape.startDeg);
-        if (sweepDeg === 0) sweepDeg = shape.sweepDeg > 0 ? 0.1 : -0.1;
-        return { ...shape, sweepDeg };
+        const end = unwrapNear(angle, shape.startDeg + shape.sweepDeg);
+        return { ...shape, sweepDeg: boundedSweep(end - shape.startDeg, shape.sweepDeg) };
       }
       return shape;
     }
@@ -310,5 +316,12 @@ export function rotateFromPointers(shape:Shape,start:Point,end:Point):Shape{
 export function moveFromPointers(shape:Shape,start:Point,end:Point,snapping=true):Shape{
   const raw=point(end[0]-start[0],end[1]-start[1]);
   const delta=snapping?snapToGrid(raw):raw;
+  if (shape.type === "label") {
+    // Move from the displayed anchor, not a raw off-screen/boundary coordinate.
+    // An outward nudge that leaves the visible glyph unchanged is a no-op.
+    const center = shapeCenter(shape);
+    const next = diagramLabelLayout(point(center[0] + delta[0], center[1] + delta[1]), shape.text).at;
+    return next[0] === center[0] && next[1] === center[1] ? shape : { ...shape, at: next };
+  }
   return moveShape(shape,delta[0],delta[1]);
 }

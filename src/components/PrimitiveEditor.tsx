@@ -6,6 +6,7 @@ import {
   moveFromPointers, resizeShape, rotateFromPointers, shapeCenter, shapeHandles,
 } from "../diagrams/geometry.ts";
 import { editDiagram } from "../diagrams/editor.ts";
+import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout } from "../diagrams/svg-geometry.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -83,10 +84,20 @@ function StrokeHit({ shape, onDown }: {
         transform={shape.rotation ? "rotate(" + shape.rotation + " " + shape.center.join(" ") + ")" : undefined}
         onPointerDown={onDown} />;
     case "arc":
-      return <circle cx={shape.center[0]} cy={shape.center[1]} r={shape.radius}
+      return <path d={diagramArcPath(shape.center, shape.radius, shape.startDeg, shape.sweepDeg)}
         fill="none" stroke="transparent" strokeWidth={75} pointerEvents="stroke"
-        onPointerDown={onDown} />;
-    case "label": return null;
+        data-arc-hit-target onPointerDown={onDown} />;
+    case "label": {
+      // Match both the rendered anchor and glyph extents; long labels can be
+      // selected by tapping visible text far from their center.
+      const { at: [x, y], fontCap } = diagramLabelLayout(shape.at, shape.text);
+      return <text x={x} y={y} textAnchor="middle" dominantBaseline="middle"
+        className="diagram-label"
+        style={{ fontSize: diagramLabelFontSize(fontCap), fontFamily: "var(--hand-font)",
+          fontWeight: 500, letterSpacing: 0, fill: "transparent", stroke: "transparent" }}
+        strokeWidth={75} pointerEvents="all" data-label-hit-target
+        onPointerDown={onDown}>{shape.text}</text>;
+    }
   }
 }
 
@@ -192,9 +203,14 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     if (!drag || drag.pointerId !== event.pointerId || !svg) return;
     event.preventDefault();
     const to = pointerPosition(svg, event);
+    // An arc may cross the -180/180 seam during one gesture. Unwrap each move
+    // relative to the last valid preview, not the original pointerdown angle.
+    const resizing = drag.mode === "resize" && drag.shape.type === "arc"
+      ? expandDiagram(workingRef.current)[drag.index] ?? drag.shape
+      : drag.shape;
     const next = drag.mode === "move" ? moveFromPointers(drag.shape, drag.from, to, showGrid)
       : drag.mode === "rotate" ? rotateFromPointers(drag.shape, drag.from, to)
-      : resizeShape(drag.shape, drag.handle ?? "", to, showGrid);
+      : resizeShape(resizing, drag.handle ?? "", to, showGrid);
     const updated = editShape(drag.base, drag.index, next);
     workingRef.current = updated;
     setWorking(updated);

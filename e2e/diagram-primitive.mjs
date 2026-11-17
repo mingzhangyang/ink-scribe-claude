@@ -96,6 +96,32 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
           .includes(zh ? "自定义标注" : "New annotation"));
       await first.locator(".diagram-shape-palette").getByRole("button", { name: zh ? "箭头" : "Arrow" }).click();
       check("D3-" + width + "-arrow", "Add arrow geometry", await first.locator(".diagram-shape-target").count() > 6);
+      await first.locator(".diagram-shape-palette").getByRole("button", { name: zh ? "角弧" : "Angle arc" }).click();
+      // The omitted 285-degree remainder of the default arc must not intercept a tap.
+      const arcHit = stage.locator("[data-arc-hit-target]").last();
+      const arcTarget = first.locator(".diagram-shape-target").last();
+      const targetBeforeTap = await arcTarget.getAttribute("aria-label");
+      const hitGeometry = await arcHit.evaluate((node) => {
+        const svg = node.ownerSVGElement;
+        const rect = svg.getBoundingClientRect();
+        const at = (angle) => {
+          const radians = angle * Math.PI / 180;
+          return [
+            rect.left + (500 + 160 * Math.cos(radians)) * rect.width / 1000,
+            rect.top + (375 + 160 * Math.sin(radians)) * rect.height / 750,
+          ];
+        };
+        const hit = (point) => document.elementsFromPoint(...point).includes(node);
+        return { visible: hit(at(-45)), omitted: hit(at(90)), omittedPoint: at(90) };
+      });
+      check("D3-" + width + "-arc-hit", "Only visible arc strokes are touch-selectable",
+        hitGeometry.visible && !hitGeometry.omitted, JSON.stringify(hitGeometry));
+      // A real tap on the invisible region must not select the arc.
+      await first.locator(".diagram-shape-target").first().focus();
+      await page.mouse.click(...hitGeometry.omittedPoint);
+      check("D3-" + width + "-arc-omitted-tap", "A tap on the omitted arc does not select it",
+        !(await arcTarget.getAttribute("class") ?? "").includes("is-selected"),
+        targetBeforeTap);
       await page.screenshot({ path: outputDir + "/diagram-d3-" + width + ".png", fullPage: true });
       check("D3-" + width + "-errors", "Diagram editing produces no console/page errors",
         page.errors.length === 0, page.errors.slice(0, 2).join("; "));

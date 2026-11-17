@@ -3,6 +3,7 @@ import {
   DIAGRAM_LIMITS, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../../shared/diagram.ts";
 import { hashString, signedRandom } from "../../lib/random.ts";
+import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout } from "../../diagrams/svg-geometry.ts";
 
 type Props = { block: DiagramBlock; seed: number };
 const add = (a: DiagramPoint, b: DiagramPoint): DiagramPoint => [a[0] + b[0], a[1] + b[1]];
@@ -31,19 +32,6 @@ const arrowHead = (from: DiagramPoint, to: DiagramPoint): string => {
   const b: DiagramPoint = [to[0] - ux * size + uy * size * 0.42, to[1] - uy * size - ux * size * 0.42];
   return "M" + coords(a) + " L" + coords(to) + " L" + coords(b);
 };
-const arcPath = (center: DiagramPoint, radius: number, start: number, sweep: number): string => {
-  const xy = (angle: number): DiagramPoint => [
-    center[0] + Math.cos(angle * Math.PI / 180) * radius,
-    center[1] + Math.sin(angle * Math.PI / 180) * radius,
-  ];
-  const pieces = Math.ceil(Math.abs(sweep) / 150);
-  const step = sweep / pieces;
-  let path = "M" + coords(xy(start));
-  for (let i = 1; i <= pieces; i++) {
-    path += " A" + radius + " " + radius + " 0 0 " + (sweep > 0 ? 1 : 0) + " " + coords(xy(start + step * i));
-  }
-  return path;
-};
 const ellipsePath = (center: DiagramPoint, rx: number, ry: number, seed: number, jitter: number): string => {
   const random = signedRandom(seed);
   const points: DiagramPoint[] = [];
@@ -69,16 +57,8 @@ const templateNames: Record<NonNullable<DiagramBlock["template"]>, string> = {
 function InkLabel({ at, children }: { at: DiagramPoint; children: string }) {
   // Positions may be valid at the canvas boundary, but text and its paper outline need room.
   // Keep the natural font size whenever possible and cap it only if the text cannot fit.
-  const inset = 20;
-  const units = Array.from(children).reduce((sum, character) => sum + (character.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
-  const estimatedWidth = Math.min(DIAGRAM_LIMITS.width - 2 * inset, units * 48);
-  const minX = Math.max(90, inset + estimatedWidth / 2);
-  const x = Math.max(minX, Math.min(DIAGRAM_LIMITS.width - minX, at[0]));
-  const y = Math.max(70, Math.min(DIAGRAM_LIMITS.height - 70, at[1]));
-  const horizontalRoom = 2 * (Math.min(x, DIAGRAM_LIMITS.width - x) - inset);
-  const verticalRoom = 2 * (Math.min(y, DIAGRAM_LIMITS.height - y) - inset);
-  const fontCap = Math.max(1, Math.floor(100 * Math.min(horizontalRoom / units, verticalRoom / 1.5)) / 100);
-  const fontSize = `min(calc(var(--fs) * var(--diagram-label-scale, 2.4)), ${fontCap}px)`;
+  const { at: [x, y], fontCap } = diagramLabelLayout(at, children);
+  const fontSize = diagramLabelFontSize(fontCap);
   return (
     <text x={x} y={y} textAnchor="middle" dominantBaseline="middle" className="diagram-label"
       style={{ fontSize }}>
@@ -120,7 +100,7 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
         shape.center[1] + Math.sin(mid) * (shape.radius + 58),
       ];
       return <g>
-        <path d={arcPath(shape.center, shape.radius, shape.startDeg, shape.sweepDeg)} />
+        <path d={diagramArcPath(shape.center, shape.radius, shape.startDeg, shape.sweepDeg)} />
         {shape.label ? <InkLabel at={place}>{shape.label}</InkLabel> : null}
       </g>;
     }
