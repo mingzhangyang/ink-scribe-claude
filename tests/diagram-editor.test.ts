@@ -82,7 +82,7 @@ describe("D2 diagram authoring commands", () => {
     const small = updateTemplateParams(base, 0, "number-line", { end: -4 });
     expect(published(small)).toBe(true);
     expect(updateTemplateParams(small, 0, "number-line", { start: -3 })).toBe(small);
-    expect(updateTemplateParams(small, 0, "number-line", { step: 0.1 })).toBe(small);
+    expect(updateTemplateParams(small, 0, "number-line", { step: 0.05 })).toBe(small);
     expect(updateTemplateParams(small, 0, "number-line", { step: 0 })).toBe(small);
     const wider = updateTemplateParams(base, 0, "number-line", { end: 12 });
     expect(updateTemplateParams(wider, 0, "number-line", { start: -30 })).toBe(wider);
