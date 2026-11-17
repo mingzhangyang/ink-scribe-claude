@@ -359,6 +359,50 @@
   display: block;
 }
 
+/* Inline diagrams are ordinary flow content, never floats or overlay stickers.
+   The same DOM is measured by useNoteFit and captured by PNG export. */
+.diagram-block {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 14px 0 18px;
+  padding: 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.diagram-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  overflow: visible;
+  color: var(--ink);
+}
+.diagram-ink .diagram-label {
+  fill: var(--ink);
+  /* Paper-colored outline separates glyphs from guide lines without a white panel. */
+  stroke: var(--paper);
+  stroke-width: 13px;
+  paint-order: stroke fill;
+  font-family: var(--hand-font);
+  font-size: calc(var(--fs) * var(--diagram-label-scale, 2.4));
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.diagram-guide { opacity: 0.17; stroke-width: 2.4; }
+.diagram-block figcaption {
+  margin: 5px auto 0;
+  font-size: calc(var(--fs) * 0.9);
+  text-align: center;
+  color: var(--ink);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.layout-free-journal .diagram-block { --diagram-label-scale: 3.7; }
+.layout-minimal .diagram-block { --diagram-label-scale: 2; }
+.note-page.is-long .diagram-block { break-inside: avoid; }
+
 /* ---------- 混合康奈尔 / 经典康奈尔 ---------- */
 .layout-grid {
   flex: 1;
