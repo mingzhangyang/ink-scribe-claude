@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { DIAGRAM_LIMITS, DIAGRAM_TEMPLATES, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
-import { editDiagram, insertDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
+import { editDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -194,7 +194,6 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const note = useNoteStore((s) => s.note);
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
   const [shapeMode, setShapeMode] = useState<number | null>(null);
@@ -205,17 +204,7 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const diagrams = note.diagrams ?? [];
   const attached = diagrams.map((block, index) => ({ block, index }))
     .filter(({ block }) => block.afterSection === sectionIndex);
-  const canAdd = diagrams.length < DIAGRAM_LIMITS.maxBlocks;
-  if (!attached.length && !canAdd) return null;
-
-  const add = (template: DiagramTemplate) => {
-    const index = diagrams.length;
-    updateDiagram((current) => insertDiagram(current, sectionIndex, template));
-    setPickerOpen(false);
-    setConfirmRemoval(null);
-    setExpanded(index);
-    setShapeMode(null);
-  };
+  if (!attached.length) return null;
 
   return <div className="diagram-section-controls" data-diagram-section={sectionIndex}>
     {attached.map(({ block, index }) => (
@@ -264,20 +253,6 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
         </div> : null}
       </div>
     ))}
-    {canAdd ? <>
-      <button type="button" className="btn btn-link diagram-add" aria-expanded={pickerOpen}
-        onClick={() => { setConfirmRemoval(null); setPickerOpen(!pickerOpen); }}>
-        {t.add} <span className="diagram-limit">({diagrams.length}/{DIAGRAM_LIMITS.maxBlocks})</span>
-      </button>
-      {pickerOpen ? <div className="diagram-template-picker" role="group" aria-label={t.chooseTemplate}>
-        {DIAGRAM_TEMPLATES.map((template) =>
-          <button key={template} type="button" className="diagram-template-choice"
-            aria-label={t.insertTemplate(t.templateNames[template])} onClick={() => add(template)}>
-            <TemplateGlyph template={template} />
-            <span>{t.templateNames[template]}</span>
-          </button>)}
-      </div> : null}
-    </> : <p className="hint diagram-limit-reached">{t.limitReached}</p>}
   </div>;
 }
 
