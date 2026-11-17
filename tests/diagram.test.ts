@@ -137,6 +137,13 @@ describe("diagram template geometry", () => {
       { params: { start: 0, end: 10, step: 9.9 }, labels: ["0", "10"] },
       { params: { start: -9, end: 9, step: 1 }, labels: Array.from({ length: 19 }, (_, i) => String(i - 9)) },
       { params: { start: 0, end: 18, step: 1.05 }, labels: [...Array.from({ length: 16 }, (_, i) => String(Number((i * 1.05).toFixed(5)))), "18"] },
+      // Shortest-precision labels must preserve endpoints of publish-valid tiny ranges.
+      { params: { start: 0, end: 0.000001, step: 0.1 }, labels: ["0", "0.000001"] },
+      { params: { start: 0, end: 1e-9, step: 0.1 }, labels: ["0", "1e-9"] },
+      { params: { start: -1e-9, end: 0, step: 0.1 }, labels: ["-1e-9", "0"] },
+      { params: { start: 999.9999999999999, end: 1000, step: 0.1 }, labels: ["999.9999999999999", "1000"] },
+      { params: { start: 0, end: 5e-324, step: 0.1 }, labels: ["0", "5e-324"] },
+      { params: { start: 0.1, end: 0.3, step: 0.1 }, labels: ["0.1", "0.2", "0.3"] },
     ];
     for (const { params, labels } of cases) {
       const block: DiagramBlock = { afterSection: 0, template: "number-line", params };

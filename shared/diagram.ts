@@ -89,6 +89,20 @@ function rightTriangle(legRatio: number): DiagramPrimitive[] {
   ];
 }
 
+/** Display the shortest precise tick labels without hiding small endpoint differences. */
+function numberLineTickLabels(ticks: number[]): string[] {
+  const smallestGap = ticks.slice(1).reduce((gap, value, index) =>
+    Math.min(gap, Math.abs(value - ticks[index])), Infinity);
+  // Label rounding must stay well below the smallest visible interval.
+  const maxError = smallestGap * 1e-6;
+  for (let digits = 1; digits <= 17; digits++) {
+    const labels = ticks.map((value) => String(Number(value.toPrecision(digits))));
+    if (new Set(labels).size === ticks.length && labels.every((text, index) =>
+      Math.abs(Number(text) - ticks[index]) <= maxError)) return labels;
+  }
+  return ticks.map(String);
+}
+
 function numberLine(start: number, end: number, step: number): DiagramPrimitive[] {
   const left = 125, right = 885, y = 365;
   const result: DiagramPrimitive[] = [arrow(point(left, y), point(right, y))];
@@ -97,7 +111,8 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
   const count = Math.max(1, Math.min(19, Math.floor((end - start) / step + 1e-9) + 1));
   const ticks = Array.from({ length: count }, (_, i) => start + step * i);
   const last = ticks.length - 1;
-  if (Math.abs(end - ticks[last]) <= Math.max(1e-8, step * 1e-8)) {
+  // Compare exact endpoints: a step-sized absolute epsilon can erase a valid tiny range.
+  if (ticks[last] === end) {
     ticks[last] = end;
   } else {
     // Drop a near-duplicate terminal tick so the end label remains readable.
@@ -105,10 +120,12 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
     if (ticks.length < 19) ticks.push(end);
     else ticks[ticks.length - 1] = end; // Defensive cap for direct callers with invalid parameters.
   }
-  for (const value of ticks) {
+  const labels = numberLineTickLabels(ticks);
+  for (let i = 0; i < ticks.length; i++) {
+    const value = ticks[i];
     const x = left + 34 + (right - left - 85) * (value - start) / (end - start);
     result.push(line(point(x, y - 16), point(x, y + 16)));
-    result.push(label(point(x, y + 62), String(Number(value.toFixed(5)))));
+    result.push(label(point(x, y + 62), labels[i]));
   }
   return result;
 }
