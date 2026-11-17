@@ -107,6 +107,8 @@ const primitiveSchema: Schema = { oneOf: [
   object({ type: { type: "string", const: "rect" }, at: diagramPoint,
     width: number(1, 1000), height: number(1, 750), rotation: number(-180, 180) },
     ["type", "at", "width", "height"]),
+  object({ type: { type: "string", const: "circle" }, center: diagramPoint,
+    r: number(1, 375) }, ["type", "center", "r"]),
   object({ type: { type: "string", const: "ellipse" }, center: diagramPoint,
     rx: number(1, 500), ry: number(1, 375), rotation: number(-180, 180) },
     ["type", "center", "rx", "ry"]),
