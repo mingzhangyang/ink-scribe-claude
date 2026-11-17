@@ -34,6 +34,7 @@ export function editDiagram(
   const existing = note.diagrams?.[index];
   if (!existing || !Number.isSafeInteger(index)) return note;
   const updated = transform(existing);
+  if (updated === existing) return note;
   // Parameter edits cannot silently move an existing diagram into another section.
   if (updated.afterSection !== existing.afterSection) return note;
   const diagrams = note.diagrams!.map((diagram, i) => i === index ? updated : diagram);
