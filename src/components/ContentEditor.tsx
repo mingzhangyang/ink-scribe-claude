@@ -1,5 +1,7 @@
 import type { NoteCue, NoteSection, NoteStructure } from "../../shared/note.ts";
 import { NOTE_LIMITS } from "../../shared/note.ts";
+import { removeSection, reorderSection } from "../diagrams/editor.ts";
+import { DiagramSectionEditor } from "./DiagramSectionEditor.tsx";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 
@@ -22,14 +24,7 @@ export function ContentEditor() {
   const patchCue = (i: number, p: Partial<NoteCue>) => patch({ cues: note.cues.map((c, j) => (j === i ? { ...c, ...p } : c)) });
   const patchSection = (i: number, p: Partial<NoteSection>) =>
     patch({ sections: note.sections.map((s, j) => (j === i ? { ...s, ...p } : s)) });
-  const moveSection = (i: number, delta: number) => {
-    const target = i + delta;
-    if (target < 0 || target >= note.sections.length) return;
-    const sections = [...note.sections];
-    [sections[i], sections[target]] = [sections[target], sections[i]];
-    patch({ sections, ...(note.diagrams ? { diagrams: note.diagrams.map((diagram) => ({ ...diagram,
-      afterSection: diagram.afterSection === i ? target : diagram.afterSection === target ? i : diagram.afterSection })) } : {}) });
-  };
+  const moveSection = (i: number, delta: number) => updateNote((current) => reorderSection(current, i, delta));
 
   return (
     <div className="panel-body content-editor">
@@ -100,11 +95,7 @@ export function ContentEditor() {
                   className="icon-btn"
                   aria-label={t.content.removeSection(i + 1)}
                   disabled={note.sections.length <= 1}
-                  onClick={() => patch({
-                    sections: note.sections.filter((_, j) => j !== i),
-                    ...(note.diagrams ? { diagrams: note.diagrams.filter((d) => d.afterSection !== i)
-                      .map((d) => ({ ...d, afterSection: d.afterSection > i ? d.afterSection - 1 : d.afterSection })) } : {}),
-                  })}
+                  onClick={() => updateNote((current) => removeSection(current, i))}
                 >
                   ×
                 </button>
@@ -124,6 +115,7 @@ export function ContentEditor() {
                 onChange={(e) => patchSection(i, { highlightInput: e.target.value, highlights: splitHighlights(e.target.value) })}
               />
               {missing.length > 0 ? <p className="hint is-warn">{t.content.missing(missing)}</p> : null}
+              <DiagramSectionEditor sectionIndex={i} />
             </div>
           );
         })}
