@@ -1,6 +1,6 @@
 # InkScribe Diagram Blocks · D1 Contract
 
-Date: 2026-11-17. This is **D1 (contract + flow rendering)** from the InkScribe Diagram v0.1 specification. It does not deliver the D2 template-insertion interface or the D3 interactive shape editor.
+Date: 2026-11-17. This document covers **D1 (contract + flow rendering)** and **D2 (template insertion + parameters)** from the InkScribe Diagram v0.1 specification. D3's interactive shape editor is still planned.
 
 ## Model
 
