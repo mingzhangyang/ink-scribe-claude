@@ -152,8 +152,6 @@ export const zh = {
 
   workspace: {
     label: "笔记画布",
-    addDiagram: "插入示意图",
-    manageDiagrams: "管理示意图",
     sample: "示例笔记",
     local: "本地快速排版",
     shared: "来自已发布的笔记",
