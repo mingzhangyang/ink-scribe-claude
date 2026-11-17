@@ -48,6 +48,7 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         await number.getAttribute("aria-invalid") === "true");
 
       await first.locator(".diagram-remove").click();
+      await first.locator(".diagram-remove").click();
       check("D2-" + viewport + "-remove", "Removing a diagram frees another slot",
         await page.locator(".note-page .diagram-block").count() === 1
         && await first.locator(".diagram-add").count() === 1);
