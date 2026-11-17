@@ -130,7 +130,7 @@ describe("diagram template geometry", () => {
       }));
       expect(html).toContain("diagram-block");
       expect(html).toContain('data-diagram-after-section="0"');
-      expect(html.indexOf("重力可以沿斜面")).toBeLessThan(html.indexOf("diagram-block"));
+      expect(html.indexOf("hand-content")).toBeLessThan(html.indexOf("diagram-block"));
     }
   });
 });
