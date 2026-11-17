@@ -431,8 +431,6 @@ export const en: Messages = {
 
   workspace: {
     label: "Note canvas",
-    addDiagram: "Insert diagram",
-    manageDiagrams: "Manage diagrams",
     sample: "Sample note",
     local: "Quick local layout",
     shared: "From a published note",
