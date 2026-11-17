@@ -57,8 +57,10 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30000 });
       await page.getByRole("tab", { name: zh ? "内容" : "Content", exact: true }).click();
       const first = page.locator(".section-editor").first();
-      await first.locator(".diagram-add").click();
-      await first.getByRole("button", { name: zh ? "插入直角三角形" : "Insert Right triangle" }).click();
+      const quick = page.locator("#diagram-quick-insert");
+      await quick.locator(".diagram-quick-trigger").click();
+      await quick.getByRole("button", { name: zh ? "插入直角三角形" : "Insert Right triangle" }).click();
+      await quick.getByRole("button", { name: zh ? "编辑参数" : "Edit parameters" }).click();
       await first.locator(".diagram-shape-mode").click();
       const stage = first.locator(".diagram-primitive-stage");
       await stage.waitFor();
