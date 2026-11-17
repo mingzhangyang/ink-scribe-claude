@@ -569,9 +569,10 @@ export const en: Messages = {
     summary: "Summary",
     diagrams: {
       quickTitle: "Diagrams · Choose a template",
+      quickManageButton: "Manage diagrams",
       quickLocation: "Insert after",
       quickSection: (i, heading) => "Section " + i + (heading ? " · " + heading : ""),
-      quickHelp: "Choose a section, then tap a template to insert. You can also insert beneath each section.",
+      quickHelp: "Choose a section, then tap a template to insert.",
       quickAdded: "Diagram added to this note.",
       quickEdit: "Edit parameters",
       quickManage: "Expand or remove a diagram under its corresponding section below.",
