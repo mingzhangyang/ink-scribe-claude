@@ -27,7 +27,8 @@ export function ContentEditor() {
     if (target < 0 || target >= note.sections.length) return;
     const sections = [...note.sections];
     [sections[i], sections[target]] = [sections[target], sections[i]];
-    patch({ sections });
+    patch({ sections, ...(note.diagrams ? { diagrams: note.diagrams.map((diagram) => ({ ...diagram,
+      afterSection: diagram.afterSection === i ? target : diagram.afterSection === target ? i : diagram.afterSection })) } : {}) });
   };
 
   return (
@@ -99,7 +100,11 @@ export function ContentEditor() {
                   className="icon-btn"
                   aria-label={t.content.removeSection(i + 1)}
                   disabled={note.sections.length <= 1}
-                  onClick={() => patch({ sections: note.sections.filter((_, j) => j !== i) })}
+                  onClick={() => patch({
+                    sections: note.sections.filter((_, j) => j !== i),
+                    ...(note.diagrams ? { diagrams: note.diagrams.filter((d) => d.afterSection !== i)
+                      .map((d) => ({ ...d, afterSection: d.afterSection > i ? d.afterSection - 1 : d.afterSection })) } : {}),
+                  })}
                 >
                   ×
                 </button>

@@ -32,7 +32,7 @@ function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps)
       </aside>
       <main className="note-main" data-fit>
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} />
+          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       <footer className="note-footer">
@@ -69,7 +69,7 @@ function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps
       <main className="note-main" data-fit>
         <div className="region-label">{labels.notes}</div>
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} />
+          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       <footer className="note-footer" data-fit>
@@ -104,6 +104,7 @@ function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
             index={i}
             seed={seed}
             naturalness={Math.min(1, naturalness * 1.6)}
+            diagrams={note.diagrams?.filter((d) => d.afterSection === i)}
             className={`journal-card journal-card-${i % 4}`}
           />
         ))}
@@ -136,7 +137,7 @@ function Minimal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
       </header>
       <main className="note-main minimal-main">
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} seed={seed} naturalness={naturalness} />
+          <SectionBlock key={i} section={section} index={i} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       {note.summary ? (

@@ -151,7 +151,7 @@ export function openApiSpec() {
       "/api/v1/notes/validate": {
         post: {
           operationId: "validateNote", summary: "Validate prepared content without publishing or calling AI",
-          description: "Checks the same contract as publication. Does not reserve an Idempotency-Key or create a note. Geometry and source fidelity are not checked.",
+          description: "Checks the same contract as publication, including diagram coordinates and template parameters. Does not create a note; browser layout, output pixels and source fidelity are not checked.",
           requestBody: publishBody,
           responses: {
             "200": { description: "Valid structure; layout has not been measured", content: { "application/json": { schema: {
@@ -215,7 +215,7 @@ export function llmsTxt(origin: string, recent: PublishedNoteSummary[] = []): st
 
 - 无需注册或密钥，直接调用。按客户端 IP 限流，并有 24 小时发布次数上限（超出返回 429 + Retry-After）。
 - 创建笔记：\`POST ${origin}/api/v1/notes\`，JSON 请求体必须包含 \`schemaVersion: 1\` 和 \`note\`（你已整理好的完整结构）。无需提交原文；\`text\` 以及生成专用的 \`language/detail/style\` 字段会被拒绝。
-- \`note\` 必须包含 \`title/cues/sections/summary\`；可选 \`date/doodleTheme/doodleSpec/doodlePrompt\`。版式放在 \`appearance.layout\`，自定义插图放在 \`note.doodleSpec\`。
+- \`note\` 必须包含 \`title/cues/sections/summary\`；可选 \`date/doodleTheme/doodleSpec/doodlePrompt/diagrams\`。\`note.diagrams\` 最多两个，\`afterSection\` 为 0 基段落索引，允许模板参数或图元列表二选一（参见 OpenAPI 的 DiagramBlock）。版式放在 \`appearance.layout\`，装饰插图仍放在 \`note.doodleSpec\`。
 - 发布过程不调用 AI；请自行整理后提交。先读取 OpenAPI 获取完整约束，使用 \`POST ${origin}/api/v1/notes/validate\` 预检同一请求体。
 - 预检只检查结构，返回 \`validation: {structure: "passed", layout: "not_checked"}\`；不保存笔记，也不验证内容事实。实际字体和溢出由浏览器渲染器检查。
 - 非法字段、超长正文、无效重点短语或插图会返回 HTTP 422，\`error.issues\` 包含 \`path/code/message\`。修正后重新提交，不会悄悄截断内容。

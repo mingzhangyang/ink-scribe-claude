@@ -74,7 +74,7 @@ curl -X POST https://notes.example.com/api/v1/notes \
 | `visibility` | 否 | `unlisted`（默认）；`public` 需要密钥，免密钥请求返回 `422 ANONYMOUS_UNLISTED_ONLY` |
 | `Idempotency-Key` 头 | 建议 | 同一键、同一请求重试返回原作品；不同内容不能复用该键 |
 
-插图选择使用 `note.doodleTheme`，受限图元使用 `note.doodleSpec`。不要发送 HTML、SVG 字符串、脚本、任意 CSS 或外部资源地址。`text`、`language`、`detail`、顶层 `style` 与顶层 `doodle` 不属于发布请求；版式通过 `appearance.layout` 指定。
+插图选择使用 `note.doodleTheme`，受限装饰图元使用 `note.doodleSpec`。**正文流内的结构化示意图**使用可选的 `note.diagrams`（最多 2 个）；二者不同。图块使用 `afterSection`（0 基段落索引）、可选 `caption`，并在 `template + params` 与 `primitives` 之间二选一。模板名称与完整坐标约束见 [示意图契约](diagrams.md) 或 OpenAPI 的 `DiagramBlock`。不要发送 HTML、SVG 字符串、脚本、任意 CSS 或外部资源地址。`text`、`language`、`detail`、顶层 `style` 与顶层 `doodle` 不属于发布请求；版式通过 `appearance.layout` 指定。
 
 ## 严格校验与发布前预检
 

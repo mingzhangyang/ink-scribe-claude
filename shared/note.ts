@@ -1,5 +1,6 @@
 import { parseContentLines, splitHighlights } from "./content.ts";
 import { normalizeDoodleSpec, type DoodleSpec, type NormalizeResult } from "./doodle.ts";
+import { validDiagramBlocks, type DiagramBlock } from "./diagram.ts";
 import { cleanText, detectLanguage } from "./text.ts";
 import { DOODLE_THEMES, inferDoodleTheme, type DoodleTheme } from "./themes.ts";
 
@@ -21,6 +22,8 @@ export type NoteStructure = {
   date?: string;
   cues: NoteCue[];
   sections: NoteSection[];
+  /** Optional flow content; absent in all legacy notes. */
+  diagrams?: DiagramBlock[];
   doodlePrompt?: string;
   /** 从内置插图库中选择的主题；由模型给出或根据 doodlePrompt 推断。 */
   doodleTheme?: DoodleTheme;
@@ -158,6 +161,11 @@ export function normalizeNoteStructure(input: unknown): NormalizeResult<NoteStru
     sections: sections.slice(0, NOTE_LIMITS.maxSections),
     summary,
   };
+
+  if (input.diagrams !== undefined) {
+    if (validDiagramBlocks(input.diagrams, note.sections.length)) note.diagrams = input.diagrams;
+    else warnings.push("diagrams 不合法，已忽略");
+  }
 
   const date = cleanText(input.date, NOTE_LIMITS.date);
   if (date) note.date = date;

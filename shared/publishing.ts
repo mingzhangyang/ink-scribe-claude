@@ -1,6 +1,7 @@
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS } from "./appearance.ts";
 import { parseContentLines, splitHighlights } from "./content.ts";
 import { DOODLE_FILLS, DOODLE_LIMITS, DOODLE_STROKES, type DoodleSpec } from "./doodle.ts";
+import { DIAGRAM_LIMITS, validDiagramPrimitive, type DiagramBlock } from "./diagram.ts";
 import { NOTE_LIMITS, type NoteStructure } from "./note.ts";
 import { STYLES, TEMPLATES, type Template } from "./options.ts";
 import type { Settings } from "./settings.ts";
@@ -33,6 +34,7 @@ type Schema = {
   required?: readonly string[];
   additionalProperties?: false;
   items?: Schema;
+  prefixItems?: Schema[];
   oneOf?: Schema[];
   const?: string | number;
   enum?: readonly string[];
@@ -89,6 +91,54 @@ const doodleSchema = object({
   },
 });
 
+
+const diagramPoint: Schema = { type: "array", minItems: 2, maxItems: 2,
+  prefixItems: [number(0, DIAGRAM_LIMITS.width), number(0, DIAGRAM_LIMITS.height)] };
+const labelSchema = plainText(DIAGRAM_LIMITS.maxLabel, 1);
+const lineOptions = { label: labelSchema, dashed: { type: "boolean" } as Schema,
+  guide: { type: "boolean" } as Schema, double: { type: "boolean" } as Schema };
+const primitiveSchema: Schema = { oneOf: [
+  ...(["line", "arrow"] as const).map((type) => object({
+    type: { type: "string", const: type }, from: diagramPoint, to: diagramPoint, ...lineOptions,
+  }, ["type", "from", "to"])),
+  object({ type: { type: "string", const: "polyline" },
+    points: { type: "array", minItems: 2, maxItems: DIAGRAM_LIMITS.maxPoints, items: diagramPoint },
+    dashed: { type: "boolean" }, guide: { type: "boolean" } }, ["type", "points"]),
+  object({ type: { type: "string", const: "rect" }, at: diagramPoint,
+    width: number(1, 1000), height: number(1, 750), rotation: number(-180, 180) },
+    ["type", "at", "width", "height"]),
+  object({ type: { type: "string", const: "circle" }, center: diagramPoint,
+    r: number(1, 375) }, ["type", "center", "r"]),
+  object({ type: { type: "string", const: "ellipse" }, center: diagramPoint,
+    rx: number(1, 500), ry: number(1, 375), rotation: number(-180, 180) },
+    ["type", "center", "rx", "ry"]),
+  object({ type: { type: "string", const: "arc" }, center: diagramPoint,
+    radius: number(1, 375), startDeg: number(-360, 360), sweepDeg: number(-360, 360), label: labelSchema },
+    ["type", "center", "radius", "startDeg", "sweepDeg"]),
+  object({ type: { type: "string", const: "label" }, at: diagramPoint, text: labelSchema }),
+]};
+const commonDiagramFields = {
+  afterSection: { type: "integer", minimum: 0, maximum: NOTE_LIMITS.maxSections - 1 } as Schema,
+  caption: plainText(DIAGRAM_LIMITS.maxCaption), handDrawn: { type: "boolean" } as Schema,
+  jitterPx: number(0, 3, 0.1),
+};
+const diagramSchema: Schema = { oneOf: [
+  object({ ...commonDiagramFields, template: { type: "string", const: "inclined-plane" },
+    params: object({ thetaDeg: number(5, 60), friction: { type: "boolean" } }) },
+    ["afterSection", "template", "params"]),
+  object({ ...commonDiagramFields, template: { type: "string", const: "right-triangle" },
+    params: object({ legRatio: number(0.25, 4) }) }, ["afterSection", "template", "params"]),
+  object({ ...commonDiagramFields, template: { type: "string", const: "number-line" },
+    params: object({ start: number(-1000, 1000), end: number(-1000, 1000), step: number(0.1, 1000) }) },
+    ["afterSection", "template", "params"]),
+  object({ ...commonDiagramFields, template: { type: "string", const: "coordinate-plane" },
+    params: object({ grid: { type: "boolean" }, quadrants: choices(["all", "first"]) }) },
+    ["afterSection", "template", "params"]),
+  object({ ...commonDiagramFields, primitives: { type: "array", minItems: 1,
+    maxItems: DIAGRAM_LIMITS.maxPrimitives, items: primitiveSchema } }, ["afterSection", "primitives"]),
+]};
+const diagramsSchema: Schema = { type: "array", maxItems: DIAGRAM_LIMITS.maxBlocks, items: diagramSchema };
+
 const noteSchema = object({
   title: plainText(NOTE_LIMITS.title, 1),
   date: plainText(NOTE_LIMITS.date, 1),
@@ -102,6 +152,7 @@ const noteSchema = object({
         description: "Distinct phrases that each retain at least one non-overlapping match within a rendered content line after list markers are removed (Unicode case-insensitive). Earlier highlights take precedence over later overlapping matches." },
     }, ["content", "highlights"]) },
   summary: plainText(NOTE_LIMITS.summary, 0, true),
+  diagrams: diagramsSchema,
   doodlePrompt: plainText(NOTE_LIMITS.doodlePrompt, 1),
   doodleTheme: choices(DOODLE_THEMES),
   doodleSpec: doodleSchema,
@@ -137,7 +188,8 @@ const stickersSchema: Schema = { type: "array", maxItems: MAX_STICKERS, items: s
 
 export const PUBLISH_COMPONENT_SCHEMAS = {
   NoteStructure: noteSchema, Appearance: appearanceSchema, Settings: settingsSchema,
-  DoodleSpec: doodleSchema, Sticker: stickerSchema, Stickers: stickersSchema,
+  DoodleSpec: doodleSchema, DiagramBlock: diagramSchema, DiagramPrimitive: primitiveSchema,
+  Diagrams: diagramsSchema, Sticker: stickerSchema, Stickers: stickersSchema,
 };
 
 /** OpenAPI embeds this very schema; the runtime below consumes it without separate limit tables. */
@@ -161,16 +213,19 @@ const publishedContentSchema = object({ note: noteSchema, settings: settingsSche
 
 const SCHEMA_KEYWORDS = new Set([
   "$schema", "title", "description", "type", "properties", "required", "additionalProperties", "items", "oneOf",
-  "const", "enum", "minLength", "maxLength", "pattern", "minItems", "maxItems", "minimum", "maximum", "multipleOf", "default", "x-plainText",
+  "const", "enum", "minLength", "maxLength", "pattern", "minItems", "maxItems", "prefixItems", "minimum", "maximum", "multipleOf", "default", "x-plainText",
 ]);
 
 /** Fail during module initialization if a future contract adds a rule this walker cannot enforce. */
 function assertSupported(schema: Schema): void {
   if (Object.keys(schema).some((key) => !SCHEMA_KEYWORDS.has(key))) throw new Error("Unsupported publication schema keyword");
   if (schema.oneOf) {
-    const types = schema.oneOf.map((branch) => branch.properties?.type.const);
-    if (types.some((type) => typeof type !== "string") || new Set(types).size !== types.length) {
-      throw new Error("Publication unions must have distinct string type discriminators");
+    const discriminators = schema.oneOf.map((branch) =>
+      branch.properties?.type?.const !== undefined ? "type:" + branch.properties.type.const
+        : branch.properties?.template?.const !== undefined ? "template:" + branch.properties.template.const
+          : branch.properties?.primitives ? "primitives:present" : null);
+    if (discriminators.some((value) => !value) || new Set(discriminators).size !== discriminators.length) {
+      throw new Error("Publication unions must have distinct type/template discriminators");
     }
     schema.oneOf.forEach(assertSupported);
   } else if (schema.type === "object") {
@@ -178,8 +233,9 @@ function assertSupported(schema: Schema): void {
       || schema.required?.some((key) => !Object.hasOwn(schema.properties!, key))) throw new Error("Invalid publication object schema");
     Object.values(schema.properties).forEach(assertSupported);
   } else if (schema.type === "array") {
-    if (!schema.items) throw new Error("Publication arrays require an item schema");
-    assertSupported(schema.items);
+    if (!schema.items && !schema.prefixItems?.length) throw new Error("Publication arrays require item or tuple schemas");
+    if (schema.items) assertSupported(schema.items);
+    schema.prefixItems?.forEach(assertSupported);
   } else if (!["string", "number", "integer", "boolean"].includes(schema.type ?? "")) {
     throw new Error("Unsupported publication schema type");
   }
@@ -200,9 +256,14 @@ const issue = (issues: ValidationIssue[], path: string, code: string, message: s
 function check(schema: Schema, value: unknown, path: string, issues: ValidationIssue[]): void {
   if (issues.length >= MAX_ISSUES) return;
   if (schema.oneOf) {
-    // Every union in this contract is discriminated by an exact type field.
-    const branch = isRecord(value) && schema.oneOf.find((s) => s.properties?.type.const === value.type);
-    if (!branch) issue(issues, propertyPath(path, "type"), "INVALID_TYPE", "Expected a supported drawing or sticker type.");
+    // Select the expected discriminator from the schema, including when the payload omits it.
+    const branch = isRecord(value) && schema.oneOf.find((s) =>
+      s.properties?.type?.const !== undefined ? s.properties.type.const === value.type
+        : s.properties?.template?.const !== undefined ? s.properties.template.const === value.template
+          : !!s.properties?.primitives && Object.hasOwn(value, "primitives") && !Object.hasOwn(value, "template"));
+    const discriminator = schema.oneOf.some((s) => s.properties?.type?.const !== undefined) ? "type" : "template";
+    if (!branch) issue(issues, propertyPath(path, discriminator),
+      "INVALID_TYPE", "Expected a supported diagram, drawing, or sticker type.");
     else check(branch, value, path, issues);
     return;
   }
@@ -228,7 +289,10 @@ function check(schema: Schema, value: unknown, path: string, issues: ValidationI
       if (!Array.isArray(value)) return issue(issues, path, "INVALID_TYPE", "Expected an array.");
       if (schema.minItems !== undefined && value.length < schema.minItems) issue(issues, path, "TOO_FEW_ITEMS", `Provide at least ${schema.minItems} items.`);
       if (schema.maxItems !== undefined && value.length > schema.maxItems) issue(issues, path, "TOO_MANY_ITEMS", `Provide no more than ${schema.maxItems} items.`);
-      value.slice(0, schema.maxItems ?? value.length).forEach((item, index) => check(schema.items!, item, `${path}[${index}]`, issues));
+      value.slice(0, schema.maxItems ?? value.length).forEach((item, index) => {
+        const itemSchema = schema.prefixItems?.[index] ?? schema.items;
+        if (itemSchema) check(itemSchema, item, `${path}[${index}]`, issues);
+      });
       return;
     case "string": {
       if (typeof value !== "string") return issue(issues, path, "INVALID_TYPE", "Expected a string.");
@@ -292,6 +356,19 @@ function checkNote(note: NoteStructure, path: string, issues: ValidationIssue[])
         seen.add(actual);
         if (!renderedHighlights.has(highlightIndex)) issue(issues, p, "HIGHLIGHT_SHADOWED", "Every matching occurrence overlaps an earlier highlight. Remove or revise this phrase so at least one non-overlapping occurrence remains.");
       }
+    });
+  });
+  note.diagrams?.forEach((diagram: DiagramBlock, index) => {
+    const p = `${path}.diagrams[${index}]`;
+    if (diagram.afterSection >= note.sections.length) issue(issues, `${p}.afterSection`, "OUT_OF_RANGE", "The referenced section does not exist.");
+    if (diagram.template === "number-line") {
+      if (diagram.params.end <= diagram.params.start) issue(issues, `${p}.params.end`, "OUT_OF_RANGE", "End must exceed start.");
+      else if ((diagram.params.end - diagram.params.start) / diagram.params.step > 18 + 1e-8)
+        issue(issues, `${p}.params.step`, "TOO_MANY_TICKS", "Use 19 or fewer tick marks.");
+    }
+    diagram.primitives?.forEach((primitive, i) => {
+      if (!validDiagramPrimitive(primitive)) issue(issues, `${p}.primitives[${i}]`, "INVALID_GEOMETRY",
+        "Shape must be nondegenerate and fit completely within the diagram canvas.");
     });
   });
   if (note.doodleSpec) checkDoodle(note.doodleSpec, `${path}.doodleSpec`, issues);
