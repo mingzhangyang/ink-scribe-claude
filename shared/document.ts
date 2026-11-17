@@ -1,4 +1,5 @@
 import { normalizeDoodleSpec, type DoodleSpec } from "./doodle.ts";
+import { validDiagramBlocks } from "./diagram.ts";
 import type { NoteStructure } from "./note.ts";
 import { DETAILS, LANGUAGES, TEMPLATES, isOneOf, type Detail, type Language, type Template } from "./options.ts";
 import { sanitizeSettings, type Settings } from "./settings.ts";
@@ -39,9 +40,11 @@ export function readDocument(value: unknown): NoteDocument {
   if (value.note !== null) {
     const n = value.note;
     if (!record(n) || !text(n.title) || !text(n.summary) || !optionalText(n.date) || !optionalText(n.doodlePrompt)
-      || !Array.isArray(n.cues) || !Array.isArray(n.sections)) throw new Error("Invalid draft note");
+      || !Array.isArray(n.cues) || !Array.isArray(n.sections)
+      || (n.diagrams !== undefined && !validDiagramBlocks(n.diagrams, n.sections.length))) throw new Error("Invalid draft note");
     note = {
       title: n.title, summary: n.summary,
+      ...(n.diagrams !== undefined ? { diagrams: n.diagrams } : {}),
       ...(n.date !== undefined ? { date: n.date } : {}),
       ...(n.doodlePrompt !== undefined ? { doodlePrompt: n.doodlePrompt } : {}),
       ...(isOneOf(DOODLE_THEMES, n.doodleTheme) ? { doodleTheme: n.doodleTheme } : {}),
