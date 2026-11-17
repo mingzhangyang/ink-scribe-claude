@@ -8,6 +8,16 @@ export const DIAGRAM_GRID = DIAGRAM_LIMITS.width / 40; // 25 normalized units
 export const DIAGRAM_HISTORY_LIMIT = 30;
 type Point = DiagramPoint;
 type Shape = DiagramPrimitive;
+/** The only valid shape-edit result: template/params fields are absent. */
+type PrimitiveDiagram = {
+  afterSection: number;
+  caption?: string;
+  handDrawn?: boolean;
+  jitterPx?: number;
+  primitives: DiagramPrimitive[];
+  template?: never;
+  params?: never;
+};
 export type ShapeHandle = { id: string; point: Point; kind: "resize" | "rotate" };
 
 const round = (n: number) => Number(n.toFixed(4));
@@ -48,8 +58,8 @@ export const snapToGrid = (at: Point): Point => point(
 );
 
 /** Converting on first *actual* edit protects the original parameterized template. */
-export function materializeDiagram(block: DiagramBlock): DiagramBlock {
-  if (block.primitives) return block;
+export function materializeDiagram(block: DiagramBlock): PrimitiveDiagram {
+  if (block.primitives) return block as PrimitiveDiagram;
   const { afterSection, caption, handDrawn, jitterPx } = block;
   return {
     afterSection,

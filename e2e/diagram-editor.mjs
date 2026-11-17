@@ -10,14 +10,26 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
     try {
       await page.goto(url, { waitUntil: "networkidle" });
       await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30000 });
+      // Diagram tools stay exclusively in the Content editor, never on the canvas.
+      check("D2-" + viewport + "-clean-canvas", "No insertion action in canvas",
+        await page.locator(".diagram-workspace-add").count() === 0);
       await page.getByRole("tab", { name: cn ? "内容" : "Content", exact: true }).click();
-
+      const quick = page.locator("#diagram-quick-insert");
+      await quick.waitFor();
+      check("D2-" + viewport + "-entry", "Compact Content-tab entry is collapsed by default",
+        await quick.locator(".diagram-quick-trigger").isVisible()
+        && await quick.locator(".diagram-template-choice").count() === 0);
+      await quick.locator(".diagram-quick-trigger").click();
+      check("D2-" + viewport + "-open", "Diagram picker appears only after explicit action",
+        await quick.locator(".diagram-template-choice").count() === 4);
       const first = page.locator(".section-editor").first();
-      await first.locator(".diagram-add").click();
       check("D2-" + viewport + "-four", "Four template choices available",
-        await first.locator(".diagram-template-choice").count() === 4);
+        await quick.locator(".diagram-template-choice").count() === 4);
       const start = performance.now();
-      await first.getByRole("button", { name: cn ? "插入斜面受力" : "Insert Inclined plane" }).click();
+      await quick.getByRole("button", { name: cn ? "插入斜面受力" : "Insert Inclined plane" }).click();
+      check("D2-" + viewport + "-added", "Quick insert confirms success",
+        await quick.getByRole("status").count() === 1);
+      await quick.getByRole("button", { name: cn ? "编辑参数" : "Edit parameters" }).click();
       await page.locator('.note-page .diagram-block[data-diagram-after-section="0"]').waitFor();
       check("D2-" + viewport + "-quick", "Template insertion reaches NotePage in under 10 seconds",
         performance.now() - start < 10000);
@@ -36,11 +48,25 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
           .includes(cn ? "斜面力分解" : "Slope vectors"));
 
       const second = page.locator(".section-editor").nth(1);
-      await second.locator(".diagram-add").click();
-      await second.getByRole("button", { name: cn ? "插入数轴" : "Insert Number line" }).click();
-      check("D2-" + viewport + "-limit", "Two-diagram cap enforced in every section",
+      // Quick entry allows selecting the exact section instead of always
+      // attaching the new drawing after section 1.
+      await quick.locator(".diagram-quick-trigger").click();
+      await quick.locator("select").selectOption("1");
+      await quick.getByRole("button", { name: cn ? "插入数轴" : "Insert Number line" }).click();
+      check("D2-" + viewport + "-position", "Quick picker anchors to the chosen section",
+        await page.locator('.note-page .diagram-block[data-diagram-after-section="1"]').count() === 1);
+      await second.locator(".diagram-expand").click();
+      const fullTrigger = await quick.locator(".diagram-quick-trigger").innerText();
+      check("D2-" + viewport + "-manage-trigger", "At 2/2, the trigger says Manage diagrams",
+        fullTrigger.includes(cn ? "管理示意图" : "Manage diagrams")
+        && fullTrigger.includes("(2/2)"), fullTrigger);
+      await quick.locator(".diagram-quick-trigger").click();
+      check("D2-" + viewport + "-limit", "Two diagrams switch the compact entry to management",
         await page.locator(".note-page .diagram-block").count() === 2
-        && await page.locator(".diagram-add").count() === 0);
+        && await page.locator(".diagram-add").count() === 0
+        && await quick.locator(".diagram-template-choice").count() === 0
+        && await quick.locator(".diagram-quick-existing").count() === 2);
+      await quick.locator(".diagram-quick-trigger").click();
       const number = second.locator('.diagram-number').last().locator("input");
       await number.fill("0");
       await number.blur();
@@ -62,10 +88,10 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
       await first.locator(".diagram-remove").click();
       await first.locator(".diagram-remove").click();
       check("D2-" + viewport + "-remove", "Removing a diagram frees another slot",
-        await page.locator(".note-page .diagram-block").count() === 1
-        && await first.locator(".diagram-add").count() === 1);
-      await first.locator(".diagram-add").click();
-      await first.getByRole("button", { name: cn ? "插入直角三角形" : "Insert Right triangle" }).click();
+        await page.locator(".note-page .diagram-block").count() === 1);
+      await quick.locator(".diagram-quick-trigger").click();
+      await quick.locator("select").selectOption("0");
+      await quick.getByRole("button", { name: cn ? "插入直角三角形" : "Insert Right triangle" }).click();
       check("D2-" + viewport + "-reinsert", "Slot accepts another template",
         await page.locator(".note-page .diagram-block").count() === 2);
 

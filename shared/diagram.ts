@@ -180,12 +180,16 @@ export function validDiagramPrimitive(value: unknown): value is DiagramPrimitive
         && (value.from[0] !== value.to[0] || value.from[1] !== value.to[1])
         && labelOrMissing(value.label) && boolOrMissing(value.dashed)
         && boolOrMissing(value.double) && boolOrMissing(value.guide);
-    case "polyline":
+    case "polyline": {
+      // Store the narrowed array locally: TS does not preserve narrowing on
+      // a mutable Record<string, unknown> property inside Array.some callbacks.
+      const points = value.points;
       return keys(value, ["type", "points", "dashed", "guide"])
-        && Array.isArray(value.points) && value.points.length >= 2 && value.points.length <= DIAGRAM_LIMITS.maxPoints
-        && value.points.every(isPoint) && value.points.some((p, i) => i > 0
-          && (p[0] !== value.points[i - 1][0] || p[1] !== value.points[i - 1][1]))
+        && Array.isArray(points) && points.length >= 2 && points.length <= DIAGRAM_LIMITS.maxPoints
+        && points.every(isPoint) && points.some((p, i) => i > 0
+          && (p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]))
         && boolOrMissing(value.dashed) && boolOrMissing(value.guide);
+    }
     case "rect":
       if (!keys(value, ["type", "at", "width", "height", "rotation"]) || !isPoint(value.at)
         || !finite(value.width, 1, DIAGRAM_LIMITS.width) || !finite(value.height, 1, DIAGRAM_LIMITS.height)
