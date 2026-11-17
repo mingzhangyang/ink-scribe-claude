@@ -26,7 +26,7 @@ describe("InkScribe nine-ink palette", () => {
       "carbon", "blue", "brown", "green", "bordeaux",
       "magenta", "teal", "violet", "graphite",
     ]);
-    expect(new Set(INKS.map((ink) => ink.color))).toHaveProperty("size", 9);
+    expect(new Set(INKS.map((ink) => ink.color)).size).toBe(9);
     for (const [id, color] of Object.entries(newInks)) {
       expect(INKS.find((ink) => ink.id === id)?.color).toBe(color);
       expect(sanitizeSettings({ ink: id }).ink).toBe(id);
