@@ -2,6 +2,7 @@
 // 由 e2e/run.mjs 启动 mock 构建的预览服务后调用；也可对已运行的服务直接执行：
 //   E2E_BASE_URL=http://127.0.0.1:4173/ node e2e/acceptance.mjs
 import { verifyCreation } from "./creation.mjs";
+import { verifyDiagramEditor } from "./diagram-editor.mjs";
 import { chromium } from "playwright";
 import { strToU8, zipSync } from "fflate";
 import fs from "node:fs";
@@ -2470,6 +2471,7 @@ for (const [id, locale] of [["Q1", "zh-CN"], ["Q2", "en-US"]]) {
 }
 
 await verifyCreation({ newPage, check, url: URL, outputDir: SP });
+await verifyDiagramEditor({ newPage, check, url: URL, outputDir: SP });
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
