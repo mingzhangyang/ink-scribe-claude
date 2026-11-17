@@ -80,7 +80,7 @@ The inspector includes:
 - All templates and existing assembled blocks: optional plain-text caption (40 Unicode characters), natural-hand-drawn style toggle, and delete.
 - Existing manually assembled diagrams are visible and removable, but their individual primitives remain read-only until D3.
 
-The visual picker, inspector and validation messages are localized for Chinese and English, and the picker adapts to narrow devices. The template list is disabled when a note already has two diagrams; deleting a block immediately frees a slot. Reordering sections moves their attached diagrams, and deleting a section removes its attached diagrams without leaving broken indices.
+The visual picker, inspector and validation messages are localized for Chinese and English, and the picker adapts to narrow devices. The template list is disabled when a note already has two diagrams; deleting a block immediately frees a slot. Reordering sections moves their attached diagrams. When deleting a section that owns diagrams, a separate explicit confirmation and cancel action protect against accidental data loss; after confirmation, attached diagrams are removed and remaining indices are remapped atomically. Sections without diagrams keep the original direct removal behavior.
 
 D2 uses pure validated functions in src/diagrams/editor.ts and the existing note store; no parallel canvas or persistence format is introduced. Data remains compatible with schemaVersion 1, local drafts, public detail pages and PNG export.
 
@@ -89,6 +89,6 @@ Local-only checks:
 - npm test -- tests/diagram-editor.test.ts
 - npm test -- tests/diagram.test.ts
 - npm run build
-- npm run test:e2e — includes 390px Chinese and 1280px English D2 browser smoke tests, screenshots, live SVG/caption/slider, invalid ranges, two-block limit and section reorder.
+- npm run test:e2e — includes 390px Chinese and 1280px English D2 browser smoke tests, screenshots, live SVG/caption/slider, invalid ranges, Escape cancel vs Enter commit, protected section removal, two-block limit and section reorder.
 
 **Not part of D2:** shape manipulation, snapping, geometry history/undo/redo, end-to-end 1.5× PNG-performance benchmarking, and full six-section worst-case clipping acceptance (D3).

@@ -46,6 +46,18 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
       await number.blur();
       check("D2-" + viewport + "-reject", "Invalid tick interval stays out of model",
         await number.getAttribute("aria-invalid") === "true");
+      const numberStart = second.locator(".diagram-number").first().locator("input");
+      await numberStart.fill("-4");
+      await numberStart.press("Enter");
+      check("D2-" + viewport + "-enter", "Enter commits a valid number-line start",
+        await numberStart.inputValue() === "-4");
+      const beforeCancelSvg = await page.locator('.note-page .diagram-block[data-diagram-after-section="1"] svg').textContent();
+      await numberStart.fill("-3");
+      await numberStart.press("Escape");
+      await page.waitForTimeout(50);
+      const afterCancelSvg = await page.locator('.note-page .diagram-block[data-diagram-after-section="1"] svg').textContent();
+      check("D2-" + viewport + "-escape", "Escape cancels input and blur without saving the draft",
+        await numberStart.inputValue() === "-4" && afterCancelSvg === beforeCancelSvg);
 
       await first.locator(".diagram-remove").click();
       await first.locator(".diagram-remove").click();
@@ -62,6 +74,35 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         await page.locator('.note-page .diagram-block[data-diagram-after-section="1"]').count() === 1
         && await page.locator('.note-page .diagram-block[data-diagram-after-section="0"]').count() === 1);
       await page.screenshot({ path: outputDir + "/diagram-d2-" + viewport + ".png", fullPage: true });
+      const sectionCount = await page.locator(".section-editor").count();
+      const attachedSection = page.locator(".section-editor").nth(1);
+      const removeAttached = attachedSection.getByRole("button",
+        { name: cn ? "删除段落 2" : "Remove section 2" });
+      await removeAttached.click();
+      check("D2-" + viewport + "-section-protect", "Section deletion warns before discarding attached diagrams",
+        await page.locator(".note-page .diagram-block").count() === 2
+        && await attachedSection.locator(".section-remove-confirmation").isVisible());
+      await attachedSection.locator(".section-remove-confirmation").getByRole("button",
+        { name: cn ? "取消" : "Cancel" }).click();
+      check("D2-" + viewport + "-section-cancel", "Cancel keeps the section and diagram intact",
+        await page.locator(".section-editor").count() === sectionCount
+        && await page.locator(".note-page .diagram-block").count() === 2
+        && await attachedSection.locator(".section-remove-confirmation").count() === 0);
+      await removeAttached.click();
+      await attachedSection.locator(".section-remove-confirmation").getByRole("button",
+        { name: cn ? "确认删除段落 2 及示意图" : "Confirm delete section 2 and diagrams" }).click();
+      check("D2-" + viewport + "-section-confirm", "Confirmed removal deletes only that section and its diagram",
+        await page.locator(".section-editor").count() === sectionCount - 1
+        && await page.locator(".note-page .diagram-block").count() === 1
+        && await page.locator('.note-page .diagram-block[data-diagram-after-section="0"]').count() === 1);
+      if (sectionCount > 2) {
+        const plainSection = page.locator(".section-editor").last();
+        await plainSection.getByRole("button",
+          { name: cn ? "删除段落 " + (sectionCount - 1) : "Remove section " + (sectionCount - 1) }).click();
+        check("D2-" + viewport + "-section-plain", "Section without diagrams still removes directly",
+          await page.locator(".section-editor").count() === sectionCount - 2
+          && await page.locator(".section-remove-confirmation").count() === 0);
+      }
       check("D2-" + viewport + "-errors", "No browser errors during D2 interactions", page.errors.length === 0,
         page.errors.slice(0, 2).join("; "));
     } finally {

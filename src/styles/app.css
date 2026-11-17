@@ -1216,6 +1216,19 @@ input[type="range"] {
   line-height: 1.6;
 }
 
+.section-remove-confirmation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.section-remove-confirmation .hint { flex: 1 1 100%; margin: 0; }
+.section-remove-confirmation .btn { min-height: 44px; }
+
 
 /* D2: Diagram insertion belongs to a section, not the floating-sticker layer. */
 .diagram-section-controls {

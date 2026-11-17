@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { NoteCue, NoteSection, NoteStructure } from "../../shared/note.ts";
 import { NOTE_LIMITS } from "../../shared/note.ts";
 import { removeSection, reorderSection } from "../diagrams/editor.ts";
@@ -18,6 +19,11 @@ export function ContentEditor() {
   const note = useNoteStore((s) => s.note);
   const updateNote = useNoteStore((s) => s.updateNote);
   const t = useT();
+  // Tie destructive confirmation to the section object AND diagram revision.
+  // Reordering, replacing a section, or changing diagrams invalidates the prompt.
+  const [pendingSectionRemoval, setPendingSectionRemoval] = useState<{
+    section: NoteSection; diagrams: NoteStructure["diagrams"];
+  } | null>(null);
   if (!note) return null;
 
   const patch = (p: Partial<NoteStructure>) => updateNote((n) => ({ ...n, ...p }));
@@ -73,6 +79,10 @@ export function ContentEditor() {
         <legend>{t.content.sections(note.sections.length, NOTE_LIMITS.maxSections)}</legend>
         {note.sections.map((section, i) => {
           const missing = section.highlights.filter((h) => !section.content.toLowerCase().includes(h.toLowerCase()));
+          const attachedDiagramCount = note.diagrams?.filter((diagram) => diagram.afterSection === i).length ?? 0;
+          const confirmDelete = attachedDiagramCount > 0
+            && pendingSectionRemoval?.section === section
+            && pendingSectionRemoval.diagrams === note.diagrams;
           return (
             <div key={i} className="section-editor">
               <div className="editor-row">
@@ -95,11 +105,30 @@ export function ContentEditor() {
                   className="icon-btn"
                   aria-label={t.content.removeSection(i + 1)}
                   disabled={note.sections.length <= 1}
-                  onClick={() => updateNote((current) => removeSection(current, i))}
+                  onClick={() => {
+                    if (attachedDiagramCount > 0) {
+                      setPendingSectionRemoval({ section, diagrams: note.diagrams });
+                      return;
+                    }
+                    updateNote((current) => current.sections[i] === section ? removeSection(current, i) : current);
+                    setPendingSectionRemoval(null);
+                  }}
                 >
                   ×
                 </button>
               </div>
+              {confirmDelete ? <div className="section-remove-confirmation" role="group"
+                aria-label={t.content.removeSection(i + 1)}>
+                <p className="hint is-warn" role="alert">{t.content.sectionRemovesDiagrams(attachedDiagramCount)}</p>
+                <button type="button" className="btn btn-link"
+                  onClick={() => {
+                    updateNote((current) => current.sections[i] === section && current.diagrams === note.diagrams
+                      ? removeSection(current, i) : current);
+                    setPendingSectionRemoval(null);
+                  }}>{t.content.confirmRemoveSectionWithDiagrams(i + 1)}</button>
+                <button type="button" className="btn btn-link"
+                  onClick={() => setPendingSectionRemoval(null)}>{t.content.cancelRemoveSection}</button>
+              </div> : null}
               <textarea
                 value={section.content}
                 rows={4}

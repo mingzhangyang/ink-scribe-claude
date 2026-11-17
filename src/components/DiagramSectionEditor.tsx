@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DIAGRAM_LIMITS, DIAGRAM_TEMPLATES, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import { editDiagram, insertDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
@@ -41,6 +41,8 @@ function NumberParameter({
 }) {
   const [draft, setDraft] = useState(String(value));
   const [invalid, setInvalid] = useState(false);
+  // Escape resets the draft, but React has not flushed that state by the following blur.
+  const cancelNextBlur = useRef(false);
   useEffect(() => { setDraft(String(value)); setInvalid(false); }, [value]);
 
   const commit = () => {
@@ -64,10 +66,19 @@ function NumberParameter({
     <input type="number" inputMode="decimal" step="any" min={min} max={max}
       value={draft} aria-label={label} aria-invalid={invalid}
       onChange={(event) => { setDraft(event.target.value); setInvalid(false); }}
-      onBlur={commit}
+      onBlur={() => {
+        if (cancelNextBlur.current) { cancelNextBlur.current = false; return; }
+        commit();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") { setDraft(String(value)); setInvalid(false); event.currentTarget.blur(); }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelNextBlur.current = true;
+          setDraft(String(value));
+          setInvalid(false);
+          event.currentTarget.blur();
+        }
       }} />
     {invalid ? <span className="hint is-warn" role="alert">{invalidMessage}</span> : null}
   </label>;
