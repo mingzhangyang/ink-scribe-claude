@@ -4,6 +4,7 @@ import type { ApiErrorBody, ResponseMeta } from "../../shared/api.ts";
 import type { NoteDocument } from "../../shared/document.ts";
 import type { DoodleSpec } from "../../shared/doodle.ts";
 import type { NoteStructure } from "../../shared/note.ts";
+import { DIAGRAM_HISTORY_LIMIT } from "../diagrams/geometry.ts";
 import type { Detail, Language, Template } from "../../shared/options.ts";
 import type { LibraryLink } from "../library/storage.ts";
 import { newStickerId, type StickerItem, type StickerType } from "../stickers/types.ts";
@@ -33,6 +34,9 @@ type State = {
   aiDoodle: DoodleSpec | null;
   /** 每次生成或载入一条新笔记时递增，用于丢弃针对旧笔记的异步结果（如 AI 插图）。 */
   noteSerial: number;
+  /** D3 geometry/document snapshots, never persisted or shared between loaded notes. */
+  diagramUndo: NoteStructure[];
+  diagramRedo: NoteStructure[];
   /** 每次换成另一份文档（恢复草稿、打开笔记库条目、载入已发布笔记）时递增；重新生成笔记不算。 */
   documentSerial: number;
   /** 当前编辑内容对应的本机笔记库条目；为空时“保存到笔记库”会新建一条。 */
@@ -54,6 +58,10 @@ type State = {
   setError: (error: RequestError) => void;
   clearError: () => void;
   updateNote: (updater: (note: NoteStructure) => NoteStructure) => void;
+  /** Record exactly one undo step for a completed diagram edit/gesture. */
+  updateDiagram: (updater: (note: NoteStructure) => NoteStructure) => void;
+  undoDiagram: () => void;
+  redoDiagram: () => void;
   setAiDoodle: (spec: DoodleSpec | null) => void;
 
   addSticker: (type: StickerType, options?: { variant?: string; doodle?: DoodleSpec; x?: number; y?: number }) => void;
@@ -78,6 +86,8 @@ export const useNoteStore = create<State>()(
       selectedStickerId: null,
       aiDoodle: null,
       noteSerial: 0,
+      diagramUndo: [],
+      diagramRedo: [],
       documentSerial: 0,
       libraryLink: null,
       generatedFrom: "",
@@ -85,7 +95,8 @@ export const useNoteStore = create<State>()(
       setLibraryLink: (link) => set({ libraryLink: link }),
       loadDocument: (document, link) =>
         set((s) => ({ ...document, libraryLink: link, generatedFrom: document.generatedFrom ?? document.input.text, meta: null, status: "idle", error: null,
-          selectedStickerId: null, noteSerial: s.noteSerial + 1, documentSerial: s.documentSerial + 1 })),
+          selectedStickerId: null, noteSerial: s.noteSerial + 1, documentSerial: s.documentSerial + 1,
+          diagramUndo: [], diagramRedo: [] })),
       setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
@@ -100,6 +111,7 @@ export const useNoteStore = create<State>()(
           error: null,
           aiDoodle: null,
           noteSerial: s.noteSerial + 1,
+          diagramUndo: [], diagramRedo: [],
           selectedStickerId: null,
           settings: { ...s.settings, seed: Math.floor(Math.random() * 100_000) },
         })),
@@ -113,6 +125,7 @@ export const useNoteStore = create<State>()(
           aiDoodle: doodle,
           noteSerial: s.noteSerial + 1,
           documentSerial: s.documentSerial + 1,
+          diagramUndo: [], diagramRedo: [],
           meta: null,
           source: "shared",
           // 已发布的笔记不是由当前原文生成的
@@ -124,7 +137,27 @@ export const useNoteStore = create<State>()(
         })),
       setError: (error) => set({ status: "error", error }),
       clearError: () => set({ status: "idle", error: null }),
-      updateNote: (updater) => set((s) => (s.note ? { note: updater(s.note) } : {})),
+      updateNote: (updater) => set((s) => {
+        if (!s.note) return {};
+        const next = updater(s.note);
+        return next === s.note ? {} : { note: next, diagramUndo: [], diagramRedo: [] };
+      }),
+      updateDiagram: (updater) => set((s) => {
+        if (!s.note) return {};
+        const next = updater(s.note);
+        if (next === s.note || JSON.stringify(next) === JSON.stringify(s.note)) return {};
+        return { note: next, diagramUndo: [...s.diagramUndo, s.note].slice(-DIAGRAM_HISTORY_LIMIT), diagramRedo: [] };
+      }),
+      undoDiagram: () => set((s) => {
+        if (!s.note || s.diagramUndo.length === 0) return {};
+        return { note: s.diagramUndo[s.diagramUndo.length - 1], diagramUndo: s.diagramUndo.slice(0, -1),
+          diagramRedo: [...s.diagramRedo, s.note].slice(-DIAGRAM_HISTORY_LIMIT) };
+      }),
+      redoDiagram: () => set((s) => {
+        if (!s.note || s.diagramRedo.length === 0) return {};
+        return { note: s.diagramRedo[s.diagramRedo.length - 1], diagramRedo: s.diagramRedo.slice(0, -1),
+          diagramUndo: [...s.diagramUndo, s.note].slice(-DIAGRAM_HISTORY_LIMIT) };
+      }),
       setAiDoodle: (spec) =>
         set((s) => ({ aiDoodle: spec, settings: { ...s.settings, doodleMode: spec ? "ai" : s.settings.doodleMode } })),
 

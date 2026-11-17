@@ -2572,3 +2572,68 @@ a.brand {
 .creation-guide p { margin: 0 0 8px; overflow-wrap: anywhere; }
 .creation-guide .btn { max-width: 100%; white-space: normal; }
 .creation-guide .hint { margin: 8px 0 0; }
+
+
+/* D3: editing overlay only lives in the inspector, never inside exported NotePage. */
+.diagram-shape-mode { align-self: flex-start; min-height: 44px; }
+.diagram-primitive-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.diagram-edit-toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: center; min-height: 44px;
+}
+.diagram-edit-toolbar .btn,
+.diagram-shape-palette .btn,
+.diagram-selected-controls .btn { min-height: 44px; }
+.diagram-grid-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 8px 2px;
+}
+.diagram-primitive-stage {
+  position: relative;
+  display: block;
+  width: 100%; max-width: 360px; align-self: center;
+  aspect-ratio: 4 / 3;
+  min-width: 0;
+  --ink: #292524;
+  --paper: var(--paper-ui);
+  --hand-font: cursive;
+  --fs: 18px;
+  background: var(--paper-ui);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.diagram-primitive-stage > .diagram-block {
+  margin: 0;
+  width: 100%; height: 100%;
+}
+.diagram-primitive-stage .diagram-art {
+  width: 100%; height: 100%;
+}
+.diagram-primitive-stage .diagram-block figcaption { display: none; }
+.diagram-interaction-overlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  overflow: hidden;
+  color: #2563eb;
+  touch-action: none; /* Pointer Events drag on touchscreens, including iPhone */
+}
+.diagram-shape-target {
+  cursor: grab;
+  outline: none;
+}
+.diagram-shape-target:focus-visible,
+.diagram-shape-target.is-selected { stroke: #2563eb; stroke-width: 3; stroke-dasharray: 8 7; }
+.diagram-selected-center { fill: #eff6ff; stroke: #2563eb; stroke-width: 4; }
+.diagram-handle-hit { cursor: nwse-resize; touch-action: none; }
+.diagram-handle { fill: #fff; stroke: #2563eb; stroke-width: 5; }
+.diagram-handle.is-rotate { fill: #fef3c7; stroke: #a16207; }
+.diagram-alignment-guide { stroke: #2563eb; stroke-width: 1.4; stroke-dasharray: 10 9; opacity: 0.48; }
+.diagram-shape-palette { display: flex; flex-wrap: wrap; gap: 5px; }
+.diagram-shape-palette .btn { flex: 0 1 auto; }
+.diagram-selected-controls { display: flex; flex-direction: column; gap: 8px; }
+.diagram-shape-label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.diagram-shape-label input { min-height: 44px; min-width: 0; }
