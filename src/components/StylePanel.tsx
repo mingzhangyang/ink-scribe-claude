@@ -3,6 +3,7 @@ import { STYLES } from "../../shared/options.ts";
 import { DOODLE_THEMES, type DoodleTheme } from "../../shared/themes.ts";
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS, type EnFontId, type PageSizeId, type ZhFontId } from "../config/appearance.ts";
 import { useT } from "../i18n/index.ts";
+import { nextHandwritingStyle } from "../lib/handwriting-style.ts";
 import { useNoteStore, type Settings } from "../state/store.ts";
 
 function Range({
@@ -188,9 +189,14 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
         format={(v) => `${Math.round(v * 100)}%`}
         onChange={(v) => set({ naturalness: v })}
       />
-      <button type="button" className="btn btn-small btn-secondary" onClick={() => set({ seed: Math.floor(Math.random() * 100_000) })}>
-        {t.style.reseed}
-      </button>
+      <div className="handwriting-style-action">
+        <button type="button" className="btn btn-small btn-secondary"
+          onClick={() => set(nextHandwritingStyle(settings))}
+          title={t.style.reseedHint}>
+          {t.style.reseed}
+        </button>
+        <span className="hint">{t.style.reseedHint}</span>
+      </div>
 
       <fieldset className="field">
         <legend>{t.style.doodle}</legend>
