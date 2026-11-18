@@ -51,7 +51,7 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
   // Interactive editing: template remains parameterized until the first actual geometry command.
   for (const [width, locale] of [[390, "zh-CN"], [1280, "en-US"]]) {
     const zh = locale === "zh-CN";
-    const { page, context } = await newPage({ viewport: { width, height: 900 }, locale });
+    const { page, context } = await newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, locale });
     try {
       await page.goto(url, { waitUntil: "networkidle" });
       await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30000 });
@@ -97,6 +97,9 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
         && await first.locator(".diagram-shape-target").count() > 5);
       const label = first.locator(".diagram-shape-label input");
       await label.fill(zh ? "自定义标注" : "New annotation");
+      check("D3-" + width + "-label-live", "Annotation changes are visible before blur",
+        (await stage.locator(".diagram-art").textContent() ?? "")
+          .includes(zh ? "自定义标注" : "New annotation"));
       await label.blur();
       check("D3-" + width + "-label", "The edited label is present in the public renderer DOM",
         (await page.locator(".note-page .diagram-art").first().textContent() ?? "")
