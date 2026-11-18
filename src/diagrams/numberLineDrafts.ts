@@ -111,6 +111,15 @@ export const useNumberLineDrafts = create<NumberLineDraftState>((set, get) => ({
     if (!note || !pending) return false;
     const params = parseNumberLineFields(pending.fields);
     if (!params) return false;
+    // The same value may be typed differently (0 vs 0.0), or be displayed in
+    // its shorter float32 representation. Neither is a new document edit.
+    const initial = numberLineFields(pending.sourceParams);
+    const equivalent = (Object.keys(params) as NumberLineField[]).every((field) =>
+      params[field] === pending.sourceParams[field] || params[field] === Number(initial[field]));
+    if (equivalent) {
+      set((state) => ({ drafts: withoutIndex(state.drafts, index) }));
+      return true;
+    }
     // This validation happens over all three numbers, in one undoable transaction.
     const updated = updateTemplateParams(note, index, "number-line", params);
     if (updated === note) return false;

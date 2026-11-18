@@ -88,6 +88,10 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         && await page.locator(".share-fab").isDisabled()
         && await noteDiagram.getAttribute("data-diagram-unapplied") === "true");
       await page.getByRole("tab", { name: cn ? "内容" : "Content", exact: true }).click();
+      check("D2-" + viewport + "-resume-draft", "Returning from Export reopens the pending inspector",
+        await second.locator(".diagram-expand").getAttribute("aria-expanded") === "true"
+        && await numberStart.isVisible()
+        && await second.locator(".diagram-preview-stale").isVisible());
       await numberStart.fill("0");
       await numberEnd.fill("5");
       await number.fill("10");
@@ -102,6 +106,14 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         && await number.inputValue() === "10"
         && await noteDiagram.getAttribute("data-diagram-unapplied") === null
         && (await noteDiagram.locator("svg").textContent()).includes("5"));
+      await numberStart.fill("0.0");
+      check("D2-" + viewport + "-equivalent-draft", "Equivalent text creates a visible pending draft",
+        await noteDiagram.getAttribute("data-diagram-unapplied") === "true");
+      await second.getByRole("button", { name: cn ? "应用参数" : "Apply parameters" }).click();
+      check("D2-" + viewport + "-equivalent-applied", "Equivalent Apply clears the export blocker",
+        await numberStart.inputValue() === "0"
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === null
+        && await second.locator(".diagram-preview-stale").count() === 0);
       await numberStart.fill("-4");
       await numberStart.press("Enter");
       check("D2-" + viewport + "-enter", "Enter applies the complete valid draft",

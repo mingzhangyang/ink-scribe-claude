@@ -184,11 +184,18 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const note = useNoteStore((s) => s.note);
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
-  const [shapeMode, setShapeMode] = useState<number | null>(null);
   const drafts = useNumberLineDrafts((s) => s.drafts);
   const noteSerial = useNoteStore((s) => s.noteSerial);
+  // Content unmounts on the Export tab. Restore a pending inspector on remount
+  // so the user can immediately apply or discard the still-active draft.
+  const [expanded, setExpanded] = useState<number | null>(() => {
+    const pendingIndex = note?.diagrams?.findIndex((block, index) =>
+      block.afterSection === sectionIndex
+      && activeNumberLineDraft(note, noteSerial, index, drafts) !== null);
+    return pendingIndex !== undefined && pendingIndex >= 0 ? pendingIndex : null;
+  });
+  const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
+  const [shapeMode, setShapeMode] = useState<number | null>(null);
   // A section reorder, undo (D3) or document reload must never confirm deletion of another block.
   useEffect(() => { setConfirmRemoval(null); }, [note?.diagrams]);
   if (!note) return null;

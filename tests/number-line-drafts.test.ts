@@ -75,6 +75,35 @@ describe("D4/D5: atomic number-line editor and non-exportable drafts", () => {
     });
   });
 
+  it("accepts equivalent decimal spellings without a note revision or undo entry", () => {
+    const original = useNoteStore.getState().note;
+    const store = useNumberLineDrafts.getState();
+    for (const [field, spelling] of [
+      ["start", "0.0"], ["end", "1.00"], ["step", "0.10"],
+    ] as const) {
+      store.setField(0, field, spelling);
+      expect(hasPending()).toBe(true);
+      expect(store.apply(0)).toBe(true);
+      expect(useNoteStore.getState().note).toBe(original);
+      expect(useNoteStore.getState().diagramUndo).toEqual([]);
+      expect(hasPending()).toBe(false);
+    }
+
+    // The inspector deliberately displays a shortened float32 value.
+    // Applying its equivalent spelling must not rewrite the saved precision.
+    const float32Note = note();
+    float32Note.diagrams = [{ afterSection: 0, template: "number-line",
+      params: { start: 0, end: 1, step: Math.fround(0.1) } }];
+    useNoteStore.getState().setResult(float32Note, null, "local");
+    expect(numberLineFields({ start: 0, end: 1, step: Math.fround(0.1) }).step).toBe("0.1");
+    store.setField(0, "step", "0.100");
+    expect(hasPending()).toBe(true);
+    expect(store.apply(0)).toBe(true);
+    expect(useNoteStore.getState().note).toBe(float32Note);
+    expect(useNoteStore.getState().diagramUndo).toEqual([]);
+    expect(hasPending()).toBe(false);
+  });
+
   it("blocks unresolved edits, including after an unrelated caption edit", () => {
     const original = useNoteStore.getState().note;
     const store = useNumberLineDrafts.getState();
