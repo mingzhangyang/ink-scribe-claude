@@ -347,6 +347,7 @@ export const zh = {
       angle: "倾角 θ",
       friction: "显示向上坡方向的摩擦力",
       frictionTip: "仅在物块沿斜面向下运动或有下滑趋势时使用此方向。",
+      shortForceNote: "短分力箭头长度为示意，不按比例。",
       legRatio: "直角边比（b/a）",
       start: "起点",
       end: "终点",

@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from "react";
 import {
-  expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
+  expandDiagram, SHORT_FORCE_SCALE_NOTE, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../../shared/diagram.ts";
 import { hashString, signedRandom } from "../../lib/random.ts";
 import { useT } from "../../i18n/index.ts";
@@ -72,7 +72,8 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
         : segment(shape.from, shape.to, seed, jitter);
       return <g>
         <path d={d} className={shape.guide ? "diagram-guide" : undefined} strokeDasharray={shape.dashed ? "13 12" : undefined} />
-        {shape.label ? <InkLabel at={diagramArrowLabelPosition(shape.from, shape.to)}>{shape.label}</InkLabel> : null}
+        {shape.label && shape.label !== SHORT_FORCE_SCALE_NOTE
+          ? <InkLabel at={diagramArrowLabelPosition(shape.from, shape.to)}>{shape.label}</InkLabel> : null}
       </g>;
     }
     case "polyline":
@@ -113,6 +114,7 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, vi
   const t = useT().content.diagrams;
   const unapplied = pending ?? pendingBlocks.includes(block);
   const elements = expandDiagram(block);
+  const hasShortForceNote = elements.some((shape) => shape.type === "arrow" && shape.label === SHORT_FORCE_SCALE_NOTE);
   const view = viewport ?? diagramViewport(block);
   const jitter = block.handDrawn === false ? 0 : block.jitterPx ?? 1.2;
   const caption = block.caption || "";
@@ -131,6 +133,7 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, vi
           {elements.map((shape, i) => <Element key={i} shape={shape} seed={baseSeed + i * 7919} jitter={jitter} />)}
         </g>
       </svg>
+      {hasShortForceNote ? <p className="diagram-scale-note" role="note">{t.shortForceNote}</p> : null}
       {unapplied ? <span className="diagram-unapplied-badge" role="status">{t.unappliedBadge}</span> : null}
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>

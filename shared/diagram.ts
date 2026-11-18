@@ -6,6 +6,9 @@ export const DIAGRAM_LIMITS = {
   maxPoints: 40, maxCaption: 40, maxLabel: 40,
 } as const;
 
+/** Rendered as a localized figure note; attaching it to the visual arrow keeps it on D3 conversion. */
+export const SHORT_FORCE_SCALE_NOTE = "Short force arrow not to scale.";
+
 export const DIAGRAM_TEMPLATES = ["inclined-plane", "right-triangle", "number-line", "coordinate-plane"] as const;
 export type DiagramTemplate = (typeof DIAGRAM_TEMPLATES)[number];
 export type DiagramPoint = [number, number];
@@ -127,11 +130,20 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
   const down = add(center, vectors.gravity);
   const support = add(center, vectors.support); // N balances mg cosθ: same magnitude, opposite direction.
   const frictionTip = add(center, scale(tangent, 110));
+  const MIN_VISIBLE_PARALLEL = 64;
+  const shortParallel = Math.hypot(...vectors.parallel) < MIN_VISIBLE_PARALLEL;
+  const downhill = scale(tangent, -1);
+  // Keep along as the TRUE decomposition point; only the displayed arrow moves.
+  const parallelFrom = shortParallel
+    ? add(add(center, scale(downhill, 76)), scale(outward, 24)) : center;
+  // point() rounds to 4 decimals; 0.5 SVG units ensure >=64 after rounding.
+  const parallelTo = shortParallel
+    ? add(parallelFrom, scale(downhill, MIN_VISIBLE_PARALLEL + 0.5)) : along;
   const elements: DiagramPrimitive[] = [
     line(base, top),
     { type: "rect", at: point(center[0] - 36, center[1] - 27), width: 72, height: 54, rotation: -thetaDeg },
     arrow(center, down),
-    arrow(center, along),
+    arrow(parallelFrom, parallelTo, shortParallel ? SHORT_FORCE_SCALE_NOTE : undefined),
     arrow(center, across),
     line(along, down, { dashed: true }),
     line(across, down, { dashed: true }),
@@ -139,7 +151,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     { type: "arc", center: base, radius: 65, startDeg: -thetaDeg, sweepDeg: thetaDeg },
   ];
   const strokes: [DiagramPoint, DiagramPoint][] = [
-    [base, top], [center, down], [center, along], [center, across],
+    [base, top], [center, down], [parallelFrom, parallelTo], [center, across],
     [along, down], [across, down], [center, support],
   ];
   // Include the rotated block and the angle arc in collision detection.
@@ -156,7 +168,9 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     strokes.push([center, frictionTip]);
   }
   const labels = [
-    { text: "mg sinθ", near: add(along, point(-140, -90)) },
+    { text: "mg sinθ", near: shortParallel
+      ? add(add(parallelTo, scale(outward, 90)), scale(downhill, -16))
+      : add(along, point(-140, -90)) },
     { text: "mg cosθ", near: add(across, point(140, 0)) },
     { text: "N", near: add(support, point(-90, -65)) },
     { text: "mg", near: add(down, point(-65, -35)) },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  expandDiagram, inclinedPlaneForces, validDiagramBlocks,
+  expandDiagram, inclinedPlaneForces, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks,
   type DiagramBlock, type DiagramPrimitive,
 } from "../shared/diagram.ts";
 import { readDocument } from "../shared/document.ts";
@@ -11,6 +11,7 @@ import { validatePublishRequest, validatePublishedNote } from "../shared/publish
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { diagramLabelLayout, diagramViewport } from "../src/diagrams/svg-geometry.ts";
+import { materializeDiagram } from "../src/diagrams/geometry.ts";
 import { LAYOUTS } from "../src/components/note/layouts.tsx";
 import { labelsFor } from "../src/components/note/parts.tsx";
 
@@ -191,8 +192,67 @@ describe("diagram template geometry", () => {
     }
   });
 
-  it("keeps inclined-plane labels separate from strokes at three key angles", () => {
-    for (const thetaDeg of [5, 30, 60]) {
+  it("renders a legible off-block downhill arrow only when the physical component is short", () => {
+    for (let thetaDeg = 5; thetaDeg <= 60; thetaDeg++) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const arrows = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "line" | "arrow" }> =>
+          shape.type === "arrow");
+        const [gravity, parallel, perpendicular, normal] = arrows;
+        const vectors = inclinedPlaneForces(thetaDeg);
+        const direction = [parallel.to[0] - parallel.from[0], parallel.to[1] - parallel.from[1]];
+        const length = Math.hypot(...direction);
+        const physicalLength = Math.hypot(...vectors.parallel);
+        const theta = thetaDeg * Math.PI / 180;
+        const trueAlong: [number, number] = [
+          Number((gravity.from[0] + vectors.parallel[0]).toFixed(4)),
+          Number((gravity.from[1] + vectors.parallel[1]).toFixed(4)),
+        ];
+        expect(shapes.some((shape) => shape.type === "line" && shape.dashed
+          && shape.from[0] === trueAlong[0] && shape.from[1] === trueAlong[1])).toBe(true);
+        expect(direction[0] * Math.cos(theta) - direction[1] * Math.sin(theta))
+          .toBeCloseTo(-length, 1);
+        expect(Math.hypot(perpendicular.to[0] - perpendicular.from[0] + normal.to[0] - normal.from[0],
+          perpendicular.to[1] - perpendicular.from[1] + normal.to[1] - normal.from[1]))
+          .toBeLessThan(0.002);
+        if (physicalLength < 64) {
+          expect(length).toBeGreaterThanOrEqual(64);
+          expect(parallel.label).toBe(SHORT_FORCE_SCALE_NOTE);
+          expect(parallel.from).not.toEqual(gravity.from);
+          const displacement = [parallel.from[0] - gravity.from[0], parallel.from[1] - gravity.from[1]];
+          expect(displacement[0] * Math.cos(theta) - displacement[1] * Math.sin(theta))
+            .toBeCloseTo(-76, 1);
+          expect(-displacement[0] * Math.sin(theta) - displacement[1] * Math.cos(theta))
+            .toBeCloseTo(24, 1);
+        } else {
+          expect(parallel.from).toEqual(gravity.from);
+          expect(parallel.to).toEqual(trueAlong);
+          expect(length).toBeCloseTo(physicalLength, 2);
+          expect(parallel.label).toBeUndefined();
+        }
+        expect(arrows).toHaveLength(friction ? 5 : 4);
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+    for (const thetaDeg of [5, 15, 30, 60]) {
+      const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+        params: { thetaDeg, friction: true } };
+      const converted = materializeDiagram(block);
+      const fromTemplate = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 41 }));
+      const fromPrimitives = renderToStaticMarkup(createElement(DiagramBlockView, { block: converted, seed: 41 }));
+      const short = thetaDeg < 24;
+      expect(fromTemplate.includes('class="diagram-scale-note"')).toBe(short);
+      expect(fromPrimitives.includes('class="diagram-scale-note"')).toBe(short);
+      expect(fromPrimitives.includes("mg sinθ")).toBe(true);
+      if (short) expect(converted.primitives.some((shape) => shape.type === "arrow"
+        && shape.label === SHORT_FORCE_SCALE_NOTE)).toBe(true);
+    }
+  });
+
+  it("keeps inclined-plane labels separate from strokes at four key angles", () => {
+    for (const thetaDeg of [5, 15, 30, 60]) {
       for (const friction of [false, true]) {
         const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
           params: { thetaDeg, friction } };
