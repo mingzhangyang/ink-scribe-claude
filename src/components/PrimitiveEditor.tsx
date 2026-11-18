@@ -363,6 +363,8 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
             if (event.key === "Enter") event.currentTarget.blur();
             if (event.key === "Escape") {
               skipLabelBlur.current = true;
+              const initial = currentIndex !== null ? expandDiagram(block)[currentIndex] : undefined;
+              setLabelDraft(initial ? labelText(initial) ?? "" : "");
               event.currentTarget.blur();
             }
           }} />
