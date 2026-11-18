@@ -88,6 +88,11 @@ describe("D2 diagram authoring commands", () => {
     expect(updateTemplateParams(wider, 0, "number-line", { start: -30 })).toBe(wider);
     expect(updateTemplateParams(base, 0, "number-line", { end: 100, step: 1 })).toBe(base);
     expect(published(wider)).toBe(true);
+    // An interval longer than the range is legal: display only the two endpoints.
+    const sparse = updateTemplateParams(base, 0, "number-line", { step: 20 });
+    expect(sparse).not.toBe(base);
+    expect(sparse.diagrams?.[0]).toMatchObject({ params: { start: -5, end: 5, step: 20 } });
+    expect(published(sparse)).toBe(true);
   });
 
   it("edits a caption without losing the referenced section or custom shapes", () => {

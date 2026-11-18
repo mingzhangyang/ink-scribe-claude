@@ -72,6 +72,8 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
       await number.blur();
       check("D2-" + viewport + "-reject", "Invalid tick interval stays out of model",
         await number.getAttribute("aria-invalid") === "true");
+      check("D2-" + viewport + "-stale", "Invalid draft visibly marks the preview as stale",
+        await second.locator(".diagram-preview-stale").isVisible());
       const numberStart = second.locator(".diagram-number").first().locator("input");
       await numberStart.fill("-4");
       await numberStart.press("Enter");

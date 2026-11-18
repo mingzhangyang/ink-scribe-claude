@@ -6,7 +6,7 @@ import {
   moveFromPointers, resizeShape, rotateFromPointers, shapeCenter, shapeHandles,
 } from "../diagrams/geometry.ts";
 import { editDiagram } from "../diagrams/editor.ts";
-import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout } from "../diagrams/svg-geometry.ts";
+import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout, diagramViewport } from "../diagrams/svg-geometry.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -24,9 +24,10 @@ const primitiveTypes = [
 
 function pointerPosition(svg: SVGSVGElement, event: PointerEvent<SVGElement>): P {
   const rect = svg.getBoundingClientRect();
+  const view = svg.viewBox.baseVal;
   return [
-    Math.max(0, Math.min(DIAGRAM_LIMITS.width, (event.clientX - rect.left) * DIAGRAM_LIMITS.width / rect.width)),
-    Math.max(0, Math.min(DIAGRAM_LIMITS.height, (event.clientY - rect.top) * DIAGRAM_LIMITS.height / rect.height)),
+    Math.max(0, Math.min(DIAGRAM_LIMITS.width, view.x + (event.clientX - rect.left) * view.width / rect.width)),
+    Math.max(0, Math.min(DIAGRAM_LIMITS.height, view.y + (event.clientY - rect.top) * view.height / rect.height)),
   ];
 }
 function labelText(shape: Primitive): string | null {
@@ -151,21 +152,41 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   const undoDiagram = useNoteStore((s) => s.undoDiagram);
   const redoDiagram = useNoteStore((s) => s.redoDiagram);
   const [working, setWorking] = useState(block);
+  // Capture the exact SVG frame on pointerdown so a concurrent label commit
+  // cannot shift pointer coordinates mid-drag.
+  const [gestureFrame, setGestureFrame] = useState<ReturnType<typeof diagramViewport> | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [showGrid, setShowGrid] = useState(true);
+  const [detachConfirmed, setDetachConfirmed] = useState(!block.template);
+  const [labelDraft, setLabelDraft] = useState("");
+  const skipLabelBlur = useRef(false);
+  const pendingLabelRef = useRef<{ index: number; text: string } | null>(null);
   const stageRef = useRef<SVGSVGElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const workingRef = useRef(block);
   const patternId = useId().replace(/:/g, "");
   useEffect(() => {
+    // A label committed on pointerdown becomes the gesture's base; do not
+    // cancel that gesture when the newly committed block flows back as props.
+    if (gestureRef.current?.base === block) return;
+    pendingLabelRef.current = null;
+    setGestureFrame(null);
     workingRef.current = block;
     setWorking(block);
     gestureRef.current = null;
   }, [block]);
 
+  // Freeze framing to the committed diagram during a pointer gesture; resizing
+  // must not move the handles underneath the pointer.
+  const pendingDetach = !!block.template && !detachConfirmed;
+  const viewport = gestureFrame ?? diagramViewport(pendingLabelRef.current && !gestureRef.current ? working : block);
   const primitives = expandDiagram(working);
   const currentIndex = selected !== null && primitives[selected] ? selected : null;
   const current = currentIndex !== null ? primitives[currentIndex] : null;
+  useEffect(() => {
+    const selectedShape = selected !== null ? expandDiagram(block)[selected] : undefined;
+    setLabelDraft(selectedShape ? labelText(selectedShape) ?? "" : "");
+  }, [selected, block]);
 
   const commit = (base: DiagramBlock, next: DiagramBlock) => {
     if (next === base) return;
@@ -175,26 +196,55 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     });
   };
 
+  // Pointerdown suppresses the input's native blur. Flush by shape index, not
+  // by the selection that may change while React unmounts the old input.
+  const commitPendingLabel = (): DiagramBlock => {
+    const pending = pendingLabelRef.current;
+    pendingLabelRef.current = null;
+    if (!pending || pendingDetach) return block;
+    const shape = expandDiagram(block)[pending.index];
+    if (!shape) return block;
+    const next = editShape(block, pending.index, setLabelText(shape, pending.text));
+    commit(block, next);
+    return next;
+  };
+  const selectShape = (shapeIndex: number) => {
+    const next = commitPendingLabel();
+    if (next !== block) {
+      workingRef.current = next;
+      setWorking(next);
+    }
+    setSelected(shapeIndex);
+  };
+
   const immediate = (operation: (base: DiagramBlock) => DiagramBlock) => {
+    if (pendingDetach) return;
     const base = block;
     const next = operation(base);
     commit(base, next);
   };
 
   const startGesture = (event: PointerEvent<SVGElement>, shapeIndex: number, mode: Mode, handle?: string) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (pendingDetach || (event.pointerType === "mouse" && event.button !== 0)) return;
     const svg = stageRef.current;
-    const shape = expandDiagram(block)[shapeIndex];
-    if (!svg || !shape) return;
+    if (!svg) return;
+    const liveFrame = svg.viewBox.baseVal;
+    const frozenFrame: ReturnType<typeof diagramViewport> = [
+      liveFrame.x, liveFrame.y, liveFrame.width, liveFrame.height,
+    ];
+    const base = commitPendingLabel();
+    const shape = expandDiagram(base)[shapeIndex];
+    if (!shape) return;
     event.preventDefault();
     event.stopPropagation();
+    setGestureFrame(frozenFrame);
     setSelected(shapeIndex);
     gestureRef.current = {
       pointerId: event.pointerId, index: shapeIndex, mode, handle,
-      from: pointerPosition(svg, event), shape, base: block,
+      from: pointerPosition(svg, event), shape, base,
     };
-    workingRef.current = block;
-    setWorking(block);
+    workingRef.current = base;
+    setWorking(base);
     svg.setPointerCapture(event.pointerId);
   };
   const onPointerMove = (event: PointerEvent<SVGSVGElement>) => {
@@ -219,6 +269,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     const drag = gestureRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     gestureRef.current = null;
+    setGestureFrame(null);
     if (stageRef.current?.hasPointerCapture(event.pointerId)) stageRef.current.releasePointerCapture(event.pointerId);
     const next = workingRef.current;
     if (!canceled) commit(drag.base, next);
@@ -236,10 +287,17 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     immediate((base) => deleteShape(base, currentIndex));
     setSelected(null);
   };
-  const applyLabel = (raw: string) => {
-    if (currentIndex === null) return;
-    const changed = setLabelText(expandDiagram(block)[currentIndex], raw);
-    immediate((base) => editShape(base, currentIndex, changed));
+  const previewLabel = (raw: string) => {
+    if (currentIndex === null || pendingDetach) return;
+    const capped = Array.from(raw).slice(0, DIAGRAM_LIMITS.maxLabel).join("");
+    pendingLabelRef.current = { index: currentIndex, text: capped };
+    setLabelDraft(capped);
+    const shape = expandDiagram(block)[currentIndex];
+    if (!shape) return;
+    const preview = editShape(block, currentIndex, setLabelText(shape, capped));
+    // Typing updates only the local SVG; blur creates one atomic undo entry.
+    workingRef.current = preview;
+    setWorking(preview);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Arrow/Delete shortcuts belong to the focused SVG canvas, never toolbar buttons
@@ -272,6 +330,12 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   };
 
   return <div className="diagram-primitive-editor" onKeyDown={onKeyDown}>
+    {pendingDetach ? <div className="diagram-detach-warning" role="note">
+      <p className="hint is-warn">{t.detachWarning}</p>
+      <button type="button" className="btn btn-link" onClick={() => setDetachConfirmed(true)}>
+        {t.detachContinue}
+      </button>
+    </div> : null}
     <div className="diagram-edit-toolbar" role="toolbar" aria-label={t.shapeTools}>
       <button type="button" className="btn btn-link" disabled={!undo} onClick={undoDiagram}>{t.undo}</button>
       <button type="button" className="btn btn-link" disabled={!redo} onClick={redoDiagram}>{t.redo}</button>
@@ -279,14 +343,16 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
         onChange={(event) => setShowGrid(event.target.checked)} />{t.snapGrid}</label>
     </div>
     <div className="diagram-primitive-stage">
-      <DiagramBlockView block={working} seed={1978} />
+      <DiagramBlockView block={working} seed={1978} viewport={viewport} />
       <svg ref={stageRef} className="diagram-interaction-overlay"
-        viewBox="0 0 1000 750" aria-label={t.shapeCanvas}
+        viewBox={viewport.join(" ")} aria-label={t.shapeCanvas}
+        aria-disabled={pendingDetach} style={pendingDetach ? { pointerEvents: "none" } : undefined}
         onPointerMove={onPointerMove} onPointerUp={(event) => release(event, false)}
         onPointerCancel={(event) => release(event, true)}
         onLostPointerCapture={() => {
           if (gestureRef.current) {
             gestureRef.current = null;
+            setGestureFrame(null);
             workingRef.current = block;
             setWorking(block);
           }
@@ -304,32 +370,43 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
             className="diagram-alignment-guide" pointerEvents="none" />
         </> : null}
         {primitives.map((shape, i) => <Selector key={i} shape={shape} index={i}
-          active={currentIndex === i} select={setSelected} startGesture={startGesture}
+          active={currentIndex === i} select={selectShape} startGesture={startGesture}
           text={t.selectShape} />)}
       </svg>
     </div>
     <p className="hint">{t.dragHelp}</p>
     <div className="diagram-shape-palette" role="group" aria-label={t.addShape}>
       {primitiveTypes.map((type) => <button type="button" key={type} className="btn btn-link"
-        disabled={primitives.length >= DIAGRAM_LIMITS.maxPrimitives}
+        disabled={pendingDetach || primitives.length >= DIAGRAM_LIMITS.maxPrimitives}
         onClick={() => addPrimitive(type)}>{t.primitiveNames[type]}</button>)}
     </div>
     {current ? <div className="diagram-selected-controls">
       <span>{t.selectedShape(currentIndex! + 1, t.primitiveNames[current.type])}</span>
       {labelText(current) !== null ? <label className="diagram-shape-label">
         {t.shapeLabel}
-        <input key={index + "-" + currentIndex + "-" + labelText(current)}
-          type="text" defaultValue={labelText(current) ?? ""}
-          onInput={(event) => {
-            const input = event.currentTarget;
-            // Count Unicode code points, not UTF-16 units (emoji/rare CJK must work).
-            const capped = Array.from(input.value).slice(0, DIAGRAM_LIMITS.maxLabel).join("");
-            if (input.value !== capped) input.value = capped;
+        <input key={index + "-" + currentIndex}
+          type="text" disabled={pendingDetach} value={labelDraft}
+          onChange={(event) => previewLabel(event.currentTarget.value)}
+          onBlur={() => {
+            if (skipLabelBlur.current) {
+              skipLabelBlur.current = false;
+              pendingLabelRef.current = null;
+              workingRef.current = block;
+              setWorking(block);
+            } else commitPendingLabel();
           }}
-          onBlur={(event) => applyLabel(event.currentTarget.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              skipLabelBlur.current = true;
+              pendingLabelRef.current = null;
+              const initial = currentIndex !== null ? expandDiagram(block)[currentIndex] : undefined;
+              setLabelDraft(initial ? labelText(initial) ?? "" : "");
+              event.currentTarget.blur();
+            }
+          }} />
       </label> : null}
-      <button type="button" className="btn btn-link" disabled={primitives.length <= 1}
+      <button type="button" className="btn btn-link" disabled={pendingDetach || primitives.length <= 1}
         onClick={deleteSelected}>{t.deleteShape}</button>
     </div> : null}
   </div>;

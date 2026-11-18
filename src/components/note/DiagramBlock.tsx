@@ -1,13 +1,11 @@
 import { memo } from "react";
 import {
-  DIAGRAM_LIMITS, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
+  expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../../shared/diagram.ts";
 import { hashString, signedRandom } from "../../lib/random.ts";
-import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout } from "../../diagrams/svg-geometry.ts";
+import { diagramArcPath, diagramArrowLabelPosition, diagramLabelFontSize, diagramLabelLayout, diagramViewport, type DiagramViewport } from "../../diagrams/svg-geometry.ts";
 
-type Props = { block: DiagramBlock; seed: number };
-const add = (a: DiagramPoint, b: DiagramPoint): DiagramPoint => [a[0] + b[0], a[1] + b[1]];
-const midpoint = (a: DiagramPoint, b: DiagramPoint): DiagramPoint => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+type Props = { block: DiagramBlock; seed: number; viewport?: DiagramViewport };
 const coords = (p: DiagramPoint) => p.map((v) => +v.toFixed(3)).join(" ");
 const segment = (start: DiagramPoint, end: DiagramPoint, seed: number, jitter: number): string => {
   const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
@@ -42,11 +40,6 @@ const ellipsePath = (center: DiagramPoint, rx: number, ry: number, seed: number,
   }
   return points.map((p, i) => (i ? "L" : "M") + coords(p)).join(" ") + " Z";
 };
-const textPosition = (from: DiagramPoint, to: DiagramPoint): DiagramPoint => {
-  const mid = midpoint(from, to), dx = to[0] - from[0], dy = to[1] - from[1];
-  const length = Math.hypot(dx, dy) || 1;
-  return add(mid, [-dy / length * 55, dx / length * 55 - 8]);
-};
 const templateNames: Record<NonNullable<DiagramBlock["template"]>, string> = {
   "inclined-plane": "Inclined plane forces",
   "right-triangle": "Right triangle",
@@ -77,7 +70,7 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
         : segment(shape.from, shape.to, seed, jitter);
       return <g>
         <path d={d} className={shape.guide ? "diagram-guide" : undefined} strokeDasharray={shape.dashed ? "13 12" : undefined} />
-        {shape.label ? <InkLabel at={textPosition(shape.from, shape.to)}>{shape.label}</InkLabel> : null}
+        {shape.label ? <InkLabel at={diagramArrowLabelPosition(shape.from, shape.to)}>{shape.label}</InkLabel> : null}
       </g>;
     }
     case "polyline":
@@ -113,8 +106,9 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
  * Pure SVG, shared by editor canvas and published-note viewer.
  * PNG export snapshots this exact NotePage DOM (no image-generation fallback).
  */
-export const DiagramBlockView = memo(function DiagramBlockView({ block, seed }: Props) {
+export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, viewport }: Props) {
   const elements = expandDiagram(block);
+  const view = viewport ?? diagramViewport(block);
   const jitter = block.handDrawn === false ? 0 : block.jitterPx ?? 1.2;
   const caption = block.caption || "";
   const accessible = caption || (block.template ? templateNames[block.template] : "Notebook diagram");
@@ -123,7 +117,7 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed }: 
   const baseSeed = seed ^ hashString(`inline-diagram:${block.afterSection}`);
   return (
     <figure className="diagram-block" data-fit data-diagram-after-section={block.afterSection}>
-      <svg className="diagram-art" viewBox={"0 0 " + DIAGRAM_LIMITS.width + " " + DIAGRAM_LIMITS.height}
+      <svg className="diagram-art" viewBox={view.join(" ")}
         role="img" aria-label={accessible} preserveAspectRatio="xMidYMid meet">
         <g className="diagram-ink" fill="none" stroke="currentColor" strokeWidth={5.5}
           strokeLinecap="round" strokeLinejoin="round">

@@ -10,6 +10,7 @@ import { normalizeNoteStructure, type NoteStructure } from "../shared/note.ts";
 import { validatePublishRequest, validatePublishedNote } from "../shared/publishing.ts";
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
+import { diagramLabelLayout, diagramViewport } from "../src/diagrams/svg-geometry.ts";
 import { LAYOUTS } from "../src/components/note/layouts.tsx";
 import { labelsFor } from "../src/components/note/parts.tsx";
 
@@ -110,7 +111,7 @@ describe("diagram template geometry", () => {
     const sum = parallel.map((v, i) => v + perpendicular[i]);
     expect(Math.hypot(sum[0] - gravity[0], sum[1] - gravity[1])).toBeLessThan(1);
     expect(expandDiagram(template)).toEqual(expandDiagram(structuredClone(template)));
-    expect(expandDiagram({ ...template, params: { thetaDeg: 30, friction: true } })).toHaveLength(expandDiagram(template).length + 1);
+    expect(expandDiagram({ ...template, params: { thetaDeg: 30, friction: true } })).toHaveLength(expandDiagram(template).length + 2);
   });
 
   it("keeps triangle right angle and all generated geometry inside the canvas", () => {
@@ -151,10 +152,55 @@ describe("diagram template geometry", () => {
       expect(validatePublishRequest(request([block])).ok).toBe(true);
       expect(validatePublishedNote(note([block])).ok).toBe(true);
       const shapes = expandDiagram(block);
-      expect(shapes.filter((shape) => shape.type === "label").map((shape) => (shape as Extract<DiagramPrimitive, { type: "label" }>).text)).toEqual(labels);
+      const visible = shapes.filter((shape) => shape.type === "label")
+        .map((shape) => (shape as Extract<DiagramPrimitive, { type: "label" }>).text);
+      expect(visible[0]).toBe(labels[0]);
+      expect(visible[visible.length - 1]).toBe(labels[labels.length - 1]);
+      expect(visible.every((text) => labels.includes(text))).toBe(true);
+      if (labels.length <= 3) expect(visible).toEqual(labels);
       expect(shapes.length).toBeLessThanOrEqual(40);
       expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
     }
+  });
+
+  it("keeps inclined-plane labels separate from strokes at three key angles", () => {
+    for (const thetaDeg of [5, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+          shape.type === "label");
+        expect(labels).toHaveLength(friction ? 6 : 5);
+        const bounds = labels.map(({ at, text }) => {
+          const [x, y] = diagramLabelLayout(at, text).at;
+          const half = Math.max(19, Array.from(text).reduce((n, c) =>
+            n + (c.charCodeAt(0) < 128 ? 1.1 : 1.3) * 14, 0));
+          return { text, rect: [x - half, y - 32, x + half, y + 32] };
+        });
+        for (let i = 0; i < bounds.length; i++) {
+          for (let j = i + 1; j < bounds.length; j++) {
+            const a = bounds[i].rect, b = bounds[j].rect;
+            expect(a[2] + 10 <= b[0] || b[2] + 10 <= a[0]
+              || a[3] + 10 <= b[1] || b[3] + 10 <= a[1]).toBe(true);
+          }
+        }
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+  });
+
+  it("thins dense number-line annotations without removing marks or endpoints", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line",
+      params: { start: 0, end: 1, step: 0.1 } };
+    const parts = expandDiagram(block);
+    expect(parts.filter((shape) => shape.type === "line")).toHaveLength(11);
+    const texts = parts.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label").map((shape) => shape.text);
+    expect(texts[0]).toBe("0");
+    expect(texts[texts.length - 1]).toBe("1");
+    expect(texts.length).toBeLessThan(11);
+    expect(diagramViewport(block)[2]).toBeLessThanOrEqual(1000);
   });
 
   it("keeps labels and their font-size bounds inside all four canvas edges", () => {
@@ -192,7 +238,7 @@ describe("diagram template geometry", () => {
     const first = renderToStaticMarkup(createElement(DiagramBlockView, { block: template, seed: 41 }));
     const second = renderToStaticMarkup(createElement(DiagramBlockView, { block: structuredClone(template), seed: 41 }));
     expect(first).toBe(second);
-    expect(first).toContain('viewBox="0 0 1000 750"');
+    expect(first).toContain('viewBox="' + diagramViewport(template).join(" ") + '"');
     expect(first).toContain("重力分解");
     expect(first).not.toContain("<canvas");
     for (const name of ["hybrid-cornell", "classic-cornell", "free-journal", "minimal"] as const) {

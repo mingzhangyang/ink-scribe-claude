@@ -362,6 +362,8 @@
 /* Inline diagrams are ordinary flow content, never floats or overlay stickers.
    The same DOM is measured by useNoteFit and captured by PNG export. */
 .diagram-block {
+  /* One text scale across all note layouts and exported PNGs. */
+  --diagram-label-scale: 2.5;
   box-sizing: border-box;
   display: block;
   width: 100%;
@@ -400,8 +402,11 @@
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.layout-free-journal .diagram-block { --diagram-label-scale: 3.7; }
-.layout-minimal .diagram-block { --diagram-label-scale: 2; }
+/* A diagram-bearing section uses the full journal width rather than half
+   of a narrow multicolumn card. Empty/inert cards remain two-column. */
+.journal-card:has(.diagram-block) {
+  column-span: all;
+}
 .note-page.is-long .diagram-block { break-inside: avoid; }
 
 /* ---------- 混合康奈尔 / 经典康奈尔 ---------- */
@@ -736,6 +741,10 @@
 
 .note-page.is-long .journal-card {
   margin-bottom: 0;
+}
+/* Long Journal cards switch from columns to grid; column-span alone is ignored. */
+.note-page.is-long .journal-card:has(.diagram-block) {
+  grid-column: 1 / -1;
 }
 
 /* ---------- 贴纸 ---------- */
