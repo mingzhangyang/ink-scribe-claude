@@ -629,6 +629,7 @@ export const en: Messages = {
       angle: "Slope angle θ",
       friction: "Show upward-slope friction",
       frictionTip: "Use this direction only when the object moves or tends to slip downhill.",
+      shortForceNote: "Short force arrow not to scale.",
       legRatio: "Leg ratio (b/a)",
       start: "Start",
       end: "End",
