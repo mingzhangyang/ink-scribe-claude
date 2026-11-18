@@ -155,6 +155,8 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   const [selected, setSelected] = useState<number | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [detachConfirmed, setDetachConfirmed] = useState(!block.template);
+  const [labelDraft, setLabelDraft] = useState("");
+  const skipLabelBlur = useRef(false);
   const stageRef = useRef<SVGSVGElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const workingRef = useRef(block);
@@ -172,6 +174,10 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   const primitives = expandDiagram(working);
   const currentIndex = selected !== null && primitives[selected] ? selected : null;
   const current = currentIndex !== null ? primitives[currentIndex] : null;
+  useEffect(() => {
+    const selectedShape = selected !== null ? expandDiagram(block)[selected] : undefined;
+    setLabelDraft(selectedShape ? labelText(selectedShape) ?? "" : "");
+  }, [selected, block]);
 
   const commit = (base: DiagramBlock, next: DiagramBlock) => {
     if (next === base) return;
@@ -244,9 +250,20 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     setSelected(null);
   };
   const applyLabel = (raw: string) => {
-    if (currentIndex === null) return;
+    if (currentIndex === null || pendingDetach) return;
     const changed = setLabelText(expandDiagram(block)[currentIndex], raw);
     immediate((base) => editShape(base, currentIndex, changed));
+  };
+  const previewLabel = (raw: string) => {
+    if (currentIndex === null || pendingDetach) return;
+    const capped = Array.from(raw).slice(0, DIAGRAM_LIMITS.maxLabel).join("");
+    setLabelDraft(capped);
+    const shape = expandDiagram(block)[currentIndex];
+    if (!shape) return;
+    const preview = editShape(block, currentIndex, setLabelText(shape, capped));
+    // Typing updates only the local SVG; blur creates one atomic undo entry.
+    workingRef.current = preview;
+    setWorking(preview);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Arrow/Delete shortcuts belong to the focused SVG canvas, never toolbar buttons
@@ -332,16 +349,23 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
       <span>{t.selectedShape(currentIndex! + 1, t.primitiveNames[current.type])}</span>
       {labelText(current) !== null ? <label className="diagram-shape-label">
         {t.shapeLabel}
-        <input key={index + "-" + currentIndex + "-" + labelText(current)}
-          type="text" disabled={pendingDetach} defaultValue={labelText(current) ?? ""}
-          onInput={(event) => {
-            const input = event.currentTarget;
-            // Count Unicode code points, not UTF-16 units (emoji/rare CJK must work).
-            const capped = Array.from(input.value).slice(0, DIAGRAM_LIMITS.maxLabel).join("");
-            if (input.value !== capped) input.value = capped;
+        <input key={index + "-" + currentIndex}
+          type="text" disabled={pendingDetach} value={labelDraft}
+          onChange={(event) => previewLabel(event.currentTarget.value)}
+          onBlur={() => {
+            if (skipLabelBlur.current) {
+              skipLabelBlur.current = false;
+              workingRef.current = block;
+              setWorking(block);
+            } else applyLabel(labelDraft);
           }}
-          onBlur={(event) => applyLabel(event.currentTarget.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              skipLabelBlur.current = true;
+              event.currentTarget.blur();
+            }
+          }} />
       </label> : null}
       <button type="button" className="btn btn-link" disabled={pendingDetach || primitives.length <= 1}
         onClick={deleteSelected}>{t.deleteShape}</button>
