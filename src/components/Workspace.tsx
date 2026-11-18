@@ -3,6 +3,7 @@ import { PAGE_WIDTH } from "../config/appearance.ts";
 import { errorMessage, useT } from "../i18n/index.ts";
 import { cancelGeneration, generateLocally, generateNote } from "../state/actions.ts";
 import { useNoteStore } from "../state/store.ts";
+import { unappliedNumberLineBlocks, useNumberLineDrafts } from "../diagrams/numberLineDrafts.ts";
 import { NotePage, pageHeightFor } from "./note/NotePage.tsx";
 import { NoteFitNotice, NoteFitStatus } from "./note/NoteFitStatus.tsx";
 import { ShareButton } from "./ShareButton.tsx";
@@ -16,6 +17,8 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
   onToast: (message: string) => void;
 }) {
   const note = useNoteStore((s) => s.note);
+  const noteSerial = useNoteStore((s) => s.noteSerial);
+  const numberLineDrafts = useNumberLineDrafts((s) => s.drafts);
   const settings = useNoteStore((s) => s.settings);
   const stickers = useNoteStore((s) => s.stickers);
   const aiDoodle = useNoteStore((s) => s.aiDoodle);
@@ -165,6 +168,7 @@ export function Workspace({ pageRef, fit, onFitChange, onEditInput, onToast }: {
               <NotePage
                 ref={pageRef}
                 note={note}
+                pendingDiagramBlocks={unappliedNumberLineBlocks(note, noteSerial, numberLineDrafts)}
                 settings={settings}
                 stickers={stickers}
                 aiDoodle={aiDoodle}

@@ -125,7 +125,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
   const along = add(center, vectors.parallel);
   const across = add(center, vectors.perpendicular);
   const down = add(center, vectors.gravity);
-  const support = add(center, scale(vectors.support, 0.55));
+  const support = add(center, vectors.support); // N balances mg cosθ: same magnitude, opposite direction.
   const frictionTip = add(center, scale(tangent, 110));
   const elements: DiagramPrimitive[] = [
     line(base, top),

@@ -68,24 +68,53 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         && await quick.locator(".diagram-quick-existing").count() === 2);
       await quick.locator(".diagram-quick-trigger").click();
       const number = second.locator('.diagram-number').last().locator("input");
+      const numberStart = second.locator(".diagram-number").first().locator("input");
+      const numberEnd = second.locator(".diagram-number").nth(1).locator("input");
+      const noteDiagram = page.locator('.note-page .diagram-block[data-diagram-after-section="1"]');
+      const beforeDraftSvg = await noteDiagram.locator("svg").innerHTML();
       await number.fill("0");
       await number.blur();
-      check("D2-" + viewport + "-reject", "Invalid tick interval stays out of model",
+      check("D2-" + viewport + "-reject", "Zero step remains an invalid draft",
         await number.getAttribute("aria-invalid") === "true");
-      check("D2-" + viewport + "-stale", "Invalid draft visibly marks the preview as stale",
-        await second.locator(".diagram-preview-stale").isVisible());
-      const numberStart = second.locator(".diagram-number").first().locator("input");
+      check("D2-" + viewport + "-stale", "Unapplied params visibly mark the actual canvas",
+        await second.locator(".diagram-preview-stale").isVisible()
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === "true"
+        && await noteDiagram.locator(".diagram-unapplied-badge").isVisible()
+        && await noteDiagram.locator("svg").innerHTML() === beforeDraftSvg);
+      await page.getByRole("tab", { name: cn ? "导出" : "Export", exact: true }).click();
+      check("D2-" + viewport + "-block-export", "Download, clipboard and sharing are blocked",
+        await page.locator("#tabpanel-export").getByRole("button", { name: cn ? "下载图片" : "Download image" }).isDisabled()
+        && await page.locator("#tabpanel-export").getByRole("button", { name: cn ? "复制到剪贴板" : "Copy to clipboard" }).isDisabled()
+        && await page.locator(".share-fab").isDisabled()
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === "true");
+      await page.getByRole("tab", { name: cn ? "内容" : "Content", exact: true }).click();
+      await numberStart.fill("0");
+      await numberEnd.fill("5");
+      await number.fill("10");
+      check("D2-" + viewport + "-sparse-draft", "Invalid intermediate combos are not committed",
+        await second.locator(".diagram-number-form button[type=submit]").isEnabled()
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === "true"
+        && await noteDiagram.locator("svg").innerHTML() === beforeDraftSvg);
+      await second.getByRole("button", { name: cn ? "应用参数" : "Apply parameters" }).click();
+      check("D2-" + viewport + "-sparse-applied", "0→5, step 10 applies atomically",
+        await numberStart.inputValue() === "0"
+        && await numberEnd.inputValue() === "5"
+        && await number.inputValue() === "10"
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === null
+        && (await noteDiagram.locator("svg").textContent()).includes("5"));
       await numberStart.fill("-4");
       await numberStart.press("Enter");
-      check("D2-" + viewport + "-enter", "Enter commits a valid number-line start",
-        await numberStart.inputValue() === "-4");
-      const beforeCancelSvg = await page.locator('.note-page .diagram-block[data-diagram-after-section="1"] svg').textContent();
+      check("D2-" + viewport + "-enter", "Enter applies the complete valid draft",
+        await numberStart.inputValue() === "-4"
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === null);
+      const beforeCancelSvg = await noteDiagram.locator("svg").textContent();
       await numberStart.fill("-3");
       await numberStart.press("Escape");
       await page.waitForTimeout(50);
-      const afterCancelSvg = await page.locator('.note-page .diagram-block[data-diagram-after-section="1"] svg').textContent();
-      check("D2-" + viewport + "-escape", "Escape cancels input and blur without saving the draft",
-        await numberStart.inputValue() === "-4" && afterCancelSvg === beforeCancelSvg);
+      const afterCancelSvg = await noteDiagram.locator("svg").textContent();
+      check("D2-" + viewport + "-escape", "Escape discards pending edits without changing saved geometry",
+        await numberStart.inputValue() === "-4" && afterCancelSvg === beforeCancelSvg
+        && await noteDiagram.getAttribute("data-diagram-unapplied") === null);
 
       await first.locator(".diagram-remove").click();
       await first.locator(".diagram-remove").click();

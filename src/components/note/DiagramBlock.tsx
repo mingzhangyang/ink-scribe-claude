@@ -1,11 +1,13 @@
-import { memo } from "react";
+import { createContext, memo, useContext } from "react";
 import {
   expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../../shared/diagram.ts";
 import { hashString, signedRandom } from "../../lib/random.ts";
+import { useT } from "../../i18n/index.ts";
 import { diagramArcPath, diagramArrowLabelPosition, diagramLabelFontSize, diagramLabelLayout, diagramViewport, type DiagramViewport } from "../../diagrams/svg-geometry.ts";
 
-type Props = { block: DiagramBlock; seed: number; viewport?: DiagramViewport };
+export const PendingDiagramContext = createContext<readonly DiagramBlock[]>([]);
+type Props = { block: DiagramBlock; seed: number; viewport?: DiagramViewport; pending?: boolean };
 const coords = (p: DiagramPoint) => p.map((v) => +v.toFixed(3)).join(" ");
 const segment = (start: DiagramPoint, end: DiagramPoint, seed: number, jitter: number): string => {
   const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
@@ -106,7 +108,10 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
  * Pure SVG, shared by editor canvas and published-note viewer.
  * PNG export snapshots this exact NotePage DOM (no image-generation fallback).
  */
-export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, viewport }: Props) {
+export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, viewport, pending }: Props) {
+  const pendingBlocks = useContext(PendingDiagramContext);
+  const t = useT().content.diagrams;
+  const unapplied = pending ?? pendingBlocks.includes(block);
   const elements = expandDiagram(block);
   const view = viewport ?? diagramViewport(block);
   const jitter = block.handDrawn === false ? 0 : block.jitterPx ?? 1.2;
@@ -116,7 +121,9 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, vi
   // materializes; the original full-block hash made every stroke flicker per pointermove.
   const baseSeed = seed ^ hashString(`inline-diagram:${block.afterSection}`);
   return (
-    <figure className="diagram-block" data-fit data-diagram-after-section={block.afterSection}>
+    <figure className={"diagram-block" + (unapplied ? " is-unapplied" : "")}
+      data-fit data-diagram-after-section={block.afterSection}
+      data-diagram-unapplied={unapplied ? "true" : undefined}>
       <svg className="diagram-art" viewBox={view.join(" ")}
         role="img" aria-label={accessible} preserveAspectRatio="xMidYMid meet">
         <g className="diagram-ink" fill="none" stroke="currentColor" strokeWidth={5.5}
@@ -124,6 +131,7 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, vi
           {elements.map((shape, i) => <Element key={i} shape={shape} seed={baseSeed + i * 7919} jitter={jitter} />)}
         </g>
       </svg>
+      {unapplied ? <span className="diagram-unapplied-badge" role="status">{t.unappliedBadge}</span> : null}
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>
   );

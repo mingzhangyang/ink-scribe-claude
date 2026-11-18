@@ -13,6 +13,7 @@ import {
 } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
+import { hasUnappliedNumberLines, useNumberLineDrafts } from "../diagrams/numberLineDrafts.ts";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
 // 只保存状态与参数，文案在渲染时按当前界面语言生成
@@ -21,6 +22,8 @@ type Status = { kind: "idle" } | { kind: "working"; task: Task } | { kind: "done
 
 export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElement | null>; fit: NoteFitState | null }) {
   const note = useNoteStore((s) => s.note);
+  const noteSerial = useNoteStore((s) => s.noteSerial);
+  const drafts = useNumberLineDrafts((s) => s.drafts);
   const settings = useNoteStore((s) => s.settings);
   const selectSticker = useNoteStore((s) => s.selectSticker);
   const [format, setFormat] = useState<ExportFormat>("png");
@@ -34,18 +37,28 @@ export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElemen
   const actualScale = effectiveScale(width, height, scale);
 
   if (!note) return null;
-  const busy = status.kind === "working" || fit?.status !== "ready";
+  const unapplied = hasUnappliedNumberLines(note, noteSerial, drafts);
+  const busy = status.kind === "working" || fit?.status !== "ready" || unapplied;
+  const ensureApplied = () => {
+    const current = useNoteStore.getState();
+    if (hasUnappliedNumberLines(current.note, current.noteSerial, useNumberLineDrafts.getState().drafts)) {
+      throw new Error("Unapplied diagram parameters must not be exported");
+    }
+  };
 
   async function render(fmt: ExportFormat) {
     const node = pageRef.current;
     if (!node) throw new Error("画布尚未就绪");
+    ensureApplied();
     selectSticker(null);
-    return renderNoteBlob(node, {
+    const result = await renderNoteBlob(node, {
       format: fmt,
       scale,
       families: usedFamilies(settings.zhFont, settings.enFont),
       background: byId(PAPERS, settings.paper).base,
     });
+    ensureApplied();
+    return result;
   }
 
   async function handleDownload() {
@@ -54,6 +67,7 @@ export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElemen
     setStatus({ kind: "working", task: "download" });
     try {
       const { blob, scale: used } = await render(format);
+      ensureApplied();
       downloadBlob(blob, fileNameFor(note!.title, format));
       outcome("export_completed");
       setStatus({ kind: "done", task: "download", ...(used < scale ? { reducedScale: used } : {}) });
@@ -120,6 +134,7 @@ export function ExportPanel({ pageRef, fit }: { pageRef: RefObject<HTMLDivElemen
         {t.export.copy}
       </button>
       {!clipboard.supported ? <p className="hint">{t.export.copyUnsupported(clipboard.reason)}</p> : null}
+      {unapplied ? <p className="hint is-warn" role="status">{t.export.pendingDiagram}</p> : null}
 
       <div className="export-status" aria-live="polite">
         {status.kind === "working" ? <p className="hint">{status.task === "copy" ? t.export.copying : t.export.rendering}</p> : null}
