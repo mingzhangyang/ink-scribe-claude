@@ -192,6 +192,53 @@ describe("diagram template geometry", () => {
     }
   });
 
+  it("keeps inclined-plane labels separate from strokes at three key angles", () => {
+    for (const thetaDeg of [5, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+          shape.type === "label");
+        expect(labels).toHaveLength(friction ? 6 : 5);
+        const bounds = labels.map(({ at, text }) => {
+          const [x, y] = diagramLabelLayout(at, text).at;
+          const half = Math.max(19, Array.from(text).reduce((n, c) =>
+            n + (c.charCodeAt(0) < 128 ? 1.1 : 1.3) * 14, 0));
+          return { text, rect: [x - half, y - 32, x + half, y + 32] };
+        });
+        for (let i = 0; i < bounds.length; i++) {
+          for (let j = i + 1; j < bounds.length; j++) {
+            const a = bounds[i].rect, b = bounds[j].rect;
+            expect(a[2] + 10 <= b[0] || b[2] + 10 <= a[0]
+              || a[3] + 10 <= b[1] || b[3] + 10 <= a[1]).toBe(true);
+          }
+        }
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+  });
+
+  it("keeps all six function presets valid and editable as existing primitives", () => {
+    for (const fn of ["linear", "quadratic", "sine", "cosine", "exponential", "logarithm"] as const) {
+      for (const quadrants of ["all", "first"] as const) {
+        const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+          params: { grid: true, quadrants, function: fn, keyPoints: true } };
+        const shapes = expandDiagram(block);
+        expect(shapes.some((shape) => shape.type === "polyline")).toBe(true);
+        expect(shapes.every((shape) => shape.type !== "polyline" || shape.points.length <= 40)).toBe(true);
+        expect(validDiagramBlocks([block], 1)).toBe(true);
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+        expect(validatePublishRequest(request([block])).ok).toBe(true);
+        const noMarks = expandDiagram({ ...block, params: { ...block.params, keyPoints: false } });
+        expect(noMarks.filter((shape) => shape.type === "circle")).toHaveLength(0);
+      }
+    }
+    const legacy: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all" } };
+    expect(expandDiagram(legacy).some((shape) => shape.type === "polyline")).toBe(false);
+  });
+
   it("renders a legible off-block downhill arrow only when the physical component is short", () => {
     for (let thetaDeg = 5; thetaDeg <= 60; thetaDeg++) {
       for (const friction of [false, true]) {

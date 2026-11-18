@@ -6,8 +6,11 @@ export const DIAGRAM_LIMITS = {
   maxPoints: 40, maxCaption: 40, maxLabel: 40,
 } as const;
 
-/** Rendered as a localized figure note; attaching it to the visual arrow keeps it on D3 conversion. */
+/** Rendered as a localized figure note; attached to arrow for D3 conversion. */
 export const SHORT_FORCE_SCALE_NOTE = "Short force arrow not to scale.";
+
+export const FUNCTION_PRESETS = ["none", "linear", "quadratic", "sine", "cosine", "exponential", "logarithm"] as const;
+export type FunctionPreset = (typeof FUNCTION_PRESETS)[number];
 
 export const DIAGRAM_TEMPLATES = ["inclined-plane", "right-triangle", "number-line", "coordinate-plane"] as const;
 export type DiagramTemplate = (typeof DIAGRAM_TEMPLATES)[number];
@@ -27,7 +30,7 @@ export type DiagramBlock = DiagramBase & (
   | { template: "inclined-plane"; params: { thetaDeg: number; friction: boolean }; primitives?: never }
   | { template: "right-triangle"; params: { legRatio: number }; primitives?: never }
   | { template: "number-line"; params: { start: number; end: number; step: number }; primitives?: never }
-  | { template: "coordinate-plane"; params: { grid: boolean; quadrants: "all" | "first" }; primitives?: never }
+  | { template: "coordinate-plane"; params: { grid: boolean; quadrants: "all" | "first"; function?: FunctionPreset; keyPoints?: boolean }; primitives?: never }
   | { template?: never; params?: never; primitives: DiagramPrimitive[] }
 );
 
@@ -248,7 +251,95 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
   return result;
 }
 
-function coordinatePlane(grid: boolean, quadrants: "all" | "first"): DiagramPrimitive[] {
+/** Coordinate axes use 78 SVG units per x unit and 76 per y unit. */
+function graphFunction(
+  preset: Exclude<FunctionPreset, "none">, origin: DiagramPoint, left: number, bottom: number,
+  showKeyPoints: boolean,
+): DiagramPrimitive[] {
+  const map = (x: number, y: number) => point(origin[0] + x * 78, origin[1] - y * 76);
+  const xmin = (left - origin[0]) / 78, xmax = (900 - origin[0]) / 78;
+  const ymin = (origin[1] - bottom) / 76, ymax = (origin[1] - 95) / 76;
+  const f = (x: number): number => {
+    switch (preset) {
+      case "linear": return x + 1;
+      case "quadratic": return x * x - 2 * x - 2;
+      case "sine": return Math.sin(x);
+      case "cosine": return Math.cos(x);
+      case "exponential": return 2 ** x;
+      case "logarithm": return Math.log2(x);
+    }
+  };
+  const primitives: DiagramPrimitive[] = [];
+  // Segment clipping avoids drawing through the axes' boundaries or across x=0 for log.
+  const samples = 240, segments: DiagramPoint[][] = [];
+  let current: DiagramPoint[] = [];
+  const clip = (a: [number, number], b: [number, number]): [number, number][] => {
+    let lo = 0, hi = 1;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    for (const [p, q] of [[-dx, a[0] - xmin], [dx, xmax - a[0]],
+      [-dy, a[1] - ymin], [dy, ymax - a[1]]] as [number, number][]) {
+      if (p === 0) { if (q < 0) return []; continue; }
+      const t = q / p;
+      if (p < 0) lo = Math.max(lo, t); else hi = Math.min(hi, t);
+      if (lo > hi) return [];
+    }
+    return [[a[0] + dx * lo, a[1] + dy * lo], [a[0] + dx * hi, a[1] + dy * hi]];
+  };
+  for (let i = 1; i <= samples; i++) {
+    const x0 = xmin + (xmax - xmin) * (i - 1) / samples;
+    const x1 = xmin + (xmax - xmin) * i / samples;
+    // Do not evaluate the logarithm outside its mathematical domain.
+    if (preset === "logarithm" && x1 <= 0) continue;
+    const a: [number, number] = [Math.max(x0, preset === "logarithm" ? 1e-8 : xmin),
+      f(Math.max(x0, preset === "logarithm" ? 1e-8 : xmin))];
+    const b: [number, number] = [x1, f(x1)];
+    if (!Number.isFinite(a[1]) || !Number.isFinite(b[1])) continue;
+    const clipped = clip(a, b);
+    if (!clipped.length) {
+      if (current.length > 1) segments.push(current);
+      current = []; continue;
+    }
+    const [from, to] = clipped.map(([x, y]) => map(x, y));
+    if (current.length && (current[current.length - 1][0] !== from[0] ||
+      current[current.length - 1][1] !== from[1])) {
+      if (current.length > 1) segments.push(current);
+      current = [];
+    }
+    if (!current.length) current.push(from);
+    current.push(to);
+  }
+  if (current.length > 1) segments.push(current);
+  for (const segment of segments) {
+    // Existing primitive contract caps polylines at 40 points. Decimate uniformly.
+    const count = Math.min(DIAGRAM_LIMITS.maxPoints, segment.length);
+    const points = Array.from({ length: count }, (_, i) =>
+      segment[Math.round(i * (segment.length - 1) / (count - 1))]);
+    primitives.push({ type: "polyline", points });
+  }
+  if (!showKeyPoints) return primitives;
+  const marks: Record<Exclude<FunctionPreset, "none">, [number, number, string][]> = {
+    linear: [[-1, 0, "(-1,0)"], [0, 1, "(0,1)"]],
+    quadratic: [[1 - Math.SQRT2, 0, "(1-√2,0)"], [1, -3, "(1,-3)"],
+      [1 + Math.SQRT2, 0, "(1+√2,0)"]],
+    sine: [[0, 0, "O"], [Math.PI / 2, 1, "(π/2,1)"], [Math.PI, 0, "(π,0)"],
+      [3 * Math.PI / 2, -1, "(3π/2,-1)"]],
+    cosine: [[0, 1, "(0,1)"], [Math.PI / 2, 0, "(π/2,0)"], [Math.PI, -1, "(π,-1)"]],
+    exponential: [[0, 1, "(0,1)"]],
+    logarithm: [[1, 0, "(1,0)"], [2, 1, "(2,1)"]],
+  };
+  for (const [x, y, text] of marks[preset]) {
+    if (x < xmin + 0.2 || x > xmax - 0.2 || y < ymin + 0.2 || y > ymax - 0.2) continue;
+    const at = map(x, y);
+    primitives.push({ type: "circle", center: at, r: 5 });
+    // Move annotations off the curve, and avoid overlapping the axes origin label.
+    if (text !== "O") primitives.push(label(point(Math.min(900, at[0] + 65),
+      Math.max(95, at[1] - 42)), text));
+  }
+  return primitives;
+}
+
+function coordinatePlane(grid: boolean, quadrants: "all" | "first",
+  preset: FunctionPreset = "none", keyPoints = true): DiagramPrimitive[] {
   const origin = quadrants === "all" ? point(490, 390) : point(175, 610);
   const left = quadrants === "all" ? 110 : origin[0];
   const bottom = quadrants === "all" ? 655 : origin[1];
@@ -262,6 +353,7 @@ function coordinatePlane(grid: boolean, quadrants: "all" | "first"): DiagramPrim
   result.push(label(point(930, origin[1] + 50), "x"));
   result.push(label(point(origin[0] + 45, 65), "y"));
   result.push(label(point(origin[0] - 40, origin[1] + 50), "O"));
+  if (preset !== "none") result.push(...graphFunction(preset, origin, left, bottom, keyPoints));
   return result;
 }
 
@@ -272,7 +364,8 @@ export function expandDiagram(block: DiagramBlock): DiagramPrimitive[] {
     case "inclined-plane": return inclinedPlane(block.params.thetaDeg, block.params.friction);
     case "right-triangle": return rightTriangle(block.params.legRatio);
     case "number-line": return numberLine(block.params.start, block.params.end, block.params.step);
-    case "coordinate-plane": return coordinatePlane(block.params.grid, block.params.quadrants);
+    case "coordinate-plane": return coordinatePlane(block.params.grid, block.params.quadrants,
+      block.params.function ?? "none", block.params.keyPoints ?? true);
   }
 }
 
@@ -375,7 +468,10 @@ export function validDiagramBlocks(value: unknown, sectionCount: number): value 
           && finite(p.start, -1000, 1000) && finite(p.end, -1000, 1000) && finite(p.step, 0.1, 1000)
           && p.end > p.start && (p.end - p.start) / p.step <= 18 + 1e-8;
       case "coordinate-plane":
-        return keys(p, ["grid", "quadrants"]) && typeof p.grid === "boolean" && ["all", "first"].includes(String(p.quadrants));
+        return keys(p, ["grid", "quadrants", "function", "keyPoints"])
+          && typeof p.grid === "boolean" && ["all", "first"].includes(String(p.quadrants))
+          && (p.function === undefined || FUNCTION_PRESETS.includes(p.function as FunctionPreset))
+          && boolOrMissing(p.keyPoints);
       default:
         return false;
     }
