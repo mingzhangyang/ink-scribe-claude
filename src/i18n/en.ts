@@ -617,7 +617,10 @@ export const en: Messages = {
       caption: "Caption (up to 40 characters)",
       captionPlaceholder: "Briefly describe the diagram (optional)",
       captionLimitNotice: "40-character limit reached",
-      stalePreview: "Preview still shows the last valid parameters. Correct the input to apply changes.",
+      stalePreview: "Number-line parameters are not applied. The canvas shows the saved version; export is paused until you apply or discard.",
+      unappliedBadge: "Unapplied · Export blocked",
+      applyParameters: "Apply parameters",
+      discardParameters: "Discard changes",
       jitterLabel: "Diagram jitter",
       handDrawn: "Natural hand-drawn strokes",
       angle: "Slope angle θ",
@@ -637,6 +640,7 @@ export const en: Messages = {
   },
 
   export: {
+    pendingDiagram: "Unapplied number-line parameters. Return to Content → number line and apply or discard changes before exporting.",
     format: "Format",
     formatLabel: "Export format",
     png: "PNG (lossless)",

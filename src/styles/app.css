@@ -2649,6 +2649,14 @@ a.brand {
 }
 .diagram-detach-warning p { margin: 0; }
 .diagram-detach-warning button { min-height: 44px; }
+.diagram-number-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.diagram-number-actions button { min-height: 44px; }
+.diagram-number-form p { margin: 0; }
 .diagram-preview-stale {
   margin: 6px 0 0;
   padding: 7px 9px;

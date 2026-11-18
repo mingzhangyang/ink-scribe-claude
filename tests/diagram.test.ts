@@ -163,6 +163,34 @@ describe("diagram template geometry", () => {
     }
   });
 
+  it("balances the perpendicular gravity component and support vector", () => {
+    for (const thetaDeg of [5, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const arrows = expandDiagram(block).filter(
+          (shape): shape is Extract<DiagramPrimitive, { type: "arrow" | "line" }> =>
+            shape.type === "arrow",
+        );
+        // Template order: gravity, parallel, perpendicular, N, optionally friction.
+        const perpendicular = arrows[2], normal = arrows[3];
+        if (!perpendicular || !normal) throw new Error("Missing force vectors");
+        const v = [perpendicular.to[0] - perpendicular.from[0],
+          perpendicular.to[1] - perpendicular.from[1]];
+        const n = [normal.to[0] - normal.from[0], normal.to[1] - normal.from[1]];
+        const expectedLength = 160 * Math.cos(thetaDeg * Math.PI / 180);
+        // Coordinates are quantized to 4 decimal places by point().
+        expect(Math.hypot(...v)).toBeCloseTo(expectedLength, 3);
+        expect(Math.hypot(...n)).toBeCloseTo(expectedLength, 3);
+        expect(Math.hypot(...v)).toBeCloseTo(Math.hypot(...n), 3);
+        expect(v[0] + n[0]).toBeCloseTo(0, 3);
+        expect(v[1] + n[1]).toBeCloseTo(0, 3);
+        expect(normal.from).toEqual(perpendicular.from);
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: expandDiagram(block) }], 1)).toBe(true);
+      }
+    }
+  });
+
   it("keeps inclined-plane labels separate from strokes at three key angles", () => {
     for (const thetaDeg of [5, 30, 60]) {
       for (const friction of [false, true]) {

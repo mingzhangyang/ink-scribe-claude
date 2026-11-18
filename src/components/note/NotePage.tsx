@@ -1,6 +1,7 @@
 import { recordLayout } from "../../analytics/creation.ts";
 import { forwardRef, useCallback, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import type { DoodleSpec } from "../../../shared/doodle.ts";
+import type { DiagramBlock } from "../../../shared/diagram.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import { TEMPLATE_DEFAULT_THEME } from "../../../shared/themes.ts";
 import { ACCENTS, byId, fontStack, INKS, PAGE_SIZES, PAGE_WIDTH, PAPERS } from "../../config/appearance.ts";
@@ -9,11 +10,14 @@ import type { Settings } from "../../state/store.ts";
 import { StickerLayer } from "../../stickers/StickerLayer.tsx";
 import type { StickerItem } from "../../stickers/types.ts";
 import { LAYOUTS } from "./layouts.tsx";
+import { PendingDiagramContext } from "./DiagramBlock.tsx";
 import { labelsFor } from "./parts.tsx";
 import { useNoteFit, type NoteFitState } from "./useNoteFit.ts";
 
 type Props = {
   note: NoteStructure;
+  /** Editor-only unsaved diagrams; never present in a published viewer. */
+  pendingDiagramBlocks?: readonly DiagramBlock[];
   settings: Settings;
   stickers: StickerItem[];
   aiDoodle: DoodleSpec | null;
@@ -48,7 +52,7 @@ export function resolveDoodle(note: NoteStructure, settings: Settings, aiDoodle:
  * 导出时直接对该节点按 1x/2x/3x 渲染，保证字体、贴纸位置和旋转完全一致。
  */
 export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
-  { note, settings: authoredSettings, stickers, aiDoodle, selectedStickerId, interactive, displayScale, onSelectSticker, onChangeSticker, onRemoveSticker, onFitChange },
+  { note, pendingDiagramBlocks, settings: authoredSettings, stickers, aiDoodle, selectedStickerId, interactive, displayScale, onSelectSticker, onChangeSticker, onRemoveSticker, onFitChange },
   ref,
 ) {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
@@ -107,6 +111,7 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
       lang={labels.lang}
       aria-busy={fit.status === "pending"}
       data-render-status={fit.status}
+      data-diagrams-unapplied={pendingDiagramBlocks?.length ? "true" : undefined}
       data-page-size={settings.pageSize}
       data-render-expanded={fit.expanded}
       className={`note-page paper-${paper.id} layout-${settings.layout}${height ? "" : " is-long"}`}
@@ -115,7 +120,9 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
         if (interactive && !(event.target as HTMLElement).closest(".sticker")) onSelectSticker(null);
       }}
     >
-      <Layout note={note} labels={labels} seed={settings.seed} naturalness={settings.naturalness} doodle={doodle} />
+      <PendingDiagramContext.Provider value={pendingDiagramBlocks ?? []}>
+        <Layout note={note} labels={labels} seed={settings.seed} naturalness={settings.naturalness} doodle={doodle} />
+      </PendingDiagramContext.Provider>
       <StickerLayer
         stickers={stickers}
         selectedId={selectedStickerId}

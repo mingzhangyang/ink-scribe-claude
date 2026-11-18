@@ -338,7 +338,10 @@ export const zh = {
       caption: "图注（最多 40 字）",
       captionPlaceholder: "简短说明图中内容（可留空）",
       captionLimitNotice: "已达 40 字上限",
-      stalePreview: "当前画布仍显示上一次有效参数；请修正输入后重试。",
+      stalePreview: "数轴参数尚未应用；画布显示已保存的版本，应用或取消前无法导出。",
+      unappliedBadge: "参数未应用 · 禁止导出",
+      applyParameters: "应用参数",
+      discardParameters: "取消修改",
       jitterLabel: "单图手绘抖动",
       handDrawn: "自然手绘线条",
       angle: "倾角 θ",
@@ -358,6 +361,7 @@ export const zh = {
   },
 
   export: {
+    pendingDiagram: "数轴存在未应用参数。请返回「内容」→ 数轴，应用或取消修改后再导出。",
     format: "格式",
     formatLabel: "导出格式",
     png: "PNG（无损）",

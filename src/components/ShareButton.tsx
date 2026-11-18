@@ -4,6 +4,7 @@ import { byId, PAPERS, usedFamilies } from "../config/appearance.ts";
 import { downloadBlob, fileNameFor, renderNoteBlob } from "../export/exportImage.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
+import { hasUnappliedNumberLines, useNumberLineDrafts } from "../diagrams/numberLineDrafts.ts";
 import type { NoteFitState } from "./note/useNoteFit.ts";
 
 /** 生成图片时的笔记状态：任一项变化后，之前生成的图片就不再对应当前画布。 */
@@ -24,6 +25,8 @@ export function ShareButton({ pageRef, fit, onToast }: {
   onToast: (message: string) => void;
 }) {
   const note = useNoteStore((s) => s.note);
+  const noteSerial = useNoteStore((s) => s.noteSerial);
+  const drafts = useNumberLineDrafts((s) => s.drafts);
   const settings = useNoteStore((s) => s.settings);
   const stickers = useNoteStore((s) => s.stickers);
   const aiDoodle = useNoteStore((s) => s.aiDoodle);
@@ -37,7 +40,12 @@ export function ShareButton({ pageRef, fit, onToast }: {
   if (!note) return null;
   const snapshot: Snapshot = [note, settings, stickers, aiDoodle];
   const preparing = phase === "preparing";
-  const disabled = phase !== "idle" || generating || fit?.status !== "ready";
+  const unapplied = hasUnappliedNumberLines(note, noteSerial, drafts);
+  const disabled = phase !== "idle" || generating || fit?.status !== "ready" || unapplied;
+  const hasPending = () => {
+    const current = useNoteStore.getState();
+    return hasUnappliedNumberLines(current.note, current.noteSerial, useNumberLineDrafts.getState().drafts);
+  };
 
   function cachedFile(): File | null {
     const cached = prepared.current;
@@ -61,7 +69,7 @@ export function ShareButton({ pageRef, fit, onToast }: {
 
   async function prepareAndShare(outcome: ReturnType<typeof captureCreationOutcome>) {
     const node = pageRef.current;
-    if (!node) return;
+    if (!node || hasPending()) return;
     setPhase("preparing");
     selectSticker(null);
     try {
@@ -71,6 +79,7 @@ export function ShareButton({ pageRef, fit, onToast }: {
         families: usedFamilies(settings.zhFont, settings.enFont),
         background: byId(PAPERS, settings.paper).base,
       });
+      if (hasPending()) throw new Error("Unapplied diagram");
       const file = new File([blob], fileNameFor(note!.title, "png"), { type: "image/png" });
       if (!canShareFile(file)) {
         downloadBlob(blob, file.name);
@@ -90,7 +99,7 @@ export function ShareButton({ pageRef, fit, onToast }: {
 
   function handleClick() {
     // 已有对应当前画布的图片时在点击事件中同步调用分享，保留用户手势
-    if (disabled) return;
+    if (disabled || hasPending()) return;
     const outcome = captureCreationOutcome();
     const file = cachedFile();
     if (file) void share(file, true, outcome);

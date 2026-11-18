@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { DIAGRAM_LIMITS, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import { editDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
+import { activeNumberLineDraft, numberLineFields, parseNumberLineFields, useNumberLineDrafts } from "../diagrams/numberLineDrafts.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -34,71 +35,26 @@ export function TemplateGlyph({ template }: { template: DiagramTemplate }) {
   }
 }
 
-/** Keep exact decimal inputs while presenting floating-point32 artifacts naturally. */
-function displayParameterNumber(value: number): string {
-  const rounded = Number(value.toPrecision(8));
-  return Number.isFinite(rounded) && rounded !== value && Math.fround(rounded) === value
-    ? String(rounded) : String(value);
-}
-
-function NumberParameter({
-  label, value, min, max, onCommit, invalidMessage, staleMessage, onDraftState,
-}: {
-  label: string; value: number; min: number; max: number;
-  onCommit: (next: number) => boolean; invalidMessage: string; staleMessage: string;
-  onDraftState?: (dirty: boolean) => void;
+/** Number-line parameters are an atomic draft, never committed individually. */
+function NumberParameter({ label, value, onChange, onCancel, invalid }: {
+  label: string;
+  value: string;
+  onChange: (raw: string) => void;
+  onCancel: () => void;
+  invalid: boolean;
 }) {
-  const [draft, setDraft] = useState(displayParameterNumber(value));
-  const [invalid, setInvalid] = useState(false);
-  // Escape resets the draft, but React has not flushed that state by the following blur.
-  const cancelNextBlur = useRef(false);
-  useEffect(() => { setDraft(displayParameterNumber(value)); setInvalid(false); }, [value]);
-
-  const commit = () => {
-    const number = Number(draft);
-    if (!draft.trim() || !Number.isFinite(number) || number < min || number > max) {
-      setInvalid(true);
-      return;
-    }
-    if (number === value) {
-      setDraft(displayParameterNumber(value));
-      setInvalid(false);
-      onDraftState?.(false);
-      return;
-    }
-    const accepted = onCommit(number);
-    setInvalid(!accepted);
-    if (accepted) {
-      setDraft(displayParameterNumber(number));
-      onDraftState?.(false);
-    }
-  };
-
   return <label className="diagram-number">
     <span>{label}</span>
-    <input type="number" inputMode="decimal" step="any" min={min} max={max}
-      value={draft} aria-label={label} aria-invalid={invalid}
-      onChange={(event) => {
-        setDraft(event.target.value);
-        setInvalid(false);
-        onDraftState?.(event.target.value !== displayParameterNumber(value));
-      }}
-      onBlur={() => {
-        if (cancelNextBlur.current) { cancelNextBlur.current = false; return; }
-        commit();
-      }}
+    <input type="number" inputMode="decimal" step="any" value={value}
+      aria-label={label} aria-invalid={invalid}
+      onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") {
           event.preventDefault();
-          cancelNextBlur.current = true;
-          setDraft(displayParameterNumber(value));
-          setInvalid(false);
-          onDraftState?.(false);
+          onCancel();
           event.currentTarget.blur();
         }
       }} />
-    {invalid ? <span className="hint is-warn" role="alert">{invalidMessage} {staleMessage}</span> : null}
   </label>;
 }
 
@@ -130,11 +86,16 @@ function CaptionParameter({ caption, label, placeholder, onCommit }: {
   </label>;
 }
 
-function DiagramParameters({ block, index, onDraftState }: {
-  block: DiagramBlock; index: number; onDraftState: (key: string, dirty: boolean) => void;
-}) {
+function DiagramParameters({ block, index }: { block: DiagramBlock; index: number }) {
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
+  const note = useNoteStore((s) => s.note);
+  const noteSerial = useNoteStore((s) => s.noteSerial);
+  const drafts = useNumberLineDrafts((s) => s.drafts);
+  const setField = useNumberLineDrafts((s) => s.setField);
+  const apply = useNumberLineDrafts((s) => s.apply);
+  const discard = useNumberLineDrafts((s) => s.discard);
+  const numberPending = activeNumberLineDraft(note, noteSerial, index, drafts);
   // Pass concrete discriminants to the shared editor. Generic Extract<T> at a
   // higher-order callback boundary is not reliably assignable under TypeScript 7.
   const changeSlope = (patch: Partial<Extract<DiagramBlock, { template: "inclined-plane" }>["params"]>) =>
@@ -143,15 +104,7 @@ function DiagramParameters({ block, index, onDraftState }: {
     updateDiagram((note) => updateTemplateParams(note, index, "right-triangle", patch));
   const changeAxes = (patch: Partial<Extract<DiagramBlock, { template: "coordinate-plane" }>["params"]>) =>
     updateDiagram((note) => updateTemplateParams(note, index, "coordinate-plane", patch));
-  const changeNumberLine = (key: "start" | "end" | "step", value: number) => {
-    let accepted = false;
-    updateDiagram((note) => {
-      const next = updateTemplateParams(note, index, "number-line", { [key]: value });
-      accepted = next !== note;
-      return next;
-    });
-    return accepted;
-  };
+
 
   switch (block.template) {
     case "inclined-plane":
@@ -178,24 +131,30 @@ function DiagramParameters({ block, index, onDraftState }: {
               changeTriangle({ legRatio: Number(Number(event.target.value).toFixed(2)) })} />
         </label>
       </div>;
-    case "number-line":
-      return <div className="diagram-parameters">
+    case "number-line": {
+      const fields = numberPending?.fields ?? numberLineFields(block.params);
+      const invalid = !!numberPending && !parseNumberLineFields(fields);
+      return <form className="diagram-parameters diagram-number-form"
+        onSubmit={(event) => { event.preventDefault(); if (!invalid) apply(index); }}>
         <div className="diagram-number-grid">
-          <NumberParameter label={t.start} value={block.params.start} min={-1000} max={1000}
-            invalidMessage={t.invalidRange} staleMessage={t.stalePreview}
-            onDraftState={(dirty) => onDraftState("start", dirty)}
-            onCommit={(value) => changeNumberLine("start", value)} />
-          <NumberParameter label={t.end} value={block.params.end} min={-1000} max={1000}
-            invalidMessage={t.invalidRange} staleMessage={t.stalePreview}
-            onDraftState={(dirty) => onDraftState("end", dirty)}
-            onCommit={(value) => changeNumberLine("end", value)} />
-          <NumberParameter label={t.step} value={block.params.step} min={0.1} max={1000}
-            invalidMessage={t.invalidRange} staleMessage={t.stalePreview}
-            onDraftState={(dirty) => onDraftState("step", dirty)}
-            onCommit={(value) => changeNumberLine("step", value)} />
+          <NumberParameter label={t.start} value={fields.start} invalid={invalid}
+            onChange={(value) => setField(index, "start", value)} onCancel={() => discard(index)} />
+          <NumberParameter label={t.end} value={fields.end} invalid={invalid}
+            onChange={(value) => setField(index, "end", value)} onCancel={() => discard(index)} />
+          <NumberParameter label={t.step} value={fields.step} invalid={invalid}
+            onChange={(value) => setField(index, "step", value)} onCancel={() => discard(index)} />
         </div>
         <p className="hint">{t.tickLimit}</p>
-      </div>;
+        {numberPending ? <>
+          <p className="hint is-warn diagram-preview-stale" role="status">{t.stalePreview}</p>
+          {invalid ? <p className="hint is-warn" role="alert">{t.invalidRange}</p> : null}
+          <div className="diagram-number-actions">
+            <button type="submit" className="btn btn-primary" disabled={invalid}>{t.applyParameters}</button>
+            <button type="button" className="btn btn-link" onClick={() => discard(index)}>{t.discardParameters}</button>
+          </div>
+        </> : null}
+      </form>;
+    }
     case "coordinate-plane":
       return <div className="diagram-parameters">
         <label className="diagram-check">
@@ -225,16 +184,20 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
   const note = useNoteStore((s) => s.note);
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
   const t = useT().content.diagrams;
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const drafts = useNumberLineDrafts((s) => s.drafts);
+  const noteSerial = useNoteStore((s) => s.noteSerial);
+  // Content unmounts on the Export tab. Restore a pending inspector on remount
+  // so the user can immediately apply or discard the still-active draft.
+  const [expanded, setExpanded] = useState<number | null>(() => {
+    const pendingIndex = note?.diagrams?.findIndex((block, index) =>
+      block.afterSection === sectionIndex
+      && activeNumberLineDraft(note, noteSerial, index, drafts) !== null);
+    return pendingIndex !== undefined && pendingIndex >= 0 ? pendingIndex : null;
+  });
   const [confirmRemoval, setConfirmRemoval] = useState<number | null>(null);
   const [shapeMode, setShapeMode] = useState<number | null>(null);
-  const [staleFields, setStaleFields] = useState<Record<string, boolean>>({});
   // A section reorder, undo (D3) or document reload must never confirm deletion of another block.
   useEffect(() => { setConfirmRemoval(null); }, [note?.diagrams]);
-  const onDraftState = (key: string, dirty: boolean) => setStaleFields((old) => {
-    if (!!old[key] === dirty) return old;
-    return { ...old, [key]: dirty };
-  });
   if (!note) return null;
 
   const diagrams = note.diagrams ?? [];
@@ -250,7 +213,6 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
             aria-controls={"diagram-inspector-" + sectionIndex + "-" + index}
             onClick={() => {
               setConfirmRemoval(null);
-              setStaleFields({});
               setExpanded(expanded === index ? null : index);
             }}>
             <span aria-hidden="true">{expanded === index ? "▾" : "▸"}</span>
@@ -278,10 +240,10 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
           {shapeMode === index
             ? <PrimitiveEditor block={block} index={index} />
             : <div className="diagram-edit-preview" aria-label={t.preview}>
-              <DiagramBlockView block={block} seed={1978} />
-              {Object.values(staleFields).some(Boolean) && <p className="hint is-warn diagram-preview-stale" role="status">{t.stalePreview}</p>}
+              <DiagramBlockView block={block} seed={1978}
+                pending={!!activeNumberLineDraft(note, noteSerial, index, drafts)} />
             </div>}
-          <DiagramParameters block={block} index={index} onDraftState={onDraftState} />
+          <DiagramParameters block={block} index={index} />
           <CaptionParameter key={"caption-" + index} caption={block.caption ?? ""}
             label={t.caption} placeholder={t.captionPlaceholder}
             onCommit={(value) => updateDiagram((current) => setDiagramCaption(current, index, value))} />

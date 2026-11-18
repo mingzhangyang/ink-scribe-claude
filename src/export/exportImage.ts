@@ -78,6 +78,12 @@ function releaseAutoSizes(cloned: Node): void {
 
 export async function renderNoteBlob(node: HTMLElement, options: ExportOptions): Promise<{ blob: Blob; scale: number }> {
   if (node.dataset.renderStatus !== "ready") throw new Error("Note layout is not ready for export");
+  // Defense in depth: caller buttons are disabled as soon as any number-line
+  // parameter draft is dirty, and direct export APIs must reject the same DOM.
+  if (node.dataset.diagramsUnapplied === "true"
+    || node.querySelector('[data-diagram-unapplied="true"]')) {
+    throw new Error("Unapplied diagram parameters must be corrected before export");
+  }
   const snapshot = snapshotNode(node);
   try {
     const text = `${snapshot.textContent ?? ""}${CSS_GENERATED_CHARS}`;
