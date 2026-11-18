@@ -47,6 +47,73 @@ export function inclinedPlaneForces(thetaDeg: number, gravity = 160): {
   return { gravity: point(0, gravity), parallel, perpendicular, support: scale(perpendicular, -1) };
 }
 
+type Bounds = [number, number, number, number];
+/** Approximate painted glyph extents in normalized SVG units, including paper outline. */
+function inclineTextBounds(text: string, at: DiagramPoint): Bounds {
+  const units = Array.from(text).reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+  const half = Math.max(19, units * 14);
+  return [at[0] - half, at[1] - 32, at[0] + half, at[1] + 32];
+}
+function boxesIntersect(a: Bounds, b: Bounds, gap = 10): boolean {
+  return a[0] < b[2] + gap && a[2] + gap > b[0] && a[1] < b[3] + gap && a[3] + gap > b[1];
+}
+/** Exact segment-vs-expanded-rectangle intersection (Liang-Barsky clipping). */
+function segmentTouchesLabel(a: DiagramPoint, b: DiagramPoint, rect: Bounds): boolean {
+  const x0 = a[0], y0 = a[1], dx = b[0] - x0, dy = b[1] - y0;
+  const minX = rect[0] - 9, minY = rect[1] - 9, maxX = rect[2] + 9, maxY = rect[3] + 9;
+  const tests: [number, number][] = [
+    [-dx, x0 - minX], [dx, maxX - x0],
+    [-dy, y0 - minY], [dy, maxY - y0],
+  ];
+  let start = 0, end = 1;
+  for (const [p, q] of tests) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const r = q / p;
+    if (p < 0) start = Math.max(start, r);
+    else end = Math.min(end, r);
+    if (start > end) return false;
+  }
+  return true;
+}
+
+/** Labels retain independent SVG primitives, so no arrow can dictate their anchor. */
+function placeInclineLabels(
+  specs: { text: string; near: DiagramPoint }[],
+  strokes: [DiagramPoint, DiagramPoint][],
+): Label[] {
+  const chosen: Label[] = [];
+  for (const spec of specs) {
+    let result: DiagramPoint | null = null;
+    // Search increasingly larger rings around the vector tip. This considers
+    // text/text and text/line clearance, not just anchor-point distance.
+    for (let ring = 0; ring < 20 && !result; ring++) {
+      const candidates: { distance: number; at: DiagramPoint }[] = [];
+      for (let dx = -ring; dx <= ring; dx++) {
+        for (let dy = -ring; dy <= ring; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const at = point(Math.round(spec.near[0] + dx * 30), Math.round(spec.near[1] + dy * 30));
+          const rect = inclineTextBounds(spec.text, at);
+          // The label layout helper clamps by its estimated string width. Keep
+          // positions inside the same safe region to avoid a render-time jump.
+          const units = Array.from(spec.text).reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+          const minX = Math.max(90, 20 + Math.min(960, units * 30) / 2);
+          if (at[0] < minX || at[0] > DIAGRAM_LIMITS.width - minX
+            || rect[0] < 23 || rect[2] > 977 || rect[1] < 56 || rect[3] > 695) continue;
+          if (chosen.some((existing) => boxesIntersect(rect, inclineTextBounds(existing.text, existing.at)))) continue;
+          if (strokes.some(([from, to]) => segmentTouchesLabel(from, to, rect))) continue;
+          candidates.push({ distance: dx * dx + dy * dy, at });
+        }
+      }
+      candidates.sort((a, b) => a.distance - b.distance);
+      if (candidates[0]) result = candidates[0].at;
+    }
+    // Valid template inputs always have room; the fallback is defensive for
+    // unexpected geometry rather than silently omitting physics annotations.
+    chosen.push(label(result ?? point(500, 375), spec.text));
+  }
+  return chosen;
+}
+
 function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] {
   const angle = thetaDeg * Math.PI / 180;
   const tangent = point(Math.cos(angle), -Math.sin(angle));
@@ -60,9 +127,6 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
   const down = add(center, vectors.gravity);
   const support = add(center, scale(vectors.support, 0.55));
   const frictionTip = add(center, scale(tangent, 110));
-  // A short parallel component must not pin all text next to the block.
-  // Anchor labels to their actual vector tips with side-specific clearances.
-  const sineY = along[1] + (thetaDeg >= 50 ? 75 : -65);
   const elements: DiagramPrimitive[] = [
     line(base, top),
     { type: "rect", at: point(center[0] - 36, center[1] - 27), width: 72, height: 54, rotation: -thetaDeg },
@@ -73,18 +137,33 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     line(across, down, { dashed: true }),
     arrow(center, support),
     { type: "arc", center: base, radius: 65, startDeg: -thetaDeg, sweepDeg: thetaDeg },
-    label(point(along[0] - 130, sineY), "mg sinθ"),
-    label(point(across[0] + 130, Math.min(670, across[1])), "mg cosθ"),
-    label(point(center[0] + Math.max(0, thetaDeg - 20) * 3, Math.min(680, down[1] + 50)), "mg"),
-    label(point(support[0] - 75, support[1] - 70), "N"),
-    // At 5° the angle wedge is thinner than its text: place the annotation below the slope.
-    label(point(285, 675), "θ = " + thetaDeg + "°"),
   ];
+  const strokes: [DiagramPoint, DiagramPoint][] = [
+    [base, top], [center, down], [center, along], [center, across],
+    [along, down], [across, down], [center, support],
+  ];
+  // Include the rotated block and the angle arc in collision detection.
+  const corners: DiagramPoint[] = [[-36, -27], [36, -27], [36, 27], [-36, 27]].map(([x, y]) =>
+    point(center[0] + x * Math.cos(-angle) - y * Math.sin(-angle),
+      center[1] + x * Math.sin(-angle) + y * Math.cos(-angle)));
+  for (let i = 0; i < corners.length; i++) strokes.push([corners[i], corners[(i + 1) % corners.length]]);
+  const wedge = Array.from({ length: 21 }, (_, i) =>
+    point(base[0] + 65 * Math.cos(angle * (i / 20 - 1)),
+      base[1] + 65 * Math.sin(angle * (i / 20 - 1))));
+  for (let i = 1; i < wedge.length; i++) strokes.push([wedge[i - 1], wedge[i]]);
   if (friction) {
     elements.push(arrow(center, frictionTip));
-    elements.push(label(point(frictionTip[0] + 130, frictionTip[1] - 55), "f"));
+    strokes.push([center, frictionTip]);
   }
-  return elements;
+  const labels = [
+    { text: "mg sinθ", near: add(along, point(-140, -90)) },
+    { text: "mg cosθ", near: add(across, point(140, 0)) },
+    { text: "N", near: add(support, point(-90, -65)) },
+    { text: "mg", near: add(down, point(-65, -35)) },
+    ...(friction ? [{ text: "f", near: add(frictionTip, point(90, -90)) }] : []),
+    { text: "θ = " + thetaDeg + "°", near: add(base, point(105, 80)) },
+  ];
+  return [...elements, ...placeInclineLabels(labels, strokes)];
 }
 
 function rightTriangle(legRatio: number): DiagramPrimitive[] {
