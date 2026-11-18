@@ -2636,6 +2636,26 @@ a.brand {
 
 
 /* D3: editing overlay only lives in the inspector, never inside exported NotePage. */
+/* A template warns before the first irreversible geometry edit. */
+.diagram-detach-warning {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.diagram-detach-warning p { margin: 0; }
+.diagram-detach-warning button { min-height: 44px; }
+.diagram-preview-stale {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+.diagram-caption small { display: block; margin-top: 3px; }
 .diagram-shape-mode { align-self: flex-start; min-height: 44px; }
 .diagram-primitive-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .diagram-edit-toolbar {
