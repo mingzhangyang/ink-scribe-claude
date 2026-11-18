@@ -35,11 +35,14 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         performance.now() - start < 10000);
       check("D2-" + viewport + "-inline", "New diagram renders inline with original section",
         await page.locator('.note-page .note-section').first().locator(".diagram-block").count() === 1);
-      const range = first.locator('.diagram-range input[type="range"]');
+      // Restrict the control and value assertion to template parameters; the
+      // inspector also has an independent hand-drawn jitter slider.
+      const angle = first.locator(".diagram-parameters .diagram-range");
+      const range = angle.getByRole("slider", { name: cn ? "倾角 θ" : "Slope angle θ", exact: true });
       await range.focus();
       await range.press("End");
       check("D2-" + viewport + "-angle", "Inclined-plane angle updates the editor",
-        await first.locator(".diagram-range strong").innerText() === "60°");
+        await angle.locator("strong").innerText() === "60°");
       const caption = first.locator(".diagram-caption input");
       await caption.fill(cn ? "斜面力分解" : "Slope vectors");
       await caption.blur();
