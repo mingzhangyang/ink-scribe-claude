@@ -59,18 +59,31 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
   const across = add(center, vectors.perpendicular);
   const down = add(center, vectors.gravity);
   const support = add(center, scale(vectors.support, 0.55));
+  const frictionTip = add(center, scale(tangent, 110));
+  // A short parallel component must not pin all text next to the block.
+  // Anchor labels to their actual vector tips with side-specific clearances.
+  const sineY = along[1] + (thetaDeg >= 50 ? 75 : -65);
   const elements: DiagramPrimitive[] = [
     line(base, top),
     { type: "rect", at: point(center[0] - 36, center[1] - 27), width: 72, height: 54, rotation: -thetaDeg },
-    arrow(center, down, "mg"),
-    arrow(center, along, "mg sinθ"),
-    arrow(center, across, "mg cosθ"),
+    arrow(center, down),
+    arrow(center, along),
+    arrow(center, across),
     line(along, down, { dashed: true }),
     line(across, down, { dashed: true }),
-    arrow(center, support, "N"),
-    { type: "arc", center: base, radius: 65, startDeg: -thetaDeg, sweepDeg: thetaDeg, label: "θ = " + thetaDeg + "°" },
+    arrow(center, support),
+    { type: "arc", center: base, radius: 65, startDeg: -thetaDeg, sweepDeg: thetaDeg },
+    label(point(along[0] - 130, sineY), "mg sinθ"),
+    label(point(across[0] + 130, Math.min(670, across[1])), "mg cosθ"),
+    label(point(center[0] + Math.max(0, thetaDeg - 20) * 3, Math.min(680, down[1] + 50)), "mg"),
+    label(point(support[0] - 75, support[1] - 70), "N"),
+    // At 5° the angle wedge is thinner than its text: place the annotation below the slope.
+    label(point(285, 675), "θ = " + thetaDeg + "°"),
   ];
-  if (friction) elements.push(arrow(center, add(center, scale(tangent, 110)), "f"));
+  if (friction) {
+    elements.push(arrow(center, frictionTip));
+    elements.push(label(point(frictionTip[0] + 130, frictionTip[1] - 55), "f"));
+  }
   return elements;
 }
 
@@ -121,11 +134,23 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
     else ticks[ticks.length - 1] = end; // Defensive cap for direct callers with invalid parameters.
   }
   const labels = numberLineTickLabels(ticks);
+  const positions = ticks.map((value) => left + 34 + (right - left - 85) * (value - start) / (end - start));
+  // Preserve every tick mark and both endpoint values. Show intermediate
+  // labels only when their estimated text extents have sufficient separation.
+  const width = (text: string) => Array.from(text).reduce((sum, char) => sum + (char.charCodeAt(0) < 128 ? 27 : 32), 0);
+  const visible = new Set([0, ticks.length - 1]);
+  let previous = 0;
+  for (let i = 1; i < ticks.length - 1; i++) {
+    if (positions[i] - positions[previous] < (width(labels[i]) + width(labels[previous])) / 2 + 20) continue;
+    if (positions[ticks.length - 1] - positions[i]
+      < (width(labels[i]) + width(labels[ticks.length - 1])) / 2 + 20) continue;
+    visible.add(i);
+    previous = i;
+  }
   for (let i = 0; i < ticks.length; i++) {
-    const value = ticks[i];
-    const x = left + 34 + (right - left - 85) * (value - start) / (end - start);
+    const x = positions[i];
     result.push(line(point(x, y - 16), point(x, y + 16)));
-    result.push(label(point(x, y + 62), labels[i]));
+    if (visible.has(i)) result.push(label(point(x, y + 62), labels[i]));
   }
   return result;
 }
