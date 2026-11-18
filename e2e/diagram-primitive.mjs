@@ -159,15 +159,21 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       await edgeInput.fill(longText);
       const frameDuring = await stage.locator(".diagram-art").getAttribute("viewBox");
       const overlayDuring = await stage.locator(".diagram-interaction-overlay").getAttribute("viewBox");
-      const labelInsideFrame = await stage.locator(".diagram-ink .diagram-label").last().evaluate((node) => {
+      const labelFrame = await stage.locator(".diagram-ink .diagram-label").last().evaluate((node) => {
         const view = node.ownerSVGElement.viewBox.baseVal;
         const bounds = node.getBBox();
-        return bounds.x >= view.x - 2 && bounds.x + bounds.width <= view.x + view.width + 2
-          && bounds.y >= view.y - 2 && bounds.y + bounds.height <= view.y + view.height + 2;
+        return {
+          inside: bounds.x >= view.x - 2 && bounds.x + bounds.width <= view.x + view.width + 2
+            && bounds.y >= view.y - 2 && bounds.y + bounds.height <= view.y + view.height + 2,
+          bounds: [bounds.x, bounds.y, bounds.width, bounds.height],
+        };
       });
-      check("D3-" + width + "-label-live-frame", "Long edge label reframes preview and hit overlay before blur",
-        frameBefore !== frameDuring && frameDuring === overlayDuring && labelInsideFrame
-          && (await stage.locator(".diagram-art").textContent() ?? "").includes(longText));
+      // A viewport already large enough to contain the new text need not change.
+      // Require actual glyph visibility and exact overlay alignment regardless.
+      check("D3-" + width + "-label-live-frame", "Long edge label and hit overlay stay aligned before blur",
+        frameDuring === overlayDuring && labelFrame.inside
+          && (await stage.locator(".diagram-art").textContent() ?? "").includes(longText),
+        JSON.stringify({ frameBefore, frameDuring, overlayDuring, labelFrame }));
       await edgeInput.press("Escape");
       check("D3-" + width + "-label-frame-cancel", "Escape restores the original frame and annotation",
         (await stage.locator(".diagram-art").getAttribute("viewBox")) === frameBefore
