@@ -62,6 +62,11 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       await quick.getByRole("button", { name: zh ? "插入直角三角形" : "Insert Right triangle" }).click();
       await quick.getByRole("button", { name: zh ? "编辑参数" : "Edit parameters" }).click();
       await first.locator(".diagram-shape-mode").click();
+      // A template cannot turn into freehand primitives without an explicit warning.
+      const confirm = first.getByRole("button", { name: zh ? "继续精细编辑" : "Continue to fine edit" });
+      check("D3-" + width + "-detach-warning", "Template conversion is confirmed explicitly",
+        await confirm.isVisible());
+      await confirm.click();
       const stage = first.locator(".diagram-primitive-stage");
       await stage.waitFor();
       const target = first.locator(".diagram-shape-target").first();
@@ -106,11 +111,12 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       const hitGeometry = await arcHit.evaluate((node) => {
         const svg = node.ownerSVGElement;
         const rect = svg.getBoundingClientRect();
+        const box = svg.viewBox.baseVal;
         const at = (angle) => {
           const radians = angle * Math.PI / 180;
           return [
-            rect.left + (500 + 160 * Math.cos(radians)) * rect.width / 1000,
-            rect.top + (375 + 160 * Math.sin(radians)) * rect.height / 750,
+            rect.left + (500 + 160 * Math.cos(radians) - box.x) * rect.width / box.width,
+            rect.top + (375 + 160 * Math.sin(radians) - box.y) * rect.height / box.height,
           ];
         };
         const hit = (point) => document.elementsFromPoint(...point).includes(node);
@@ -149,7 +155,7 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
         const bodyFont = text ? parseFloat(getComputedStyle(text).fontSize) : 0;
         const fonts = Array.from(node.querySelectorAll(".diagram-label")).map((label) => {
           const svg = label.closest("svg");
-          const scale = svg ? svg.getBoundingClientRect().width / 1000 : 0;
+          const scale = svg ? svg.getBoundingClientRect().width / svg.viewBox.baseVal.width : 0;
           return parseFloat(getComputedStyle(label).fontSize) * scale;
         });
         return {
