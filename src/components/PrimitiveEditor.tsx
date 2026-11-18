@@ -6,7 +6,7 @@ import {
   moveFromPointers, resizeShape, rotateFromPointers, shapeCenter, shapeHandles,
 } from "../diagrams/geometry.ts";
 import { editDiagram } from "../diagrams/editor.ts";
-import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout } from "../diagrams/svg-geometry.ts";
+import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout, diagramViewport } from "../diagrams/svg-geometry.ts";
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
@@ -24,9 +24,10 @@ const primitiveTypes = [
 
 function pointerPosition(svg: SVGSVGElement, event: PointerEvent<SVGElement>): P {
   const rect = svg.getBoundingClientRect();
+  const view = svg.viewBox.baseVal;
   return [
-    Math.max(0, Math.min(DIAGRAM_LIMITS.width, (event.clientX - rect.left) * DIAGRAM_LIMITS.width / rect.width)),
-    Math.max(0, Math.min(DIAGRAM_LIMITS.height, (event.clientY - rect.top) * DIAGRAM_LIMITS.height / rect.height)),
+    Math.max(0, Math.min(DIAGRAM_LIMITS.width, view.x + (event.clientX - rect.left) * view.width / rect.width)),
+    Math.max(0, Math.min(DIAGRAM_LIMITS.height, view.y + (event.clientY - rect.top) * view.height / rect.height)),
   ];
 }
 function labelText(shape: Primitive): string | null {
@@ -163,6 +164,9 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     gestureRef.current = null;
   }, [block]);
 
+  // Freeze framing to the committed diagram during a pointer gesture; resizing
+  // must not move the handles underneath the pointer.
+  const viewport = diagramViewport(block);
   const primitives = expandDiagram(working);
   const currentIndex = selected !== null && primitives[selected] ? selected : null;
   const current = currentIndex !== null ? primitives[currentIndex] : null;
@@ -279,9 +283,9 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
         onChange={(event) => setShowGrid(event.target.checked)} />{t.snapGrid}</label>
     </div>
     <div className="diagram-primitive-stage">
-      <DiagramBlockView block={working} seed={1978} />
+      <DiagramBlockView block={working} seed={1978} viewport={viewport} />
       <svg ref={stageRef} className="diagram-interaction-overlay"
-        viewBox="0 0 1000 750" aria-label={t.shapeCanvas}
+        viewBox={viewport.join(" ")} aria-label={t.shapeCanvas}
         onPointerMove={onPointerMove} onPointerUp={(event) => release(event, false)}
         onPointerCancel={(event) => release(event, true)}
         onLostPointerCapture={() => {
