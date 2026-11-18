@@ -1,4 +1,4 @@
-import { DIAGRAM_LIMITS, expandDiagram, type DiagramBlock, type DiagramPoint } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, expandDiagram, SHORT_FORCE_SCALE_NOTE, type DiagramBlock, type DiagramPoint } from "../../shared/diagram.ts";
 
 /** The visible arc and its editing hit path must use identical SVG geometry. */
 export function diagramArcPath(center: DiagramPoint, radius: number, start: number, sweep: number): string {
@@ -61,7 +61,8 @@ export function diagramViewport(block: DiagramBlock): DiagramViewport {
       case "line":
       case "arrow":
         add(shape.from); add(shape.to);
-        if (shape.label) text(diagramArrowLabelPosition(shape.from, shape.to), shape.label);
+        if (shape.label && shape.label !== SHORT_FORCE_SCALE_NOTE)
+          text(diagramArrowLabelPosition(shape.from, shape.to), shape.label);
         break;
       case "polyline": shape.points.forEach(add); break;
       case "rect": {

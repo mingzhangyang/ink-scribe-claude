@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  expandDiagram, inclinedPlaneForces, validDiagramBlocks,
+  expandDiagram, inclinedPlaneForces, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks,
   type DiagramBlock, type DiagramPrimitive,
 } from "../shared/diagram.ts";
 import { readDocument } from "../shared/document.ts";
@@ -11,6 +11,7 @@ import { validatePublishRequest, validatePublishedNote } from "../shared/publish
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { diagramLabelLayout, diagramViewport } from "../src/diagrams/svg-geometry.ts";
+import { materializeDiagram } from "../src/diagrams/geometry.ts";
 import { LAYOUTS } from "../src/components/note/layouts.tsx";
 import { labelsFor } from "../src/components/note/parts.tsx";
 
@@ -193,6 +194,150 @@ describe("diagram template geometry", () => {
 
   it("keeps inclined-plane labels separate from strokes at three key angles", () => {
     for (const thetaDeg of [5, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+          shape.type === "label");
+        expect(labels).toHaveLength(friction ? 6 : 5);
+        const bounds = labels.map(({ at, text }) => {
+          const [x, y] = diagramLabelLayout(at, text).at;
+          const half = Math.max(19, Array.from(text).reduce((n, c) =>
+            n + (c.charCodeAt(0) < 128 ? 1.1 : 1.3) * 14, 0));
+          return { text, rect: [x - half, y - 32, x + half, y + 32] };
+        });
+        for (let i = 0; i < bounds.length; i++) {
+          for (let j = i + 1; j < bounds.length; j++) {
+            const a = bounds[i].rect, b = bounds[j].rect;
+            expect(a[2] + 10 <= b[0] || b[2] + 10 <= a[0]
+              || a[3] + 10 <= b[1] || b[3] + 10 <= a[1]).toBe(true);
+          }
+        }
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+  });
+
+  it("keeps all six function presets valid and editable as existing primitives", () => {
+    for (const fn of ["linear", "quadratic", "sine", "cosine", "exponential", "logarithm"] as const) {
+      for (const quadrants of ["all", "first"] as const) {
+        const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+          params: { grid: true, quadrants, function: fn, keyPoints: true } };
+        const shapes = expandDiagram(block);
+        expect(shapes.some((shape) => shape.type === "polyline")).toBe(true);
+        expect(shapes.every((shape) => shape.type !== "polyline" || shape.points.length <= 40)).toBe(true);
+        expect(validDiagramBlocks([block], 1)).toBe(true);
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+        expect(validatePublishRequest(request([block])).ok).toBe(true);
+        const noMarks = expandDiagram({ ...block, params: { ...block.params, keyPoints: false } });
+        expect(noMarks.filter((shape) => shape.type === "circle")).toHaveLength(0);
+      }
+    }
+    const legacy: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all" } };
+    expect(expandDiagram(legacy).some((shape) => shape.type === "polyline")).toBe(false);
+  });
+
+  it("publishes legacy coordinate axes and fresh presets with omitted optional fields", () => {
+    const legacy: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } };
+    const fresh: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all", function: "quadratic" } };
+    for (const block of [legacy, fresh,
+      { ...fresh, params: { ...fresh.params, keyPoints: false } } as DiagramBlock]) {
+      expect(validatePublishRequest(request([block])).ok).toBe(true);
+      expect(validatePublishedNote(note([block])).ok).toBe(true);
+    }
+    expect(errors(request([{ ...fresh, params: { ...fresh.params, keyPoints: "yes" } } as unknown as DiagramBlock])))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "note.diagrams[0].params.keyPoints", code: "INVALID_TYPE" }),
+      ]));
+  });
+
+  it("marks the actual x-intercepts of the quadratic function", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all", function: "quadratic", keyPoints: true } };
+    const shapes = expandDiagram(block);
+    const xs = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "circle" }> =>
+      shape.type === "circle" && Math.abs(shape.center[1] - 390) < 0.001)
+      .map((shape) => (shape.center[0] - 490) / 78);
+    expect(xs).toHaveLength(2);
+    for (const x of xs) expect(x * x - 2 * x - 2).toBeCloseTo(0, 4);
+    const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label").map((shape) => shape.text);
+    expect(labels).toEqual(expect.arrayContaining(["(1-√3,0)", "(1+√3,0)"]));
+  });
+
+  it("marks force and block SVG primitives for stable browser QA selectors", () => {
+    const html = renderToStaticMarkup(createElement(DiagramBlockView, {
+      block: { ...template, handDrawn: false }, seed: 41,
+    }));
+    expect(html.match(/data-diagram-primitive="arrow"/g)).toHaveLength(4);
+    expect(html.match(/data-diagram-primitive="rect"/g)).toHaveLength(1);
+  });
+
+  it("renders a legible off-block downhill arrow only when the physical component is short", () => {
+    for (let thetaDeg = 5; thetaDeg <= 60; thetaDeg++) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const arrows = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "line" | "arrow" }> =>
+          shape.type === "arrow");
+        const [gravity, parallel, perpendicular, normal] = arrows;
+        const vectors = inclinedPlaneForces(thetaDeg);
+        const direction = [parallel.to[0] - parallel.from[0], parallel.to[1] - parallel.from[1]];
+        const length = Math.hypot(...direction);
+        const physicalLength = Math.hypot(...vectors.parallel);
+        const theta = thetaDeg * Math.PI / 180;
+        const trueAlong: [number, number] = [
+          Number((gravity.from[0] + vectors.parallel[0]).toFixed(4)),
+          Number((gravity.from[1] + vectors.parallel[1]).toFixed(4)),
+        ];
+        expect(shapes.some((shape) => shape.type === "line" && shape.dashed
+          && shape.from[0] === trueAlong[0] && shape.from[1] === trueAlong[1])).toBe(true);
+        expect(direction[0] * Math.cos(theta) - direction[1] * Math.sin(theta))
+          .toBeCloseTo(-length, 1);
+        expect(Math.hypot(perpendicular.to[0] - perpendicular.from[0] + normal.to[0] - normal.from[0],
+          perpendicular.to[1] - perpendicular.from[1] + normal.to[1] - normal.from[1]))
+          .toBeLessThan(0.002);
+        if (physicalLength < 64) {
+          expect(length).toBeGreaterThanOrEqual(64);
+          expect(parallel.label).toBe(SHORT_FORCE_SCALE_NOTE);
+          expect(parallel.from).not.toEqual(gravity.from);
+          const displacement = [parallel.from[0] - gravity.from[0], parallel.from[1] - gravity.from[1]];
+          expect(displacement[0] * Math.cos(theta) - displacement[1] * Math.sin(theta))
+            .toBeCloseTo(-76, 1);
+          expect(-displacement[0] * Math.sin(theta) - displacement[1] * Math.cos(theta))
+            .toBeCloseTo(24, 1);
+        } else {
+          expect(parallel.from).toEqual(gravity.from);
+          expect(parallel.to).toEqual(trueAlong);
+          expect(length).toBeCloseTo(physicalLength, 2);
+          expect(parallel.label).toBeUndefined();
+        }
+        expect(arrows).toHaveLength(friction ? 5 : 4);
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+    for (const thetaDeg of [5, 15, 30, 60]) {
+      const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+        params: { thetaDeg, friction: true } };
+      const converted = materializeDiagram(block);
+      const fromTemplate = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 41 }));
+      const fromPrimitives = renderToStaticMarkup(createElement(DiagramBlockView, { block: converted, seed: 41 }));
+      const short = thetaDeg < 24;
+      expect(fromTemplate.includes('class="diagram-scale-note"')).toBe(short);
+      expect(fromPrimitives.includes('class="diagram-scale-note"')).toBe(short);
+      expect(fromPrimitives.includes("mg sinθ")).toBe(true);
+      if (short) expect(converted.primitives.some((shape) => shape.type === "arrow"
+        && shape.label === SHORT_FORCE_SCALE_NOTE)).toBe(true);
+    }
+  });
+
+  it("keeps inclined-plane labels separate from strokes at four key angles", () => {
+    for (const thetaDeg of [5, 15, 30, 60]) {
       for (const friction of [false, true]) {
         const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
           params: { thetaDeg, friction } };

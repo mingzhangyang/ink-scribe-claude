@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DIAGRAM_LIMITS, type DiagramBlock, type DiagramTemplate } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, FUNCTION_PRESETS, type DiagramBlock, type DiagramTemplate, type FunctionPreset } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import { editDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
 import { activeNumberLineDraft, numberLineFields, parseNumberLineFields, useNumberLineDrafts } from "../diagrams/numberLineDrafts.ts";
@@ -170,6 +170,18 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
             <option value="first">{t.firstQuadrant}</option>
           </select>
         </label>
+        <label className="diagram-select">
+          <span>{t.functionPreset}</span>
+          <select aria-label={t.functionPreset} value={block.params.function ?? "none"}
+            onChange={(event) => changeAxes({ function: event.target.value as FunctionPreset })}>
+            {FUNCTION_PRESETS.map((preset) => <option key={preset} value={preset}>{t.functionNames[preset]}</option>)}
+          </select>
+        </label>
+        {(block.params.function ?? "none") !== "none" ? <label className="diagram-check">
+          <input type="checkbox" checked={block.params.keyPoints !== false}
+            onChange={(event) => changeAxes({ keyPoints: event.target.checked })} />
+          <span>{t.keyPoints}</span>
+        </label> : null}
       </div>;
     default:
       return <p className="hint">{t.customReadOnly}</p>;
