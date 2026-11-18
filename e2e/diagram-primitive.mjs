@@ -104,6 +104,20 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       check("D3-" + width + "-label", "The edited label is present in the public renderer DOM",
         (await page.locator(".note-page .diagram-art").first().textContent() ?? "")
           .includes(zh ? "自定义标注" : "New annotation"));
+      // Pointer selection prevents native blur: the pending text must commit
+      // before the old input unmounts, without swallowing the gesture.
+      const pendingText = zh ? "切换形状后保留" : "Kept after pointer selection";
+      await label.fill(pendingText);
+      await stage.locator(".diagram-shape-target").first().click({ force: true });
+      const publicArt = page.locator(".note-page .diagram-art").first();
+      check("D3-" + width + "-label-pointer", "Pointer-selecting another shape saves the pending label",
+        (await publicArt.textContent() ?? "").includes(pendingText));
+      await first.getByRole("button", { name: zh ? "撤销" : "Undo", exact: true }).click();
+      check("D3-" + width + "-label-pointer-undo", "Pointer-triggered label save is one undo step",
+        !(await publicArt.textContent() ?? "").includes(pendingText));
+      await first.getByRole("button", { name: zh ? "重做" : "Redo", exact: true }).click();
+      check("D3-" + width + "-label-pointer-redo", "Redo restores the pointer-triggered label save",
+        (await publicArt.textContent() ?? "").includes(pendingText));
       await first.locator(".diagram-shape-palette").getByRole("button", { name: zh ? "箭头" : "Arrow" }).click();
       check("D3-" + width + "-arrow", "Add arrow geometry", await first.locator(".diagram-shape-target").count() > 6);
       await first.locator(".diagram-shape-palette").getByRole("button", { name: zh ? "角弧" : "Angle arc" }).click();
@@ -133,6 +147,31 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
       check("D3-" + width + "-arc-omitted-tap", "A tap on the omitted arc does not select it",
         !(await arcTarget.getAttribute("class") ?? "").includes("is-selected"),
         targetBeforeTap);
+      // Live text framing must expand before blur, not after the committed
+      // diagram changes. Nudge a newly added label toward the right boundary.
+      await first.locator(".diagram-shape-palette").getByRole("button", { name: zh ? "文字" : "Text" }).click();
+      const edgeTarget = stage.locator(".diagram-shape-target").last();
+      await edgeTarget.focus();
+      for (let n = 0; n < 16; n++) await edgeTarget.press("ArrowRight");
+      const frameBefore = await stage.locator(".diagram-art").getAttribute("viewBox");
+      const edgeInput = first.locator(".diagram-shape-label input");
+      const longText = "W".repeat(40);
+      await edgeInput.fill(longText);
+      const frameDuring = await stage.locator(".diagram-art").getAttribute("viewBox");
+      const overlayDuring = await stage.locator(".diagram-interaction-overlay").getAttribute("viewBox");
+      const labelInsideFrame = await stage.locator(".diagram-ink .diagram-label").last().evaluate((node) => {
+        const view = node.ownerSVGElement.viewBox.baseVal;
+        const bounds = node.getBBox();
+        return bounds.x >= view.x - 2 && bounds.x + bounds.width <= view.x + view.width + 2
+          && bounds.y >= view.y - 2 && bounds.y + bounds.height <= view.y + view.height + 2;
+      });
+      check("D3-" + width + "-label-live-frame", "Long edge label reframes preview and hit overlay before blur",
+        frameBefore !== frameDuring && frameDuring === overlayDuring && labelInsideFrame
+          && (await stage.locator(".diagram-art").textContent() ?? "").includes(longText));
+      await edgeInput.press("Escape");
+      check("D3-" + width + "-label-frame-cancel", "Escape restores the original frame and annotation",
+        (await stage.locator(".diagram-art").getAttribute("viewBox")) === frameBefore
+          && !(await publicArt.textContent() ?? "").includes(longText));
       await page.screenshot({ path: outputDir + "/diagram-d3-" + width + ".png", fullPage: true });
       check("D3-" + width + "-errors", "Diagram editing produces no console/page errors",
         page.errors.length === 0, page.errors.slice(0, 2).join("; "));
@@ -147,7 +186,7 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
   const exported = [];
   try {
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    for (const layout of ["minimal", "classic-cornell"]) {
+    for (const layout of ["minimal", "classic-cornell", "free-journal"]) {
       const noteUrl = await publish(page, url, longNote(), layout, auth);
       await page.goto(noteUrl, { waitUntil: "networkidle" });
       await page.locator('.note-page[data-render-status="ready"]').waitFor({ timeout: 30000 });
@@ -178,6 +217,26 @@ export async function verifyDiagramD3({ newPage, check, url, outputDir }) {
         && geometry.captions.every(Boolean), JSON.stringify(geometry));
       check("D3-font-" + layout, "Diagram labels remain >=0.9x body font", geometry.minFontRatio >= 0.9,
         String(geometry.minFontRatio));
+      if (layout === "free-journal") {
+        const journal = await page.locator(".note-page.layout-free-journal").evaluate((node) => {
+          const container = node.querySelector(".journal-cards");
+          const width = container?.getBoundingClientRect().width ?? 0;
+          const cards = Array.from(node.querySelectorAll(".journal-card:has(.diagram-block)"));
+          return {
+            isLong: node.classList.contains("is-long"),
+            grid: container ? getComputedStyle(container).display : null,
+            cards: cards.map((card) => ({
+              span: getComputedStyle(card).gridColumn,
+              width: card.getBoundingClientRect().width,
+            })),
+            width,
+          };
+        });
+        check("D3-long-journal-fullwidth", "Long Free Journal spans both grid columns for every diagram",
+          journal.isLong && journal.grid === "grid" && journal.cards.length === 2
+            && journal.cards.every((card) => card.span === "1 / -1" && card.width > journal.width * 0.8),
+          JSON.stringify(journal));
+      }
       const result = await download({ newPage, noteUrl, destination: outputDir + "/diagram-d3-long-" + layout + ".png" });
       exported.push({ layout, ...result });
       check("D3-png-" + layout, "Long-note PNG export succeeds", result.bytes > 10000 && result.errors.length === 0, JSON.stringify(result));

@@ -742,6 +742,10 @@
 .note-page.is-long .journal-card {
   margin-bottom: 0;
 }
+/* Long Journal cards switch from columns to grid; column-span alone is ignored. */
+.note-page.is-long .journal-card:has(.diagram-block) {
+  grid-column: 1 / -1;
+}
 
 /* ---------- 贴纸 ---------- */
 .sticker-layer {
