@@ -154,6 +154,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   const [working, setWorking] = useState(block);
   const [selected, setSelected] = useState<number | null>(null);
   const [showGrid, setShowGrid] = useState(true);
+  const [detachConfirmed, setDetachConfirmed] = useState(!block.template);
   const stageRef = useRef<SVGSVGElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const workingRef = useRef(block);
@@ -166,6 +167,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
 
   // Freeze framing to the committed diagram during a pointer gesture; resizing
   // must not move the handles underneath the pointer.
+  const pendingDetach = !!block.template && !detachConfirmed;
   const viewport = diagramViewport(block);
   const primitives = expandDiagram(working);
   const currentIndex = selected !== null && primitives[selected] ? selected : null;
@@ -180,13 +182,14 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   };
 
   const immediate = (operation: (base: DiagramBlock) => DiagramBlock) => {
+    if (pendingDetach) return;
     const base = block;
     const next = operation(base);
     commit(base, next);
   };
 
   const startGesture = (event: PointerEvent<SVGElement>, shapeIndex: number, mode: Mode, handle?: string) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (pendingDetach || (event.pointerType === "mouse" && event.button !== 0)) return;
     const svg = stageRef.current;
     const shape = expandDiagram(block)[shapeIndex];
     if (!svg || !shape) return;
@@ -276,6 +279,12 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
   };
 
   return <div className="diagram-primitive-editor" onKeyDown={onKeyDown}>
+    {pendingDetach ? <div className="diagram-detach-warning" role="note">
+      <p className="hint is-warn">{t.detachWarning}</p>
+      <button type="button" className="btn btn-link" onClick={() => setDetachConfirmed(true)}>
+        {t.detachContinue}
+      </button>
+    </div> : null}
     <div className="diagram-edit-toolbar" role="toolbar" aria-label={t.shapeTools}>
       <button type="button" className="btn btn-link" disabled={!undo} onClick={undoDiagram}>{t.undo}</button>
       <button type="button" className="btn btn-link" disabled={!redo} onClick={redoDiagram}>{t.redo}</button>
@@ -286,6 +295,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
       <DiagramBlockView block={working} seed={1978} viewport={viewport} />
       <svg ref={stageRef} className="diagram-interaction-overlay"
         viewBox={viewport.join(" ")} aria-label={t.shapeCanvas}
+        aria-disabled={pendingDetach} style={pendingDetach ? { pointerEvents: "none" } : undefined}
         onPointerMove={onPointerMove} onPointerUp={(event) => release(event, false)}
         onPointerCancel={(event) => release(event, true)}
         onLostPointerCapture={() => {
@@ -315,7 +325,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
     <p className="hint">{t.dragHelp}</p>
     <div className="diagram-shape-palette" role="group" aria-label={t.addShape}>
       {primitiveTypes.map((type) => <button type="button" key={type} className="btn btn-link"
-        disabled={primitives.length >= DIAGRAM_LIMITS.maxPrimitives}
+        disabled={pendingDetach || primitives.length >= DIAGRAM_LIMITS.maxPrimitives}
         onClick={() => addPrimitive(type)}>{t.primitiveNames[type]}</button>)}
     </div>
     {current ? <div className="diagram-selected-controls">
@@ -323,7 +333,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
       {labelText(current) !== null ? <label className="diagram-shape-label">
         {t.shapeLabel}
         <input key={index + "-" + currentIndex + "-" + labelText(current)}
-          type="text" defaultValue={labelText(current) ?? ""}
+          type="text" disabled={pendingDetach} defaultValue={labelText(current) ?? ""}
           onInput={(event) => {
             const input = event.currentTarget;
             // Count Unicode code points, not UTF-16 units (emoji/rare CJK must work).
@@ -333,7 +343,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
           onBlur={(event) => applyLabel(event.currentTarget.value)}
           onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
       </label> : null}
-      <button type="button" className="btn btn-link" disabled={primitives.length <= 1}
+      <button type="button" className="btn btn-link" disabled={pendingDetach || primitives.length <= 1}
         onClick={deleteSelected}>{t.deleteShape}</button>
     </div> : null}
   </div>;
