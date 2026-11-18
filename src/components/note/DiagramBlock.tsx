@@ -70,7 +70,7 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
         ? segment(shape.from, shape.to, seed, 0) + " " + arrowHead(shape.from, shape.to)
           + (shape.double ? " " + arrowHead(shape.to, shape.from) : "")
         : segment(shape.from, shape.to, seed, jitter);
-      return <g>
+      return <g data-diagram-primitive={shape.type}>
         <path d={d} className={shape.guide ? "diagram-guide" : undefined} strokeDasharray={shape.dashed ? "13 12" : undefined} />
         {shape.label && shape.label !== SHORT_FORCE_SCALE_NOTE
           ? <InkLabel at={diagramArrowLabelPosition(shape.from, shape.to)}>{shape.label}</InkLabel> : null}
@@ -82,7 +82,7 @@ function Element({ shape, seed, jitter }: { shape: DiagramPrimitive; seed: numbe
     case "rect": {
       const [x, y] = shape.at, w = shape.width, h = shape.height;
       const points: DiagramPoint[] = [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
-      return <path d={polyPath(points, seed, jitter)} transform={shape.rotation ? "rotate(" + shape.rotation + " " + (x + w / 2) + " " + (y + h / 2) + ")" : undefined} />;
+      return <path data-diagram-primitive="rect" d={polyPath(points, seed, jitter)} transform={shape.rotation ? "rotate(" + shape.rotation + " " + (x + w / 2) + " " + (y + h / 2) + ")" : undefined} />;
     }
     case "circle":
       return <path d={ellipsePath(shape.center, shape.r, shape.r, seed, jitter)} />;

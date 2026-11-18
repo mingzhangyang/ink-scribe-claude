@@ -1,4 +1,16 @@
 /** Local-only browser regression for the small-angle force display. */
+/** Parse the full SVG shaft (even with hand-drawn jitter), excluding arrowhead subpaths. */
+export function parseArrowShaftPath(d) {
+  if (typeof d !== "string") return null;
+  const shaft = d.split(" M")[0];
+  const matches = [...shaft.matchAll(/([ML])(-?(?:\d+(?:\.\d+)?|\.\d+)) (-?(?:\d+(?:\.\d+)?|\.\d+))/g)];
+  if (matches.length < 2 || matches[0][1] !== "M" ||
+    matches.slice(1).some((match) => match[1] !== "L") ||
+    matches.map((match) => match[0]).join(" ") !== shaft) return null;
+  return [Number(matches[0][2]), Number(matches[0][3]),
+    Number(matches.at(-1)[2]), Number(matches.at(-1)[3])];
+}
+
 export async function verifyDiagramSmallAngles({ newPage, check, url, outputDir }) {
   for (const [width, locale] of [[390, "zh-CN"], [1280, "en-US"]]) {
     const zh = locale === "zh-CN";
@@ -21,30 +33,20 @@ export async function verifyDiagramSmallAngles({ newPage, check, url, outputDir 
           await frictionInput.setChecked(friction);
           const rendered = await figure.evaluate((root) => {
             const svg = root.querySelector("svg.diagram-art");
-            const paths = [...svg.querySelectorAll(".diagram-ink > g > path")];
-            const parse = (path) => {
-              const values = path?.getAttribute("d")?.match(/^M(-?[\\d.]+) (-?[\\d.]+) L(-?[\\d.]+) (-?[\\d.]+)/);
-              return values ? values.slice(1).map(Number) : null;
-            };
-            const arrows = paths.slice(0, 4).map(parse);
-            if (arrows.some((v) => !v)) return null;
-            const [gravity, parallel, perpendicular, normal] = arrows;
-            const vector = (v) => [v[2] - v[0], v[3] - v[1]];
-            const length = (v) => Math.hypot(...v);
-            const p = vector(parallel), n = vector(normal), q = vector(perpendicular);
-            const block = svg.querySelector(".diagram-ink > path:nth-of-type(2)");
+            const arrowPaths = [...svg.querySelectorAll('.diagram-ink > g[data-diagram-primitive="arrow"] > path')];
+            const block = svg.querySelector('.diagram-ink > path[data-diagram-primitive="rect"]');
             const labels = [...svg.querySelectorAll(".diagram-label")];
             const rects = labels.map((node) => node.getBoundingClientRect());
             const view = svg.getBoundingClientRect();
-            const arrowRect = paths[1].getBoundingClientRect();
+            const arrowRect = arrowPaths[1]?.getBoundingClientRect();
             const blockRect = block?.getBoundingClientRect();
             const note = root.querySelector(".diagram-scale-note");
             const noteRect = note?.getBoundingClientRect();
             const paper = root.closest(".note-page")?.getBoundingClientRect();
             return {
-              parallelLength: length(p), p, balanced: length([n[0] + q[0], n[1] + q[1]]),
-              arrowCount: paths.length, label: labels.some((v) => v.textContent === "mg sinθ"),
-              separate: !!blockRect && arrowRect.right + 2 < blockRect.left,
+              arrowPaths: arrowPaths.map((path) => path.getAttribute("d")),
+              arrowCount: arrowPaths.length, label: labels.some((v) => v.textContent === "mg sinθ"),
+              separate: !!blockRect && !!arrowRect && arrowRect.right + 2 < blockRect.left,
               clipped: rects.some((r) => r.left < view.left - 2 || r.right > view.right + 2 ||
                 r.top < view.top - 2 || r.bottom > view.bottom + 2),
               overlap: rects.some((a, i) => rects.slice(i + 1).some((b) =>
@@ -53,16 +55,25 @@ export async function verifyDiagramSmallAngles({ newPage, check, url, outputDir 
                 noteRect.width > 0 && noteRect.left >= paper.left - 2 && noteRect.right <= paper.right + 2,
             };
           });
+          // Read the actual painted shaft endpoints, not just the first jitter segment.
+          const arrows = rendered?.arrowPaths.map(parseArrowShaftPath) ?? [];
+          const validArrows = arrows.length === (friction ? 5 : 4) && arrows.every((coords) => coords !== null);
+          const vector = ([x1, y1, x2, y2]) => [x2 - x1, y2 - y1];
+          const p = validArrows ? vector(arrows[1]) : null;
+          const q = validArrows ? vector(arrows[2]) : null;
+          const n = validArrows ? vector(arrows[3]) : null;
+          const parallelLength = p ? Math.hypot(...p) : 0;
+          const balanced = validArrows ? Math.hypot(n[0] + q[0], n[1] + q[1]) : Infinity;
           const short = theta < 24;
           const expected = 160 * Math.sin(theta * Math.PI / 180);
-          const ok = !!rendered && rendered.label && !rendered.clipped && !rendered.overlap &&
-            rendered.arrowCount === (friction ? 5 : 4) && rendered.balanced < 0.002 &&
-            rendered.p[0] < 0 && rendered.p[1] > 0 &&
-            (short ? rendered.parallelLength >= 64 && rendered.separate && rendered.noteVisible &&
+          const ok = !!rendered && validArrows && rendered.label && !rendered.clipped && !rendered.overlap &&
+            rendered.arrowCount === (friction ? 5 : 4) && balanced < 0.002 &&
+            p[0] < 0 && p[1] > 0 &&
+            (short ? parallelLength >= 64 && rendered.separate && rendered.noteVisible &&
               rendered.note === (zh ? "短分力箭头长度为示意，不按比例。" : "Short force arrow not to scale.")
-              : Math.abs(rendered.parallelLength - expected) < 0.002 && !rendered.note);
+              : Math.abs(parallelLength - expected) < 0.002 && !rendered.note);
           check(`DQA-${width}-${theta}-${Number(friction)}`, "Rendered force readability and N balance", ok,
-            JSON.stringify(rendered));
+            JSON.stringify(rendered && { ...rendered, arrowPaths: undefined, p, parallelLength, balanced, validArrows }));
           await figure.screenshot({ path: `${outputDir}/diagram-angle-${width}-${theta}-${Number(friction)}.png` });
         }
       }

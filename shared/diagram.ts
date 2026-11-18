@@ -319,8 +319,8 @@ function graphFunction(
   if (!showKeyPoints) return primitives;
   const marks: Record<Exclude<FunctionPreset, "none">, [number, number, string][]> = {
     linear: [[-1, 0, "(-1,0)"], [0, 1, "(0,1)"]],
-    quadratic: [[1 - Math.SQRT2, 0, "(1-√2,0)"], [1, -3, "(1,-3)"],
-      [1 + Math.SQRT2, 0, "(1+√2,0)"]],
+    quadratic: [[1 - Math.sqrt(3), 0, "(1-√3,0)"], [1, -3, "(1,-3)"],
+      [1 + Math.sqrt(3), 0, "(1+√3,0)"]],
     sine: [[0, 0, "O"], [Math.PI / 2, 1, "(π/2,1)"], [Math.PI, 0, "(π,0)"],
       [3 * Math.PI / 2, -1, "(3π/2,-1)"]],
     cosine: [[0, 1, "(0,1)"], [Math.PI / 2, 0, "(π/2,0)"], [Math.PI, -1, "(π,-1)"]],

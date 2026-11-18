@@ -134,7 +134,7 @@ const diagramSchema: Schema = { oneOf: [
   object({ ...commonDiagramFields, template: { type: "string", const: "coordinate-plane" },
     params: object({ grid: { type: "boolean" }, quadrants: choices(["all", "first"]),
       function: choices(["none", "linear", "quadratic", "sine", "cosine", "exponential", "logarithm"]),
-      keyPoints: { type: "boolean" } }) },
+      keyPoints: { type: "boolean" } }, ["grid", "quadrants"]) },
     ["afterSection", "template", "params"]),
   object({ ...commonDiagramFields, primitives: { type: "array", minItems: 1,
     maxItems: DIAGRAM_LIMITS.maxPrimitives, items: primitiveSchema } }, ["afterSection", "primitives"]),

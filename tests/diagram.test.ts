@@ -239,6 +239,44 @@ describe("diagram template geometry", () => {
     expect(expandDiagram(legacy).some((shape) => shape.type === "polyline")).toBe(false);
   });
 
+  it("publishes legacy coordinate axes and fresh presets with omitted optional fields", () => {
+    const legacy: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } };
+    const fresh: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all", function: "quadratic" } };
+    for (const block of [legacy, fresh,
+      { ...fresh, params: { ...fresh.params, keyPoints: false } } as DiagramBlock]) {
+      expect(validatePublishRequest(request([block])).ok).toBe(true);
+      expect(validatePublishedNote(note([block])).ok).toBe(true);
+    }
+    expect(errors(request([{ ...fresh, params: { ...fresh.params, keyPoints: "yes" } } as unknown as DiagramBlock])))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "note.diagrams[0].params.keyPoints", code: "INVALID_TYPE" }),
+      ]));
+  });
+
+  it("marks the actual x-intercepts of the quadratic function", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all", function: "quadratic", keyPoints: true } };
+    const shapes = expandDiagram(block);
+    const xs = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "circle" }> =>
+      shape.type === "circle" && Math.abs(shape.center[1] - 390) < 0.001)
+      .map((shape) => (shape.center[0] - 490) / 78);
+    expect(xs).toHaveLength(2);
+    for (const x of xs) expect(x * x - 2 * x - 2).toBeCloseTo(0, 4);
+    const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label").map((shape) => shape.text);
+    expect(labels).toEqual(expect.arrayContaining(["(1-√3,0)", "(1+√3,0)"]));
+  });
+
+  it("marks force and block SVG primitives for stable browser QA selectors", () => {
+    const html = renderToStaticMarkup(createElement(DiagramBlockView, {
+      block: { ...template, handDrawn: false }, seed: 41,
+    }));
+    expect(html.match(/data-diagram-primitive="arrow"/g)).toHaveLength(4);
+    expect(html.match(/data-diagram-primitive="rect"/g)).toHaveLength(1);
+  });
+
   it("renders a legible off-block downhill arrow only when the physical component is short", () => {
     for (let thetaDeg = 5; thetaDeg <= 60; thetaDeg++) {
       for (const friction of [false, true]) {
