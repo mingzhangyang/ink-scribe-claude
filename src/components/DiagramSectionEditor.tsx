@@ -248,7 +248,11 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
         <div className="diagram-editor-heading">
           <button type="button" className="diagram-expand" aria-expanded={expanded === index}
             aria-controls={"diagram-inspector-" + sectionIndex + "-" + index}
-            onClick={() => { setConfirmRemoval(null); setExpanded(expanded === index ? null : index); }}>
+            onClick={() => {
+              setConfirmRemoval(null);
+              setStaleFields({});
+              setExpanded(expanded === index ? null : index);
+            }}>
             <span aria-hidden="true">{expanded === index ? "▾" : "▸"}</span>
             <span>{block.template ? t.templateNames[block.template] : t.customTitle}</span>
           </button>
