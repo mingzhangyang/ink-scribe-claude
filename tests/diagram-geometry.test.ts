@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { PrimitiveEditor } from "../src/components/PrimitiveEditor.tsx";
 import { diagramArcPath, diagramLabelLayout } from "../src/diagrams/svg-geometry.ts";
-import { expandDiagram, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
+import { expandDiagram, inclineTextBounds, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 import {
   DIAGRAM_GRID, DIAGRAM_HISTORY_LIMIT, addShape, defaultShape, deleteShape,
@@ -351,5 +351,62 @@ describe("selective clearance after edits to nearby strokes", () => {
     if (shifted.type !== "label") throw new Error("Expected label");
     expect(shifted.at).not.toEqual(label.at);
     expect(intersectsVerticalStroke(shifted, 445)).toBe(false);
+  });
+});
+
+describe("selective reflow avoids painted label collisions (review fix)", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  const labelBounds = (shape: Label) =>
+    inclineTextBounds(shape.text, diagramLabelLayout(shape.at, shape.text).at);
+  const overlap = (a: Label, b: Label) => {
+    const [left, top, right, bottom] = labelBounds(a);
+    const [otherLeft, otherTop, otherRight, otherBottom] = labelBounds(b);
+    const gap = 10;
+    return left < otherRight + gap && right + gap > otherLeft
+      && top < otherBottom + gap && bottom + gap > otherTop;
+  };
+
+  it("keeps adjacent number-line labels separate after moving the axis down 75 units", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line",
+      params: { start: 0, end: 5, step: 1 } };
+    const before = expandDiagram(block);
+    const axisIndex = before.findIndex((shape) => shape.type === "arrow");
+    expect(axisIndex).toBe(0);
+    const moved = moveShape(before[axisIndex], 0, 3 * DIAGRAM_GRID);
+    const result = editShape(block, axisIndex, moved);
+    const after = result.primitives!;
+    const initialValues = before.filter((shape): shape is Label => shape.type === "label");
+    const values = after.filter((shape): shape is Label => shape.type === "label");
+
+    expect(values.map((label) => label.text)).toEqual(["0", "1", "2", "3", "4", "5"]);
+    expect(values.some((label, i) => label.at.join() !== initialValues[i].at.join())).toBe(true);
+    for (let i = 0; i < values.length; i++) {
+      for (let j = i + 1; j < values.length; j++) {
+        expect(overlap(values[i], values[j]), `${values[i].text}/${values[j].text}`).toBe(false);
+      }
+    }
+    expect(after[axisIndex]).toEqual(moved);
+    before.forEach((shape, i) => {
+      if (i !== axisIndex && shape.type !== "label") expect(after[i], `tick #${i}`).toEqual(shape);
+    });
+    expect(validDiagramBlocks([result], 1)).toBe(true);
+    expect(editShape(block, axisIndex, moved)).toEqual(result);
+  });
+
+  it("avoids an untouched label while selectively moving a newly obscured one", () => {
+    const block: DiagramBlock = { afterSection: 0, primitives: [
+      { type: "line", from: [200, 200], to: [800, 200] },
+      { type: "label", at: [400, 375], text: "A" },
+      { type: "label", at: [350, 300], text: "B" },
+    ] };
+    const result = editShape(block, 0, moveShape(block.primitives![0], 0, 175));
+    const shifted = result.primitives![1], untouched = result.primitives![2];
+    expect(shifted.type).toBe("label");
+    expect(untouched.type).toBe("label");
+    if (shifted.type !== "label" || untouched.type !== "label") throw new Error("Expected labels");
+    expect(shifted.at).not.toEqual([400, 375]);
+    expect(untouched).toEqual(block.primitives![2]);
+    expect(overlap(shifted, untouched)).toBe(false);
+    expect(validDiagramBlocks([result], 1)).toBe(true);
   });
 });
