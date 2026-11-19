@@ -232,3 +232,53 @@ describe("D3 shapes and geometry", () => {
   });
 
 });
+
+describe("first shape edit preserves untouched template labels (review fix)", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  const labels = (shapes: DiagramPrimitive[]) =>
+    shapes.filter((shape): shape is Label => shape.type === "label");
+  const cases: { name: string; block: DiagramBlock; pick: (shape: DiagramPrimitive) => boolean }[] = [
+    { name: "number line axis", block: { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } },
+      pick: (shape) => shape.type === "arrow" },
+    { name: "sine curve", block: { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all", function: "sine" } }, pick: (shape) => shape.type === "polyline" },
+    { name: "axes x label", block: { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } }, pick: (shape) => shape.type === "label" && shape.text === "x" },
+    { name: "inclined block", block: { afterSection: 0, template: "inclined-plane",
+      params: { thetaDeg: 30, friction: true } }, pick: (shape) => shape.type === "rect" },
+  ];
+  for (const { name, block, pick } of cases) {
+    it(`moving the ${name} leaves every other primitive unchanged`, () => {
+      const before = expandDiagram(block);
+      const index = before.findIndex(pick);
+      const target = before[index];
+      const moved = target.type === "label"
+        ? { ...target, at: [target.at[0] - 100, target.at[1] - 100] as [number, number] }
+        : moveShape(target, 0, -25);
+      const result = editShape(block, index, moved);
+      expect(result).not.toBe(block);
+      const after = result.primitives!;
+      expect(after).toHaveLength(before.length);
+      before.forEach((shape, i) => { if (i !== index) expect(after[i], `${name} #${i}`).toEqual(shape); });
+    });
+  }
+
+  it("never stacks two number-line values onto one anchor after a nudge", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } };
+    const axis = expandDiagram(block).findIndex((shape) => shape.type === "arrow");
+    const result = editShape(block, axis, moveShape(expandDiagram(block)[axis], 0, -DIAGRAM_GRID));
+    const anchors = labels(result.primitives!).map((label) => label.at.join(","));
+    expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("still reflows a label that the edited shape is moved onto", () => {
+    const base: DiagramBlock = { afterSection: 0, primitives: [
+      { type: "line", from: [200, 200], to: [800, 200] },
+      { type: "label", at: [500, 375], text: "L" },
+    ] };
+    const result = editShape(base, 0, moveShape(base.primitives![0], 0, 175));
+    const label = result.primitives![1];
+    if (label.type !== "label") throw new Error("Expected label");
+    expect(Math.abs(label.at[1] - 375)).toBeGreaterThanOrEqual(48);
+  });
+});

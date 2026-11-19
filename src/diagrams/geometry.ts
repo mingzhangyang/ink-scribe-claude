@@ -253,11 +253,17 @@ function strokes(shape: Shape): Point[][] {
   }
 }
 
+const LABEL_CLEARANCE = 48;
+/** Distance from a label anchor to the nearest stroke of one shape (Infinity for text). */
+function strokeDistance(at: Point, shape: Shape): number {
+  return strokes(shape).reduce((best, [a, b]) => Math.min(best, closestSegment(at, a, b)), Infinity);
+}
+
 /**
  * Enforce a minimum text-anchor-to-stroke clearance (~4 rendered px at normal scale,
  * plus room for the outline/handwritten glyph). D1 still paints a paper-color outline.
  */
-export function clearLabel(shape: Shape, others: Shape[], clearance = 48): Shape {
+export function clearLabel(shape: Shape, others: Shape[], clearance = LABEL_CLEARANCE): Shape {
   if (shape.type !== "label") return shape;
   const lines = others.flatMap(strokes);
   if (!lines.length) return shape;
@@ -285,7 +291,14 @@ export function editShape(block: DiagramBlock, index: number, next: Shape): Diag
   const adapted = clearLabel(next, primitives.filter((_, i) => i !== index));
   if (JSON.stringify(primitives[index]) === JSON.stringify(adapted)) return block;
   const changed = primitives.map((shape, i) => i === index ? adapted : shape);
-  const adjusted = changed.map((shape, i) => shape.type === "label"
+  // Only reflow a label that the edited shape newly crowds. Template labels are
+  // laid out by their own placement rules (e.g. number-line values sit near tick
+  // marks); re-running clearLabel on every label at the first edit snapped them to
+  // the grid and stacked neighbours onto one anchor ("1" and "2" both at x=600).
+  const before = primitives[index];
+  const adjusted = changed.map((shape, i) => shape.type === "label" && i !== index
+    && strokeDistance(shape.at, before) >= LABEL_CLEARANCE
+    && strokeDistance(shape.at, adapted) < LABEL_CLEARANCE
     ? clearLabel(shape, changed.filter((_, j) => j !== i)) : shape);
   if (!adjusted.every(validDiagramPrimitive)) return block;
   return { ...editable, primitives: adjusted };
