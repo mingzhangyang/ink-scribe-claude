@@ -126,6 +126,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
   const outward = point(-Math.sin(angle), -Math.cos(angle));
   const base = point(170, 620);
   const top = add(base, scale(tangent, 520));
+  const groundEnd = point(base[0] + 260, base[1]);
   const center = add(add(base, scale(tangent, 305)), scale(outward, 36));
   const vectors = inclinedPlaneForces(thetaDeg);
   const along = add(center, vectors.parallel);
@@ -144,6 +145,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     ? add(parallelFrom, scale(downhill, MIN_VISIBLE_PARALLEL + 0.5)) : along;
   const elements: DiagramPrimitive[] = [
     line(base, top),
+    line(base, groundEnd),
     { type: "rect", at: point(center[0] - 36, center[1] - 27), width: 72, height: 54, rotation: -thetaDeg },
     arrow(center, down),
     arrow(parallelFrom, parallelTo, shortParallel ? SHORT_FORCE_SCALE_NOTE : undefined),
@@ -154,7 +156,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     { type: "arc", center: base, radius: 65, startDeg: -thetaDeg, sweepDeg: thetaDeg },
   ];
   const strokes: [DiagramPoint, DiagramPoint][] = [
-    [base, top], [center, down], [parallelFrom, parallelTo], [center, across],
+    [base, top], [base, groundEnd], [center, down], [parallelFrom, parallelTo], [center, across],
     [along, down], [across, down], [center, support],
   ];
   // Include the rotated block and the angle arc in collision detection.
@@ -178,7 +180,8 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     { text: "N", near: add(support, point(-90, -65)) },
     { text: "mg", near: add(down, point(-65, -35)) },
     ...(friction ? [{ text: "f", near: add(frictionTip, point(90, -90)) }] : []),
-    { text: "θ = " + thetaDeg + "°", near: add(base, point(105, 80)) },
+    // A close-to-arc anchor below the new horizontal ground avoids crowding the narrow wedge.
+    { text: "θ = " + thetaDeg + "°", near: add(base, point(120, 42)) },
   ];
   return [...elements, ...placeInclineLabels(labels, strokes)];
 }
@@ -231,19 +234,47 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
     if (ticks.length < 19) ticks.push(end);
     else ticks[ticks.length - 1] = end; // Defensive cap for direct callers with invalid parameters.
   }
+  // Preserve a true zero when binary floating-point arithmetic only approximates it.
+  // Never snap a requested endpoint: tiny valid user ranges must stay lossless.
+  if (start < 0 && end > 0) {
+    for (let i = 1; i < ticks.length - 1; i++) {
+      if (Math.abs(ticks[i]) <= step * 1e-9) ticks[i] = 0;
+    }
+  }
   const labels = numberLineTickLabels(ticks);
   const positions = ticks.map((value) => left + 34 + (right - left - 85) * (value - start) / (end - start));
-  // Preserve every tick mark and both endpoint values. Show intermediate
-  // labels only when their estimated text extents have sufficient separation.
+  // Keep every tick mark; thin only the labels at one regular index stride.
+  // Greedy left-to-right collision filtering used to create irregular 0, .2, .5,
+  // .8, 1 patterns. Prefer zero as the sampling origin whenever it is a real tick.
   const width = (text: string) => Array.from(text).reduce((sum, char) => sum + (char.charCodeAt(0) < 128 ? 27 : 32), 0);
-  const visible = new Set([0, ticks.length - 1]);
-  let previous = 0;
-  for (let i = 1; i < ticks.length - 1; i++) {
-    if (positions[i] - positions[previous] < (width(labels[i]) + width(labels[previous])) / 2 + 20) continue;
-    if (positions[ticks.length - 1] - positions[i]
-      < (width(labels[i]) + width(labels[ticks.length - 1])) / 2 + 20) continue;
-    visible.add(i);
-    previous = i;
+  const lastIndex = ticks.length - 1;
+  const zeroIndex = ticks.findIndex((value) => value === 0);
+  const required = new Set([0, lastIndex, ...(zeroIndex >= 0 ? [zeroIndex] : [])]);
+  const fits = (selected: Set<number>) => {
+    const ordered = [...selected].sort((a, b) => a - b);
+    return ordered.slice(1).every((current, i) => {
+      const previous = ordered[i];
+      return positions[current] - positions[previous]
+        >= (width(labels[current]) + width(labels[previous])) / 2 + 20;
+    });
+  };
+  let visible: Set<number> | null = null;
+  const origin = zeroIndex >= 0 ? zeroIndex : 0;
+  for (let stride = 1; stride <= ticks.length; stride++) {
+    const selected = new Set(required);
+    for (let i = 1; i < lastIndex; i++) {
+      if ((i - origin) % stride === 0) selected.add(i);
+    }
+    if (fits(selected)) { visible = selected; break; }
+  }
+  if (!visible) {
+    // Extremely tiny ranges may not fit three mandatory labels. Endpoints win;
+    // show zero as well only where it remains legible.
+    visible = new Set([0, lastIndex]);
+    if (zeroIndex > 0 && zeroIndex < lastIndex) {
+      const withZero = new Set([...visible, zeroIndex]);
+      if (fits(withZero)) visible = withZero;
+    }
   }
   for (let i = 0; i < ticks.length; i++) {
     const x = positions[i];

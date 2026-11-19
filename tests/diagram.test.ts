@@ -518,3 +518,59 @@ describe("template math regressions (review fixes)", () => {
     }
   });
 });
+
+describe("diagram polish: ground reference and regular number labels", () => {
+  it("draws a horizontal ground reference from the incline vertex for supported angles", () => {
+    for (const thetaDeg of [5, 15, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const ground = shapes.find((shape) => shape.type === "line"
+          && shape.from[0] === 170 && shape.from[1] === 620
+          && shape.to[1] === 620 && shape.to[0] > shape.from[0]);
+        expect(ground, `ground at ${thetaDeg}° friction=${friction}`).toBeDefined();
+        const arc = shapes.find((shape) => shape.type === "arc");
+        expect(arc).toMatchObject({ center: [170, 620], startDeg: -thetaDeg, sweepDeg: thetaDeg });
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+  });
+
+  it("places the 30-degree label close to the angle reference", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "inclined-plane",
+      params: { thetaDeg: 30, friction: false } });
+    const theta = shapes.find((shape) => shape.type === "label" && shape.text === "θ = 30°");
+    expect(theta?.type).toBe("label");
+    if (theta?.type !== "label") return;
+    const arcMid: [number, number] = [170 + 65 * Math.cos(Math.PI / 12), 620 - 65 * Math.sin(Math.PI / 12)];
+    expect(Math.hypot(theta.at[0] - arcMid[0], theta.at[1] - arcMid[1])).toBeLessThan(110);
+  });
+
+  it("uses a constant index stride for internal number-line labels and preserves all tick strokes", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "number-line",
+      params: { start: 0, end: 1.8, step: 0.1 } });
+    const tickLines = shapes.filter((shape) => shape.type === "line");
+    expect(tickLines).toHaveLength(19);
+    const visibleLabels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label");
+    const indices = visibleLabels.map((label) =>
+      tickLines.findIndex((tick) => tick.type === "line" && Math.abs(tick.from[0] - label.at[0]) < 0.001));
+    expect(indices[0]).toBe(0);
+    expect(indices[indices.length - 1]).toBe(18);
+    expect(indices.every((index) => index >= 0)).toBe(true);
+    const gaps = indices.slice(1).map((value, index) => value - indices[index]);
+    expect(new Set(gaps).size).toBe(1);
+  });
+
+  it("prioritizes a true zero on a symmetric number line", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "number-line",
+      params: { start: -0.9, end: 0.9, step: 0.1 } });
+    const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label").map((shape) => shape.text);
+    expect(labels).toContain("0");
+    expect(labels[0]).toBe("-0.9");
+    expect(labels[labels.length - 1]).toBe("0.9");
+    expect(shapes.filter((shape) => shape.type === "line")).toHaveLength(19);
+  });
+});
