@@ -55,7 +55,7 @@ export function inclinedPlaneForces(thetaDeg: number, gravity = 160): {
 
 type Bounds = [number, number, number, number];
 /** Approximate painted glyph extents in normalized SVG units, including paper outline. */
-function inclineTextBounds(text: string, at: DiagramPoint): Bounds {
+export function inclineTextBounds(text: string, at: DiagramPoint): Bounds {
   const units = Array.from(text).reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
   const half = Math.max(19, units * 14);
   return [at[0] - half, at[1] - 32, at[0] + half, at[1] + 32];
@@ -64,7 +64,7 @@ function boxesIntersect(a: Bounds, b: Bounds, gap = 10): boolean {
   return a[0] < b[2] + gap && a[2] + gap > b[0] && a[1] < b[3] + gap && a[3] + gap > b[1];
 }
 /** Exact segment-vs-expanded-rectangle intersection (Liang-Barsky clipping). */
-function segmentTouchesLabel(a: DiagramPoint, b: DiagramPoint, rect: Bounds): boolean {
+export function segmentTouchesLabel(a: DiagramPoint, b: DiagramPoint, rect: Bounds): boolean {
   const x0 = a[0], y0 = a[1], dx = b[0] - x0, dy = b[1] - y0;
   const minX = rect[0] - 9, minY = rect[1] - 9, maxX = rect[2] + 9, maxY = rect[3] + 9;
   const tests: [number, number][] = [

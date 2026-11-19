@@ -282,3 +282,74 @@ describe("first shape edit preserves untouched template labels (review fix)", ()
     expect(Math.abs(label.at[1] - 375)).toBeGreaterThanOrEqual(48);
   });
 });
+
+describe("selective clearance after edits to nearby strokes", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  // Match the shared text-bound estimator (including its 9-unit paint outline).
+  const intersectsVerticalStroke = (shape: Label, x: number) => {
+    const [centerX] = diagramLabelLayout(shape.at, shape.text).at;
+    const units = Array.from(shape.text).reduce((sum, ch) =>
+      sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+    return Math.abs(centerX - x) <= Math.max(19, units * 14) + 9;
+  };
+
+  it("moves the origin label when the y axis enters its painted bounds, with or without grid", () => {
+    for (const grid of [false, true]) {
+      const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+        params: { grid, quadrants: "all" } };
+      const initial = expandDiagram(block);
+      const axisIndex = initial.findIndex((shape) => shape.type === "arrow" && shape.from[0] === 490);
+      const originIndex = initial.findIndex((shape) => shape.type === "label" && shape.text === "O");
+      expect(axisIndex).toBeGreaterThanOrEqual(0);
+      expect(originIndex).toBeGreaterThanOrEqual(0);
+      const edited = moveShape(initial[axisIndex], -DIAGRAM_GRID, 0);
+      const result = editShape(block, axisIndex, edited);
+      const after = result.primitives!;
+      expect(after).toHaveLength(initial.length);
+      expect(after[originIndex].type).toBe("label");
+      if (after[originIndex].type !== "label") throw new Error("Expected O label");
+      expect(after[originIndex].at, `grid=${grid}`).not.toEqual([450, 440]);
+      expect(intersectsVerticalStroke(after[originIndex], 465), `grid=${grid}`).toBe(false);
+      initial.forEach((shape, i) => {
+        if (i !== axisIndex && i !== originIndex) expect(after[i], `grid=${grid} #${i}`).toEqual(shape);
+      });
+      expect(validDiagramBlocks([result], 1)).toBe(true);
+    }
+  });
+
+  it("keeps the origin label in place when the axis moves away", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } };
+    const initial = expandDiagram(block);
+    const axisIndex = initial.findIndex((shape) => shape.type === "arrow" && shape.from[0] === 490);
+    const result = editShape(block, axisIndex, moveShape(initial[axisIndex], DIAGRAM_GRID, 0));
+    const beforeO = initial.find((shape) => shape.type === "label" && shape.text === "O");
+    const afterO = result.primitives?.find((shape) => shape.type === "label" && shape.text === "O");
+    expect(afterO).toEqual(beforeO);
+  });
+
+  it("checks wide painted bounds even if the label anchor is still 48 units clear", () => {
+    const original: DiagramPrimitive = { type: "line", from: [675, 100], to: [675, 650] };
+    const label: Label = { type: "label", at: [500, 375], text: "abcdefghij" };
+    const block: DiagramBlock = { afterSection: 0, primitives: [original, label] };
+    const result = editShape(block, 0, moveShape(original, -DIAGRAM_GRID, 0));
+    const shifted = result.primitives![1];
+    expect(shifted.type).toBe("label");
+    if (shifted.type !== "label") throw new Error("Expected label");
+    expect(shifted.at).not.toEqual(label.at);
+    expect(intersectsVerticalStroke(shifted, 650)).toBe(false);
+    expect(validDiagramBlocks([result], 1)).toBe(true);
+  });
+
+  it("repositions an already-overlapped label when the stroke gets materially closer", () => {
+    const original: DiagramPrimitive = { type: "line", from: [470, 100], to: [470, 600] };
+    const label: Label = { type: "label", at: [450, 440], text: "O" };
+    const block: DiagramBlock = { afterSection: 0, primitives: [original, label] };
+    const result = editShape(block, 0, moveShape(original, -DIAGRAM_GRID, 0));
+    const shifted = result.primitives![1];
+    expect(shifted.type).toBe("label");
+    if (shifted.type !== "label") throw new Error("Expected label");
+    expect(shifted.at).not.toEqual(label.at);
+    expect(intersectsVerticalStroke(shifted, 445)).toBe(false);
+  });
+});
