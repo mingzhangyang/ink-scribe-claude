@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  expandDiagram, inclinedPlaneForces, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks,
+  expandDiagram, inclinedPlaneForces, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks, validJitterPx,
   type DiagramBlock, type DiagramPrimitive,
 } from "../shared/diagram.ts";
 import { readDocument } from "../shared/document.ts";
@@ -304,7 +304,8 @@ describe("diagram template geometry", () => {
           .toBeLessThan(0.002);
         if (physicalLength < 64) {
           expect(length).toBeGreaterThanOrEqual(64);
-          expect(parallel.label).toBe(SHORT_FORCE_SCALE_NOTE);
+          expect(parallel.callout).toBe(SHORT_FORCE_CALLOUT);
+          expect(parallel.label).toBeUndefined();
           expect(parallel.from).not.toEqual(gravity.from);
           const displacement = [parallel.from[0] - gravity.from[0], parallel.from[1] - gravity.from[1]];
           expect(displacement[0] * Math.cos(theta) - displacement[1] * Math.sin(theta))
@@ -332,7 +333,7 @@ describe("diagram template geometry", () => {
       expect(fromPrimitives.includes('class="diagram-scale-note"')).toBe(short);
       expect(fromPrimitives.includes("mg sinθ")).toBe(true);
       if (short) expect(converted.primitives.some((shape) => shape.type === "arrow"
-        && shape.label === SHORT_FORCE_SCALE_NOTE)).toBe(true);
+        && shape.callout === SHORT_FORCE_CALLOUT)).toBe(true);
     }
   });
 
@@ -572,5 +573,55 @@ describe("diagram polish: ground reference and regular number labels", () => {
     expect(labels[0]).toBe("-0.9");
     expect(labels[labels.length - 1]).toBe("0.9");
     expect(shapes.filter((shape) => shape.type === "line")).toHaveLength(19);
+  });
+});
+
+describe("diagram callout metadata and jitter import compatibility", () => {
+  const shortArrow = { type: "arrow" as const, from: [100, 100] as [number, number],
+    to: [170, 100] as [number, number] };
+  it("stores scale metadata separate from user text and publishes the new format", () => {
+    const block: DiagramBlock = { afterSection: 0,
+      primitives: [{ ...shortArrow, callout: SHORT_FORCE_CALLOUT }] };
+    expect(validDiagramBlocks([block], 1)).toBe(true);
+    expect(validatePublishRequest(request([block])).ok).toBe(true);
+    const html = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 41 }));
+    expect(html).toContain('class="diagram-scale-note"');
+    expect(html).not.toContain("Short force arrow not to scale.</text>");
+  });
+
+  it("still shows legacy scale notes and migrates their marker on shape editing", () => {
+    const legacy: DiagramBlock = { afterSection: 0,
+      primitives: [{ ...shortArrow, label: SHORT_FORCE_SCALE_NOTE }] };
+    expect(validatePublishRequest(request([legacy])).toMatchObject({ ok: true });
+    expect(renderToStaticMarkup(createElement(DiagramBlockView, { block: legacy, seed: 9 })))
+      .toContain('class="diagram-scale-note"');
+    const converted = materializeDiagram(legacy);
+    const first = converted.primitives[0];
+    expect(first.type).toBe("arrow");
+    if (first.type !== "arrow") return;
+    expect(first.label).toBeUndefined();
+    expect(first.callout).toBe(SHORT_FORCE_CALLOUT);
+    expect(validatePublishRequest(request([converted])).ok).toBe(true);
+  });
+
+  it("applies the same 0.1 precision rule to local JSON drafts and API publication", () => {
+    for (const jitterPx of [0, 0.1, 1.2, 3]) {
+      const block: DiagramBlock = { ...template, jitterPx };
+      expect(validJitterPx(jitterPx)).toBe(true);
+      expect(validDiagramBlocks([block], 1)).toBe(true);
+      expect(validatePublishRequest(request([block])).ok).toBe(true);
+    }
+    for (const jitterPx of [-0.1, 1.25, 3.1, NaN]) {
+      const block: DiagramBlock = { ...template, jitterPx };
+      expect(validJitterPx(jitterPx)).toBe(false);
+      expect(validDiagramBlocks([block], 1)).toBe(false);
+      expect(validatePublishRequest(request([block])).ok).toBe(false);
+      const document = { input: { text: "physics", template: "general", language: "auto", detail: "standard" },
+        note: note([block]), settings: DEFAULT_SETTINGS, stickers: [], aiDoodle: null, source: "local" };
+      expect(() => readDocument(document)).toThrow("Invalid draft note");
+    }
+    expect(errors(request([{ ...template, jitterPx: 1.25 }]))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "note.diagrams[0].jitterPx", code: "INVALID_PRECISION" }),
+    ]));
   });
 });

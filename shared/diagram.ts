@@ -7,7 +7,10 @@ export const DIAGRAM_LIMITS = {
 } as const;
 
 /** Rendered as a localized figure note; attached to arrow for D3 conversion. */
+/** Legacy serialized marker, accepted for previously published diagrams only. */
 export const SHORT_FORCE_SCALE_NOTE = "Short force arrow not to scale.";
+/** Language-independent metadata; never displayed as an editable label. */
+export const SHORT_FORCE_CALLOUT = "short-force-not-to-scale" as const;
 
 export const FUNCTION_PRESETS = ["none", "linear", "quadratic", "sine", "cosine", "exponential", "logarithm"] as const;
 export type FunctionPreset = (typeof FUNCTION_PRESETS)[number];
@@ -16,7 +19,7 @@ export const DIAGRAM_TEMPLATES = ["inclined-plane", "right-triangle", "number-li
 export type DiagramTemplate = (typeof DIAGRAM_TEMPLATES)[number];
 export type DiagramPoint = [number, number];
 
-type Line = { type: "line" | "arrow"; from: DiagramPoint; to: DiagramPoint; label?: string; dashed?: boolean; double?: boolean; guide?: boolean };
+type Line = { type: "line" | "arrow"; from: DiagramPoint; to: DiagramPoint; label?: string; callout?: typeof SHORT_FORCE_CALLOUT; dashed?: boolean; double?: boolean; guide?: boolean };
 type Polyline = { type: "polyline"; points: DiagramPoint[]; dashed?: boolean; guide?: boolean };
 type Rect = { type: "rect"; at: DiagramPoint; width: number; height: number; rotation?: number };
 type Circle = { type: "circle"; center: DiagramPoint; r: number };
@@ -38,7 +41,9 @@ const point = (x: number, y: number): DiagramPoint => [Number(x.toFixed(4)), Num
 const add = (a: DiagramPoint, b: DiagramPoint): DiagramPoint => point(a[0] + b[0], a[1] + b[1]);
 const scale = (a: DiagramPoint, n: number): DiagramPoint => point(a[0] * n, a[1] * n);
 const line = (from: DiagramPoint, to: DiagramPoint, extra: Partial<Line> = {}): Line => ({ type: "line", from, to, ...extra });
-const arrow = (from: DiagramPoint, to: DiagramPoint, label?: string): Line => ({ type: "arrow", from, to, ...(label ? { label } : {}) });
+const arrow = (from: DiagramPoint, to: DiagramPoint, label?: string, callout?: typeof SHORT_FORCE_CALLOUT): Line => ({
+  type: "arrow", from, to, ...(label ? { label } : {}), ...(callout ? { callout } : {}),
+});
 const label = (at: DiagramPoint, text: string): Label => ({ type: "label", at, text });
 
 /** The two gravity components add to (0, gravity) even for non-right-angle slopes. */
@@ -148,7 +153,7 @@ function inclinedPlane(thetaDeg: number, friction: boolean): DiagramPrimitive[] 
     line(base, groundEnd),
     { type: "rect", at: point(center[0] - 36, center[1] - 27), width: 72, height: 54, rotation: -thetaDeg },
     arrow(center, down),
-    arrow(parallelFrom, parallelTo, shortParallel ? SHORT_FORCE_SCALE_NOTE : undefined),
+    arrow(parallelFrom, parallelTo, undefined, shortParallel ? SHORT_FORCE_CALLOUT : undefined),
     arrow(center, across),
     line(along, down, { dashed: true }),
     line(across, down, { dashed: true }),
@@ -445,6 +450,14 @@ export function expandDiagram(block: DiagramBlock): DiagramPrimitive[] {
 const obj = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).every((key) => allowed.includes(key));
 const finite = (value: unknown, min: number, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+/** Exactly the same decimal multiple-of semantics as the publishing schema. */
+export function matchesNumberIncrement(value: number, increment: number): boolean {
+  const factor = 1 / increment;
+  return Math.round(value * factor) / factor === value;
+}
+export function validJitterPx(value: unknown): value is number {
+  return finite(value, 0, 3) && matchesNumberIncrement(value, 0.1);
+}
 const isPoint = (value: unknown): value is DiagramPoint => Array.isArray(value) && value.length === 2
   && finite(value[0], 0, DIAGRAM_LIMITS.width) && finite(value[1], 0, DIAGRAM_LIMITS.height);
 const text = (value: unknown, max: number, allowEmpty = false): value is string =>
@@ -458,11 +471,12 @@ export function validDiagramPrimitive(value: unknown): value is DiagramPrimitive
   switch (value.type) {
     case "line":
     case "arrow":
-      return keys(value, ["type", "from", "to", "label", "dashed", "double", "guide"])
+      return keys(value, ["type", "from", "to", "label", "callout", "dashed", "double", "guide"])
         && isPoint(value.from) && isPoint(value.to)
         && (value.from[0] !== value.to[0] || value.from[1] !== value.to[1])
-        && labelOrMissing(value.label) && boolOrMissing(value.dashed)
-        && boolOrMissing(value.double) && boolOrMissing(value.guide);
+        && labelOrMissing(value.label)
+        && (value.callout === undefined || (value.type === "arrow" && value.callout === SHORT_FORCE_CALLOUT))
+        && boolOrMissing(value.dashed) && boolOrMissing(value.double) && boolOrMissing(value.guide);
     case "polyline": {
       // Store the narrowed array locally: TS does not preserve narrowing on
       // a mutable Record<string, unknown> property inside Array.some callbacks.
@@ -520,7 +534,7 @@ export function validDiagramBlocks(value: unknown, sectionCount: number): value 
       || !Number.isSafeInteger(block.afterSection) || !finite(block.afterSection, 0, sectionCount - 1)
       || (block.caption !== undefined && !text(block.caption, DIAGRAM_LIMITS.maxCaption, true))
       || !boolOrMissing(block.handDrawn)
-      || (block.jitterPx !== undefined && !finite(block.jitterPx, 0, 3))) return false;
+      || (block.jitterPx !== undefined && !validJitterPx(block.jitterPx))) return false;
 
     if (Object.hasOwn(block, "primitives")) {
       return !Object.hasOwn(block, "template") && !Object.hasOwn(block, "params")

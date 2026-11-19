@@ -1,5 +1,6 @@
 import {
-  DIAGRAM_LIMITS, expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramPrimitive,
+  DIAGRAM_LIMITS, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE,
+  expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramPrimitive,
   type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../shared/diagram.ts";
 import { diagramLabelLayout } from "./svg-geometry.ts";
@@ -59,7 +60,17 @@ export const snapToGrid = (at: Point): Point => point(
 
 /** Converting on first *actual* edit protects the original parameterized template. */
 export function materializeDiagram(block: DiagramBlock): PrimitiveDiagram {
-  if (block.primitives) return block as PrimitiveDiagram;
+  if (block.primitives) {
+    // Normalize old persisted English marker only when a real D3 edit asks to
+    // materialize the block; unchanged legacy published notes remain readable.
+    if (!block.primitives.some((shape) => shape.type === "arrow" && shape.label === SHORT_FORCE_SCALE_NOTE))
+      return block as PrimitiveDiagram;
+    return { ...block, primitives: block.primitives.map((shape) => {
+      if (shape.type !== "arrow" || shape.label !== SHORT_FORCE_SCALE_NOTE) return shape;
+      const { label: _legacy, ...arrow } = shape;
+      return { ...arrow, callout: SHORT_FORCE_CALLOUT };
+    }) } as PrimitiveDiagram;
+  }
   const { afterSection, caption, handDrawn, jitterPx } = block;
   return {
     afterSection,

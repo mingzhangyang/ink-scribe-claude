@@ -1,7 +1,7 @@
 import { ACCENTS, EN_FONTS, INKS, PAGE_SIZES, PAPERS, ZH_FONTS } from "./appearance.ts";
 import { parseContentLines, splitHighlights } from "./content.ts";
 import { DOODLE_FILLS, DOODLE_LIMITS, DOODLE_STROKES, type DoodleSpec } from "./doodle.ts";
-import { DIAGRAM_LIMITS, validDiagramPrimitive, type DiagramBlock } from "./diagram.ts";
+import { DIAGRAM_LIMITS, SHORT_FORCE_CALLOUT, matchesNumberIncrement, validDiagramPrimitive, type DiagramBlock } from "./diagram.ts";
 import { NOTE_LIMITS, type NoteStructure } from "./note.ts";
 import { STYLES, TEMPLATES, type Template } from "./options.ts";
 import type { Settings } from "./settings.ts";
@@ -100,6 +100,7 @@ const lineOptions = { label: labelSchema, dashed: { type: "boolean" } as Schema,
 const primitiveSchema: Schema = { oneOf: [
   ...(["line", "arrow"] as const).map((type) => object({
     type: { type: "string", const: type }, from: diagramPoint, to: diagramPoint, ...lineOptions,
+    ...(type === "arrow" ? { callout: { type: "string", const: SHORT_FORCE_CALLOUT } as Schema } : {}),
   }, ["type", "from", "to"])),
   object({ type: { type: "string", const: "polyline" },
     points: { type: "array", minItems: 2, maxItems: DIAGRAM_LIMITS.maxPoints, items: diagramPoint },
@@ -316,8 +317,8 @@ function check(schema: Schema, value: unknown, path: string, issues: ValidationI
       if (schema.minimum !== undefined && value < schema.minimum) issue(issues, path, "OUT_OF_RANGE", `Minimum is ${schema.minimum}.`);
       if (schema.maximum !== undefined && value > schema.maximum) issue(issues, path, "OUT_OF_RANGE", `Maximum is ${schema.maximum}.`);
       if (schema.multipleOf) {
-        const factor = 1 / schema.multipleOf;
-        if (Math.round(value * factor) / factor !== value) issue(issues, path, "INVALID_PRECISION", `Use increments of ${schema.multipleOf}.`);
+        if (!matchesNumberIncrement(value, schema.multipleOf))
+          issue(issues, path, "INVALID_PRECISION", `Use increments of ${schema.multipleOf}.`);
       }
       return;
     case "boolean":

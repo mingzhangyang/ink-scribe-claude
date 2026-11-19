@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { DIAGRAM_LIMITS, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import {
   addShape, defaultShape, deleteShape, DIAGRAM_GRID, editShape,
@@ -35,8 +35,8 @@ function labelText(shape: Primitive): string | null {
   switch (shape.type) {
     case "label": return shape.text;
     case "line":
-    case "arrow":
     case "arc": return shape.label ?? "";
+    case "arrow": return shape.label === SHORT_FORCE_SCALE_NOTE ? "" : shape.label ?? "";
     default: return null;
   }
 }
@@ -48,7 +48,9 @@ function setLabelText(shape: Primitive, text: string): Primitive {
     case "arrow":
     case "arc": {
       const { label: _prior, ...rest } = shape;
-      return value ? { ...rest, label: value } as Primitive : rest as Primitive;
+      const migrated = shape.type === "arrow" && _prior === SHORT_FORCE_SCALE_NOTE
+        ? { ...rest, callout: SHORT_FORCE_CALLOUT } : rest;
+      return value ? { ...migrated, label: value } as Primitive : migrated as Primitive;
     }
     default: return shape;
   }

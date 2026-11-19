@@ -157,3 +157,15 @@ Any measured overflow, label-size or export performance failure remains a releas
 - **Fine edit:** the first shape edit no longer re-flows every template label. Only labels newly crowded at their anchor or newly/more severely crossed by the edited stroke at painted text bounds move; guide grid lines are ignored as hard clearance obstacles during this selective reflow. All other primitives stay byte-identical. Previously nudging a number-line axis snapped all values to the grid and stacked "1"/"2" and "4"/"5" onto one anchor.
 - **Coordinate plane:** grid lines now run through integer coordinates measured from the origin (78 units per x, 76 per y, the function plot scale), and lines coinciding with an axis are omitted. Key-point annotations choose the first nearby position whose text box crosses neither axis, the curve, its own dot, nor another annotation.
 - Regression tests: `tests/diagram.test.ts` ("template math regressions") and `tests/diagram-geometry.test.ts` ("first shape edit preserves untouched template labels").
+
+
+## Diagram polish: ground, sampled labels and editor history (2026-11-18)
+
+- The inclined-plane angle arc now has a solid horizontal ground reference from the same vertex. The angle label is searched near the arc with both the ground and incline as obstacles; force-vector math is unchanged.
+- Number-line tick marks remain fully preserved, including endpoints and the existing floating-point terminal-tick correction. Intermediate label **visibility** uses one regular tick-index stride, anchored at zero where zero is an actual tick. The two endpoints remain mandatory. Very small ranges fall back to endpoints when adding a zero label would collide.
+- D2 and D3 expose the same document-scoped 30-step diagram history controls. Changes to a range input (slope, leg ratio, per-diagram jitter) re-render live but coalesce into one undo step per pointer/keyboard gesture; pointerup/keyup/blur ends the transaction. New documents, ordinary text edits, undo and redo clear the active transaction.
+- A diagram caption is local until blur (or Enter), then a single history step is recorded if the cleaned value differs. Escape discards the edit. A note-serial and diagram-identity guard rejects stale blur commits.
+- A short force arrow uses an optional, language-independent `callout: "short-force-not-to-scale"` rather than putting an English system note into an editable arrow label. The view renders the locale-specific note outside the SVG. Previously persisted `label: "Short force arrow not to scale."` arrows remain readable; conversion to editable primitives migrates the marker. The optional field is allowed for arrows only, and publish schemaVersion stays 1.
+- The editor, local draft reader and publishing validator use the same 0..3, exact 0.1-increment jitter rule. Invalid imported values (such as 1.25) are rejected rather than silently rounded.
+
+Local release gate: `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`, and actual Chinese/English SVG/PNG inspection at 5°, 15°, 30° and 60°. No CI dispatch is required.
