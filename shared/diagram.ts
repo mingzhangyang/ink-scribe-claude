@@ -55,7 +55,7 @@ export function inclinedPlaneForces(thetaDeg: number, gravity = 160): {
 
 type Bounds = [number, number, number, number];
 /** Approximate painted glyph extents in normalized SVG units, including paper outline. */
-function inclineTextBounds(text: string, at: DiagramPoint): Bounds {
+export function inclineTextBounds(text: string, at: DiagramPoint): Bounds {
   const units = Array.from(text).reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
   const half = Math.max(19, units * 14);
   return [at[0] - half, at[1] - 32, at[0] + half, at[1] + 32];
@@ -64,7 +64,7 @@ function boxesIntersect(a: Bounds, b: Bounds, gap = 10): boolean {
   return a[0] < b[2] + gap && a[2] + gap > b[0] && a[1] < b[3] + gap && a[3] + gap > b[1];
 }
 /** Exact segment-vs-expanded-rectangle intersection (Liang-Barsky clipping). */
-function segmentTouchesLabel(a: DiagramPoint, b: DiagramPoint, rect: Bounds): boolean {
+export function segmentTouchesLabel(a: DiagramPoint, b: DiagramPoint, rect: Bounds): boolean {
   const x0 = a[0], y0 = a[1], dx = b[0] - x0, dy = b[1] - y0;
   const minX = rect[0] - 9, minY = rect[1] - 9, maxX = rect[2] + 9, maxY = rect[3] + 9;
   const tests: [number, number][] = [
@@ -220,8 +220,10 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
   const count = Math.max(1, Math.min(19, Math.floor((end - start) / step + 1e-9) + 1));
   const ticks = Array.from({ length: count }, (_, i) => start + step * i);
   const last = ticks.length - 1;
-  // Compare exact endpoints: a step-sized absolute epsilon can erase a valid tiny range.
-  if (ticks[last] === end) {
+  // start + step * i accumulates binary rounding error (0.1 * 12 = 1.2000000000000002).
+  // Snap a final tick within a step-relative epsilon of the end; never snap the
+  // start tick itself, which keeps publish-valid tiny ranges (end < step) intact.
+  if (ticks[last] === end || (last > 0 && Math.abs(ticks[last] - end) <= step * 1e-9)) {
     ticks[last] = end;
   } else {
     // Drop a near-duplicate terminal tick so the end label remains readable.
@@ -249,6 +251,35 @@ function numberLine(start: number, end: number, step: number): DiagramPrimitive[
     if (visible.has(i)) result.push(label(point(x, y + 62), labels[i]));
   }
   return result;
+}
+
+/**
+ * Put a key-point annotation at the first candidate around its dot whose
+ * estimated text box crosses neither axis, the plotted curve, its own dot,
+ * nor an earlier annotation.
+ */
+function keyPointLabelAnchor(
+  text: string, at: DiagramPoint, origin: DiagramPoint, placed: Bounds[], curve: [DiagramPoint, DiagramPoint][],
+): DiagramPoint {
+  const units = Array.from(text).reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+  // Same horizontal safe region as the label renderer, so the checked box is the painted one.
+  const minX = Math.max(90, 20 + Math.min(960, units * 30) / 2);
+  const clamp = (p: DiagramPoint) => point(Math.max(minX, Math.min(DIAGRAM_LIMITS.width - minX, p[0])),
+    Math.max(95, Math.min(DIAGRAM_LIMITS.height - 70, p[1])));
+  // Shift wide labels so their near edge, not their center, sits beside the dot.
+  const dx = Math.max(65, units * 14 + 12);
+  const candidates = [[dx, -42], [-dx, -42], [dx, 42], [-dx, 42],
+    [dx, -84], [-dx, -84], [dx, 84], [-dx, 84]].map(([x, y]) => clamp(point(at[0] + x, at[1] + y)));
+  const clear = (p: DiagramPoint) => {
+    const box = inclineTextBounds(text, p);
+    const crossesAxis = (box[0] < origin[0] && box[2] > origin[0])
+      || (box[1] < origin[1] && box[3] > origin[1]);
+    // Edge clamping can slide a wide label back over its own dot.
+    const coversDot = boxesIntersect(box, [at[0], at[1], at[0], at[1]], 6);
+    return !crossesAxis && !coversDot && !placed.some((other) => boxesIntersect(box, other, 4))
+      && !curve.some(([from, to]) => segmentTouchesLabel(from, to, box));
+  };
+  return candidates.find(clear) ?? candidates[0];
 }
 
 /** Coordinate axes use 78 SVG units per x unit and 76 per y unit. */
@@ -327,13 +358,18 @@ function graphFunction(
     exponential: [[0, 1, "(0,1)"]],
     logarithm: [[1, 0, "(1,0)"], [2, 1, "(2,1)"]],
   };
+  const placed: Bounds[] = [];
+  const curve = primitives.flatMap((shape) => shape.type === "polyline"
+    ? shape.points.slice(1).map((p, i): [DiagramPoint, DiagramPoint] => [shape.points[i], p]) : []);
   for (const [x, y, text] of marks[preset]) {
     if (x < xmin + 0.2 || x > xmax - 0.2 || y < ymin + 0.2 || y > ymax - 0.2) continue;
     const at = map(x, y);
     primitives.push({ type: "circle", center: at, r: 5 });
-    // Move annotations off the curve, and avoid overlapping the axes origin label.
-    if (text !== "O") primitives.push(label(point(Math.min(900, at[0] + 65),
-      Math.max(95, at[1] - 42)), text));
+    // The origin is already annotated by the axes' "O".
+    if (text === "O") continue;
+    const anchor = keyPointLabelAnchor(text, at, origin, placed, curve);
+    placed.push(inclineTextBounds(text, anchor));
+    primitives.push(label(anchor, text));
   }
   return primitives;
 }
@@ -345,8 +381,13 @@ function coordinatePlane(grid: boolean, quadrants: "all" | "first",
   const bottom = quadrants === "all" ? 655 : origin[1];
   const result: DiagramPrimitive[] = [];
   if (grid) {
-    for (let x = left; x <= 890; x += 78) result.push(line(point(x, 95), point(x, bottom), { guide: true, dashed: true }));
-    for (let y = 110; y <= bottom; y += 76) result.push(line(point(left, y), point(900, y), { guide: true, dashed: true }));
+    // Grid lines pass through integer coordinates (origin + k units), the same
+    // 78/76-unit scale graphFunction uses, so plotted key points sit on intersections.
+    // Lines that would coincide with an axis are omitted.
+    for (let x = origin[0] - Math.floor((origin[0] - left) / 78) * 78; x <= 890; x += 78)
+      if (x !== origin[0]) result.push(line(point(x, 95), point(x, bottom), { guide: true, dashed: true }));
+    for (let y = origin[1] - Math.floor((origin[1] - 95) / 76) * 76; y <= bottom; y += 76)
+      if (y !== origin[1]) result.push(line(point(left, y), point(900, y), { guide: true, dashed: true }));
   }
   result.push(arrow(point(left, origin[1]), point(905, origin[1])));
   result.push(arrow(point(origin[0], bottom), point(origin[0], 80)));

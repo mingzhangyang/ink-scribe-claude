@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { PrimitiveEditor } from "../src/components/PrimitiveEditor.tsx";
 import { diagramArcPath, diagramLabelLayout } from "../src/diagrams/svg-geometry.ts";
-import { expandDiagram, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
+import { expandDiagram, inclineTextBounds, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 import {
   DIAGRAM_GRID, DIAGRAM_HISTORY_LIMIT, addShape, defaultShape, deleteShape,
@@ -231,4 +231,182 @@ describe("D3 shapes and geometry", () => {
     expect(clamped.sweepDeg).toBe(360);
   });
 
+});
+
+describe("first shape edit preserves untouched template labels (review fix)", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  const labels = (shapes: DiagramPrimitive[]) =>
+    shapes.filter((shape): shape is Label => shape.type === "label");
+  const cases: { name: string; block: DiagramBlock; pick: (shape: DiagramPrimitive) => boolean }[] = [
+    { name: "number line axis", block: { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } },
+      pick: (shape) => shape.type === "arrow" },
+    { name: "sine curve", block: { afterSection: 0, template: "coordinate-plane",
+      params: { grid: false, quadrants: "all", function: "sine" } }, pick: (shape) => shape.type === "polyline" },
+    { name: "axes x label", block: { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } }, pick: (shape) => shape.type === "label" && shape.text === "x" },
+    { name: "inclined block", block: { afterSection: 0, template: "inclined-plane",
+      params: { thetaDeg: 30, friction: true } }, pick: (shape) => shape.type === "rect" },
+  ];
+  for (const { name, block, pick } of cases) {
+    it(`moving the ${name} leaves every other primitive unchanged`, () => {
+      const before = expandDiagram(block);
+      const index = before.findIndex(pick);
+      const target = before[index];
+      const moved = target.type === "label"
+        ? { ...target, at: [target.at[0] - 100, target.at[1] - 100] as [number, number] }
+        : moveShape(target, 0, -25);
+      const result = editShape(block, index, moved);
+      expect(result).not.toBe(block);
+      const after = result.primitives!;
+      expect(after).toHaveLength(before.length);
+      before.forEach((shape, i) => { if (i !== index) expect(after[i], `${name} #${i}`).toEqual(shape); });
+    });
+  }
+
+  it("never stacks two number-line values onto one anchor after a nudge", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } };
+    const axis = expandDiagram(block).findIndex((shape) => shape.type === "arrow");
+    const result = editShape(block, axis, moveShape(expandDiagram(block)[axis], 0, -DIAGRAM_GRID));
+    const anchors = labels(result.primitives!).map((label) => label.at.join(","));
+    expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("still reflows a label that the edited shape is moved onto", () => {
+    const base: DiagramBlock = { afterSection: 0, primitives: [
+      { type: "line", from: [200, 200], to: [800, 200] },
+      { type: "label", at: [500, 375], text: "L" },
+    ] };
+    const result = editShape(base, 0, moveShape(base.primitives![0], 0, 175));
+    const label = result.primitives![1];
+    if (label.type !== "label") throw new Error("Expected label");
+    expect(Math.abs(label.at[1] - 375)).toBeGreaterThanOrEqual(48);
+  });
+});
+
+describe("selective clearance after edits to nearby strokes", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  // Match the shared text-bound estimator (including its 9-unit paint outline).
+  const intersectsVerticalStroke = (shape: Label, x: number) => {
+    const [centerX] = diagramLabelLayout(shape.at, shape.text).at;
+    const units = Array.from(shape.text).reduce((sum, ch) =>
+      sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0);
+    return Math.abs(centerX - x) <= Math.max(19, units * 14) + 9;
+  };
+
+  it("moves the origin label when the y axis enters its painted bounds, with or without grid", () => {
+    for (const grid of [false, true]) {
+      const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+        params: { grid, quadrants: "all" } };
+      const initial = expandDiagram(block);
+      const axisIndex = initial.findIndex((shape) => shape.type === "arrow" && shape.from[0] === 490);
+      const originIndex = initial.findIndex((shape) => shape.type === "label" && shape.text === "O");
+      expect(axisIndex).toBeGreaterThanOrEqual(0);
+      expect(originIndex).toBeGreaterThanOrEqual(0);
+      const edited = moveShape(initial[axisIndex], -DIAGRAM_GRID, 0);
+      const result = editShape(block, axisIndex, edited);
+      const after = result.primitives!;
+      expect(after).toHaveLength(initial.length);
+      expect(after[originIndex].type).toBe("label");
+      if (after[originIndex].type !== "label") throw new Error("Expected O label");
+      expect(after[originIndex].at, `grid=${grid}`).not.toEqual([450, 440]);
+      expect(intersectsVerticalStroke(after[originIndex], 465), `grid=${grid}`).toBe(false);
+      initial.forEach((shape, i) => {
+        if (i !== axisIndex && i !== originIndex) expect(after[i], `grid=${grid} #${i}`).toEqual(shape);
+      });
+      expect(validDiagramBlocks([result], 1)).toBe(true);
+    }
+  });
+
+  it("keeps the origin label in place when the axis moves away", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+      params: { grid: true, quadrants: "all" } };
+    const initial = expandDiagram(block);
+    const axisIndex = initial.findIndex((shape) => shape.type === "arrow" && shape.from[0] === 490);
+    const result = editShape(block, axisIndex, moveShape(initial[axisIndex], DIAGRAM_GRID, 0));
+    const beforeO = initial.find((shape) => shape.type === "label" && shape.text === "O");
+    const afterO = result.primitives?.find((shape) => shape.type === "label" && shape.text === "O");
+    expect(afterO).toEqual(beforeO);
+  });
+
+  it("checks wide painted bounds even if the label anchor is still 48 units clear", () => {
+    const original: DiagramPrimitive = { type: "line", from: [675, 100], to: [675, 650] };
+    const label: Label = { type: "label", at: [500, 375], text: "abcdefghij" };
+    const block: DiagramBlock = { afterSection: 0, primitives: [original, label] };
+    const result = editShape(block, 0, moveShape(original, -DIAGRAM_GRID, 0));
+    const shifted = result.primitives![1];
+    expect(shifted.type).toBe("label");
+    if (shifted.type !== "label") throw new Error("Expected label");
+    expect(shifted.at).not.toEqual(label.at);
+    expect(intersectsVerticalStroke(shifted, 650)).toBe(false);
+    expect(validDiagramBlocks([result], 1)).toBe(true);
+  });
+
+  it("repositions an already-overlapped label when the stroke gets materially closer", () => {
+    const original: DiagramPrimitive = { type: "line", from: [470, 100], to: [470, 600] };
+    const label: Label = { type: "label", at: [450, 440], text: "O" };
+    const block: DiagramBlock = { afterSection: 0, primitives: [original, label] };
+    const result = editShape(block, 0, moveShape(original, -DIAGRAM_GRID, 0));
+    const shifted = result.primitives![1];
+    expect(shifted.type).toBe("label");
+    if (shifted.type !== "label") throw new Error("Expected label");
+    expect(shifted.at).not.toEqual(label.at);
+    expect(intersectsVerticalStroke(shifted, 445)).toBe(false);
+  });
+});
+
+describe("selective reflow avoids painted label collisions (review fix)", () => {
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  const labelBounds = (shape: Label) =>
+    inclineTextBounds(shape.text, diagramLabelLayout(shape.at, shape.text).at);
+  const overlap = (a: Label, b: Label) => {
+    const [left, top, right, bottom] = labelBounds(a);
+    const [otherLeft, otherTop, otherRight, otherBottom] = labelBounds(b);
+    const gap = 10;
+    return left < otherRight + gap && right + gap > otherLeft
+      && top < otherBottom + gap && bottom + gap > otherTop;
+  };
+
+  it("keeps adjacent number-line labels separate after moving the axis down 75 units", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line",
+      params: { start: 0, end: 5, step: 1 } };
+    const before = expandDiagram(block);
+    const axisIndex = before.findIndex((shape) => shape.type === "arrow");
+    expect(axisIndex).toBe(0);
+    const moved = moveShape(before[axisIndex], 0, 3 * DIAGRAM_GRID);
+    const result = editShape(block, axisIndex, moved);
+    const after = result.primitives!;
+    const initialValues = before.filter((shape): shape is Label => shape.type === "label");
+    const values = after.filter((shape): shape is Label => shape.type === "label");
+
+    expect(values.map((label) => label.text)).toEqual(["0", "1", "2", "3", "4", "5"]);
+    expect(values.some((label, i) => label.at.join() !== initialValues[i].at.join())).toBe(true);
+    for (let i = 0; i < values.length; i++) {
+      for (let j = i + 1; j < values.length; j++) {
+        expect(overlap(values[i], values[j]), `${values[i].text}/${values[j].text}`).toBe(false);
+      }
+    }
+    expect(after[axisIndex]).toEqual(moved);
+    before.forEach((shape, i) => {
+      if (i !== axisIndex && shape.type !== "label") expect(after[i], `tick #${i}`).toEqual(shape);
+    });
+    expect(validDiagramBlocks([result], 1)).toBe(true);
+    expect(editShape(block, axisIndex, moved)).toEqual(result);
+  });
+
+  it("avoids an untouched label while selectively moving a newly obscured one", () => {
+    const block: DiagramBlock = { afterSection: 0, primitives: [
+      { type: "line", from: [200, 200], to: [800, 200] },
+      { type: "label", at: [400, 375], text: "A" },
+      { type: "label", at: [350, 300], text: "B" },
+    ] };
+    const result = editShape(block, 0, moveShape(block.primitives![0], 0, 175));
+    const shifted = result.primitives![1], untouched = result.primitives![2];
+    expect(shifted.type).toBe("label");
+    expect(untouched.type).toBe("label");
+    if (shifted.type !== "label" || untouched.type !== "label") throw new Error("Expected labels");
+    expect(shifted.at).not.toEqual([400, 375]);
+    expect(untouched).toEqual(block.primitives![2]);
+    expect(overlap(shifted, untouched)).toBe(false);
+    expect(validDiagramBlocks([result], 1)).toBe(true);
+  });
 });

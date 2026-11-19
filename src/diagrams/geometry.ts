@@ -1,5 +1,5 @@
 import {
-  DIAGRAM_LIMITS, expandDiagram, validDiagramPrimitive,
+  DIAGRAM_LIMITS, expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramPrimitive,
   type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../shared/diagram.ts";
 import { diagramLabelLayout } from "./svg-geometry.ts";
@@ -253,16 +253,45 @@ function strokes(shape: Shape): Point[][] {
   }
 }
 
+const LABEL_CLEARANCE = 48;
+type TextLabel = Extract<Shape, { type: "label" }>;
+/** Use the renderer's clamped anchor for painted bounds and label collisions. */
+function paintedLabelBounds(label: TextLabel, at: Point = label.at): [number, number, number, number] {
+  return inclineTextBounds(label.text, diagramLabelLayout(at, label.text).at);
+}
+/** Require a small buffer between painted label boxes, not just distinct anchors. */
+function labelsOverlap(label: TextLabel, at: Point, other: TextLabel): boolean {
+  const [left, top, right, bottom] = paintedLabelBounds(label, at);
+  const [otherLeft, otherTop, otherRight, otherBottom] = paintedLabelBounds(other);
+  const gap = 10;
+  return left < otherRight + gap && right + gap > otherLeft
+    && top < otherBottom + gap && bottom + gap > otherTop;
+}
+/** Test the painted text box, not just its anchor, against an edited stroke. */
+function touchesPaintedLabel(label: TextLabel, stroke: Shape): boolean {
+  const bounds = paintedLabelBounds(label);
+  return strokes(stroke).some(([from, to]) => segmentTouchesLabel(from, to, bounds));
+}
+/** Distance from a label anchor to the nearest stroke of one shape (Infinity for text). */
+function strokeDistance(at: Point, shape: Shape): number {
+  return strokes(shape).reduce((best, [a, b]) => Math.min(best, closestSegment(at, a, b)), Infinity);
+}
+
 /**
  * Enforce a minimum text-anchor-to-stroke clearance (~4 rendered px at normal scale,
  * plus room for the outline/handwritten glyph). D1 still paints a paper-color outline.
  */
-export function clearLabel(shape: Shape, others: Shape[], clearance = 48): Shape {
+export function clearLabel(
+  shape: Shape, others: Shape[], clearance = LABEL_CLEARANCE, avoidPaintedStroke?: Shape,
+): Shape {
   if (shape.type !== "label") return shape;
   const lines = others.flatMap(strokes);
-  if (!lines.length) return shape;
+  const labels = others.filter((other): other is TextLabel => other.type === "label");
+  if (!lines.length && !avoidPaintedStroke && !labels.length) return shape;
   const valid = (p: Point) => p[0] >= 60 && p[0] <= 940 && p[1] >= 60 && p[1] <= 690
-    && lines.every(([a,b])=>closestSegment(p,a,b)>=clearance);
+    && lines.every(([a,b])=>closestSegment(p,a,b)>=clearance)
+    && (!avoidPaintedStroke || !touchesPaintedLabel({ ...shape, at: p }, avoidPaintedStroke))
+    && labels.every((other) => !labelsOverlap(shape, p, other));
   if (valid(shape.at)) return shape;
   const base = snapToGrid(shape.at);
   for(let ring=0;ring<=20;ring++){
@@ -285,8 +314,27 @@ export function editShape(block: DiagramBlock, index: number, next: Shape): Diag
   const adapted = clearLabel(next, primitives.filter((_, i) => i !== index));
   if (JSON.stringify(primitives[index]) === JSON.stringify(adapted)) return block;
   const changed = primitives.map((shape, i) => i === index ? adapted : shape);
-  const adjusted = changed.map((shape, i) => shape.type === "label"
-    ? clearLabel(shape, changed.filter((_, j) => j !== i)) : shape);
+  // Preserve intentional template spacing (notably number-line tick values).
+  // Reflow only if the edited stroke newly crowds an anchor or newly/more deeply
+  // crosses the painted glyph box. Existing near-clearance is not a veto.
+  const before = primitives[index];
+  // Sequential placement keeps earlier relocations visible to later labels,
+  // while labels not being reflowed stay as fixed obstacles.
+  const adjusted = [...changed];
+  for (let i = 0; i < adjusted.length; i++) {
+    const shape = adjusted[i];
+    if (shape.type !== "label" || i === index) continue;
+    const beforeDistance = strokeDistance(shape.at, before);
+    const afterDistance = strokeDistance(shape.at, adapted);
+    const newlyCrowded = beforeDistance >= LABEL_CLEARANCE && afterDistance < LABEL_CLEARANCE;
+    const worsenedInk = touchesPaintedLabel(shape, adapted)
+      && (!touchesPaintedLabel(shape, before) || beforeDistance - afterDistance >= DIAGRAM_GRID / 2);
+    if (!newlyCrowded && !worsenedInk) continue;
+    // Decorative guide lines sit close together by design; forcing 48 units
+    // from every grid line makes a valid relocation impossible.
+    const obstacles = adjusted.filter((other, j) => j !== i && !("guide" in other && other.guide));
+    adjusted[i] = clearLabel(shape, obstacles, LABEL_CLEARANCE, adapted);
+  }
   if (!adjusted.every(validDiagramPrimitive)) return block;
   return { ...editable, primitives: adjusted };
 }

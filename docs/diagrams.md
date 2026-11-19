@@ -150,3 +150,10 @@ Local-only commands:
     npm run test:e2e
 
 Any measured overflow, label-size or export performance failure remains a release blocker, not an exception silently waived by PR merge.
+
+## Acceptance review fixes (2026-11-19)
+
+- **Number line:** the last tick is matched to `end` with a step-relative tolerance, so float accumulation (`0.1 * 12 = 1.2000000000000002`) no longer drops the second-to-last tick (0–1.2 step 0.1 now draws all 13 evenly spaced ticks). The start tick is never snapped, so tiny publish-valid ranges keep both endpoints.
+- **Fine edit:** the first shape edit no longer re-flows every template label. Only labels newly crowded at their anchor or newly/more severely crossed by the edited stroke at painted text bounds move; guide grid lines are ignored as hard clearance obstacles during this selective reflow. All other primitives stay byte-identical. Previously nudging a number-line axis snapped all values to the grid and stacked "1"/"2" and "4"/"5" onto one anchor.
+- **Coordinate plane:** grid lines now run through integer coordinates measured from the origin (78 units per x, 76 per y, the function plot scale), and lines coinciding with an axis are omitted. Key-point annotations choose the first nearby position whose text box crosses neither axis, the curve, its own dot, nor another annotation.
+- Regression tests: `tests/diagram.test.ts` ("template math regressions") and `tests/diagram-geometry.test.ts` ("first shape edit preserves untouched template labels").

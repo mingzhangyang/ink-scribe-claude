@@ -424,3 +424,97 @@ describe("diagram template geometry", () => {
     }
   });
 });
+
+describe("template math regressions (review fixes)", () => {
+  type Line = Extract<DiagramPrimitive, { type: "line" | "arrow" }>;
+  type Label = Extract<DiagramPrimitive, { type: "label" }>;
+  const tickXs = (block: DiagramBlock) => expandDiagram(block)
+    .filter((shape): shape is Line => shape.type === "line").map((shape) => shape.from[0]);
+
+  it("keeps every number-line tick when start + step * i accumulates float error", () => {
+    // 0.1 * 12 === 1.2000000000000002, which previously dropped the 1.1 tick.
+    for (const [start, end, expected] of [
+      [0, 1.2, 13], [0, 1.4, 15], [0, 1.7, 18], [0.1, 1.8, 18], [-1.2, 0.5, 18], [0, 0.7, 8],
+    ] as const) {
+      const block: DiagramBlock = { afterSection: 0, template: "number-line", params: { start, end, step: 0.1 } };
+      expect(validDiagramBlocks([block], 1)).toBe(true);
+      const xs = tickXs(block);
+      expect(xs, `${start}..${end}`).toHaveLength(expected);
+      const gaps = xs.slice(1).map((x, i) => x - xs[i]);
+      // Uniform spacing: no doubled gap at the end of the axis.
+      expect(Math.max(...gaps) - Math.min(...gaps), `${start}..${end}`).toBeLessThan(0.01);
+      const labels = expandDiagram(block).filter((shape): shape is Label => shape.type === "label");
+      expect(labels.at(-1)?.text).toBe(String(end));
+    }
+  });
+
+  it("still appends a distinct end tick when the step does not divide the range", () => {
+    const block: DiagramBlock = { afterSection: 0, template: "number-line", params: { start: 0, end: 10, step: 3 } };
+    const labels = expandDiagram(block).filter((shape): shape is Label => shape.type === "label").map((s) => s.text);
+    expect(labels).toEqual(["0", "3", "6", "9", "10"].filter((text) => labels.includes(text)));
+    expect(labels.at(-1)).toBe("10");
+    expect(tickXs(block)).toHaveLength(5);
+  });
+
+  it("aligns the coordinate grid with the axes and the plotted unit scale", () => {
+    for (const quadrants of ["all", "first"] as const) {
+      const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+        params: { grid: true, quadrants, function: "linear", keyPoints: true } };
+      const shapes = expandDiagram(block);
+      const [xAxis, yAxis] = shapes.filter((shape): shape is Line => shape.type === "arrow");
+      const originX = yAxis.from[0], originY = xAxis.from[1];
+      const grid = shapes.filter((shape): shape is Line => shape.type === "line" && !!shape.guide);
+      const vertical = grid.filter((shape) => shape.from[0] === shape.to[0]).map((shape) => shape.from[0]);
+      const horizontal = grid.filter((shape) => shape.from[1] === shape.to[1]).map((shape) => shape.from[1]);
+      expect(vertical.length).toBeGreaterThan(3);
+      expect(horizontal.length).toBeGreaterThan(3);
+      // 78 SVG units per x unit and 76 per y unit, measured from the origin.
+      for (const x of vertical) expect(Math.abs(((x - originX) / 78) % 1), `x=${x}`).toBeLessThan(1e-9);
+      for (const y of horizontal) expect(Math.abs(((y - originY) / 76) % 1), `y=${y}`).toBeLessThan(1e-9);
+      // No grid line is drawn on top of an axis.
+      expect(vertical).not.toContain(originX);
+      expect(horizontal).not.toContain(originY);
+      // Every key point lies on a grid intersection or an axis when it has integer coordinates.
+      const dots = shapes.filter((shape) => shape.type === "circle");
+      for (const dot of dots) {
+        if (dot.type !== "circle") continue;
+        expect([originX, ...vertical].some((x) => Math.abs(x - dot.center[0]) < 1e-6)).toBe(true);
+        expect([originY, ...horizontal].some((y) => Math.abs(y - dot.center[1]) < 1e-6)).toBe(true);
+      }
+    }
+  });
+
+  it("keeps function key-point labels off the axes, the curve and each other", () => {
+    const half = (text: string) => Math.max(19, Array.from(text)
+      .reduce((sum, ch) => sum + (ch.charCodeAt(0) < 128 ? 1.1 : 1.3), 0) * 14);
+    for (const fn of ["linear", "quadratic", "sine", "cosine", "exponential", "logarithm"] as const) {
+      for (const quadrants of ["all", "first"] as const) {
+        for (const grid of [true, false]) {
+          const block: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+            params: { grid, quadrants, function: fn, keyPoints: true } };
+          const shapes = expandDiagram(block);
+          expect(shapes.length).toBeLessThanOrEqual(40);
+          expect(validDiagramBlocks([materializeDiagram(block)], 1)).toBe(true);
+          const [xAxis, yAxis] = shapes.filter((shape): shape is Line => shape.type === "arrow");
+          const originX = yAxis.from[0], originY = xAxis.from[1];
+          const boxes = shapes.filter((shape): shape is Label => shape.type === "label" && shape.text.startsWith("("))
+            .map((shape) => ({ text: shape.text, box: [shape.at[0] - half(shape.text), shape.at[1] - 32,
+              shape.at[0] + half(shape.text), shape.at[1] + 32] }));
+          const curve = shapes.flatMap((shape) => shape.type === "polyline" ? shape.points : []);
+          for (const [i, { text, box }] of boxes.entries()) {
+            const where = `${fn}/${quadrants}/${grid} ${text}`;
+            expect(box[0] < originX && box[2] > originX, where + " crosses y-axis").toBe(false);
+            expect(box[1] < originY && box[3] > originY, where + " crosses x-axis").toBe(false);
+            expect(curve.some(([x, y]) => x > box[0] && x < box[2] && y > box[1] && y < box[3]),
+              where + " covers the curve").toBe(false);
+            for (const other of boxes.slice(i + 1)) {
+              const b = other.box;
+              expect(box[0] < b[2] && b[0] < box[2] && box[1] < b[3] && b[1] < box[3],
+                where + " overlaps " + other.text).toBe(false);
+            }
+          }
+        }
+      }
+    }
+  });
+});
