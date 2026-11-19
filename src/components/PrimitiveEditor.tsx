@@ -10,6 +10,7 @@ import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout, diagramViewpo
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
+import { DiagramHistoryButtons } from "./DiagramHistoryButtons.tsx";
 
 type P = DiagramPoint;
 type Primitive = DiagramPrimitive;
@@ -147,8 +148,6 @@ function Selector({
 export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: number }) {
   const t = useT().content.diagrams;
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
-  const undo = useNoteStore((s) => s.diagramUndo.length);
-  const redo = useNoteStore((s) => s.diagramRedo.length);
   const undoDiagram = useNoteStore((s) => s.undoDiagram);
   const redoDiagram = useNoteStore((s) => s.redoDiagram);
   const [working, setWorking] = useState(block);
@@ -337,8 +336,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
       </button>
     </div> : null}
     <div className="diagram-edit-toolbar" role="toolbar" aria-label={t.shapeTools}>
-      <button type="button" className="btn btn-link" disabled={!undo} onClick={undoDiagram}>{t.undo}</button>
-      <button type="button" className="btn btn-link" disabled={!redo} onClick={redoDiagram}>{t.redo}</button>
+      <DiagramHistoryButtons />
       <label className="diagram-grid-toggle"><input type="checkbox" checked={showGrid}
         onChange={(event) => setShowGrid(event.target.checked)} />{t.snapGrid}</label>
     </div>
