@@ -11,7 +11,7 @@ import { validatePublishRequest, validatePublishedNote } from "../shared/publish
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { diagramLabelLayout, diagramViewport } from "../src/diagrams/svg-geometry.ts";
-import { materializeDiagram } from "../src/diagrams/geometry.ts";
+import { editShape, materializeDiagram, moveShape } from "../src/diagrams/geometry.ts";
 import { LAYOUTS } from "../src/components/note/layouts.tsx";
 import { labelsFor } from "../src/components/note/parts.tsx";
 
@@ -602,6 +602,15 @@ describe("diagram callout metadata and jitter import compatibility", () => {
     expect(first.label).toBeUndefined();
     expect(first.callout).toBe(SHORT_FORCE_CALLOUT);
     expect(validatePublishRequest(request([converted])).ok).toBe(true);
+    // A move carries the old arrow object as its source. It must not overwrite
+    // the migrated field with the legacy English sentinel again.
+    const dragged = editShape(legacy, 0, moveShape(legacy.primitives[0], 25, 0));
+    expect(dragged.primitives?.[0].type).toBe("arrow");
+    const draggedArrow = dragged.primitives?.[0];
+    if (draggedArrow?.type !== "arrow") throw new Error("Expected arrow after edit");
+    expect(draggedArrow.label).toBeUndefined();
+    expect(draggedArrow.callout).toBe(SHORT_FORCE_CALLOUT);
+    expect(validatePublishRequest(request([dragged])).ok).toBe(true);
   });
 
   it("applies the same 0.1 precision rule to local JSON drafts and API publication", () => {
