@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { NoteStructure } from "../shared/note.ts";
-import { insertDiagram, setDiagramCaption } from "../src/diagrams/editor.ts";
+import { insertDiagram, setDiagramCaption, updateTemplateParams } from "../src/diagrams/editor.ts";
 import { useNoteStore } from "../src/state/store.ts";
 
 function original(): NoteStructure {
@@ -13,10 +13,10 @@ function original(): NoteStructure {
 
 describe("D3 history: bounded and document-scoped", () => {
   beforeEach(() => {
-    useNoteStore.setState({ note: original(), diagramUndo: [], diagramRedo: [] });
+    useNoteStore.setState({ note: original(), diagramUndo: [], diagramRedo: [], diagramTransaction: null });
   });
   afterEach(() => {
-    useNoteStore.setState({ note: null, diagramUndo: [], diagramRedo: [] });
+    useNoteStore.setState({ note: null, diagramUndo: [], diagramRedo: [], diagramTransaction: null });
   });
 
   it("records one immutable snapshot for each committed diagram command and supports redo", () => {
@@ -67,5 +67,43 @@ describe("D3 history: bounded and document-scoped", () => {
     expect(useNoteStore.getState().diagramRedo).toHaveLength(0);
     useNoteStore.getState().undoDiagram();
     expect(useNoteStore.getState().note).toEqual(replacement);
+  });
+});
+
+
+// A slider emits many input events during one gesture. It must never evict older
+// unrelated undo steps from the bounded 30-entry history.
+describe("diagram slider transactions", () => {
+  it("coalesces forty live angle updates into one undo step", () => {
+    useNoteStore.setState({ note: original(), diagramUndo: [], diagramRedo: [], diagramTransaction: null });
+    useNoteStore.getState().updateDiagram((note) => insertDiagram(note, 0, "inclined-plane"));
+    for (let thetaDeg = 5; thetaDeg <= 45; thetaDeg++) {
+      useNoteStore.getState().updateDiagram((note) =>
+        updateTemplateParams(note, 0, "inclined-plane", { thetaDeg }), "angle-gesture");
+    }
+    expect(useNoteStore.getState().diagramUndo).toHaveLength(2);
+    useNoteStore.getState().endDiagramTransaction();
+    useNoteStore.getState().undoDiagram();
+    expect(useNoteStore.getState().note?.diagrams?.[0].params).toMatchObject({ thetaDeg: 30 });
+    useNoteStore.getState().redoDiagram();
+    expect(useNoteStore.getState().note?.diagrams?.[0].params).toMatchObject({ thetaDeg: 45 });
+  });
+
+  it("keeps separate gestures as separate undo steps and resets on unrelated edits", () => {
+    useNoteStore.setState({ note: original(), diagramUndo: [], diagramRedo: [], diagramTransaction: null });
+    useNoteStore.getState().updateDiagram((note) => insertDiagram(note, 0, "inclined-plane"));
+    const angle = (thetaDeg: number) => (note: NoteStructure) =>
+      updateTemplateParams(note, 0, "inclined-plane", { thetaDeg });
+    useNoteStore.getState().updateDiagram(angle(31), "range");
+    useNoteStore.getState().updateDiagram(angle(32), "range");
+    useNoteStore.getState().endDiagramTransaction();
+    useNoteStore.getState().updateDiagram(angle(33), "range");
+    expect(useNoteStore.getState().diagramUndo).toHaveLength(3);
+    useNoteStore.getState().undoDiagram();
+    expect(useNoteStore.getState().diagramTransaction).toBeNull();
+    expect(useNoteStore.getState().note?.diagrams?.[0].params).toMatchObject({ thetaDeg: 32 });
+    useNoteStore.getState().updateNote((note) => ({ ...note, title: "Changed title" }));
+    expect(useNoteStore.getState().diagramTransaction).toBeNull();
+    expect(useNoteStore.getState().diagramUndo).toHaveLength(0);
   });
 });

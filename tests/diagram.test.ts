@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  expandDiagram, inclinedPlaneForces, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks,
+  expandDiagram, inclinedPlaneForces, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE, validDiagramBlocks, validJitterPx,
   type DiagramBlock, type DiagramPrimitive,
 } from "../shared/diagram.ts";
 import { readDocument } from "../shared/document.ts";
@@ -11,7 +11,7 @@ import { validatePublishRequest, validatePublishedNote } from "../shared/publish
 import { DEFAULT_SETTINGS } from "../shared/settings.ts";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { diagramLabelLayout, diagramViewport } from "../src/diagrams/svg-geometry.ts";
-import { materializeDiagram } from "../src/diagrams/geometry.ts";
+import { editShape, materializeDiagram, moveShape } from "../src/diagrams/geometry.ts";
 import { LAYOUTS } from "../src/components/note/layouts.tsx";
 import { labelsFor } from "../src/components/note/parts.tsx";
 
@@ -304,7 +304,8 @@ describe("diagram template geometry", () => {
           .toBeLessThan(0.002);
         if (physicalLength < 64) {
           expect(length).toBeGreaterThanOrEqual(64);
-          expect(parallel.label).toBe(SHORT_FORCE_SCALE_NOTE);
+          expect(parallel.callout).toBe(SHORT_FORCE_CALLOUT);
+          expect(parallel.label).toBeUndefined();
           expect(parallel.from).not.toEqual(gravity.from);
           const displacement = [parallel.from[0] - gravity.from[0], parallel.from[1] - gravity.from[1]];
           expect(displacement[0] * Math.cos(theta) - displacement[1] * Math.sin(theta))
@@ -332,7 +333,7 @@ describe("diagram template geometry", () => {
       expect(fromPrimitives.includes('class="diagram-scale-note"')).toBe(short);
       expect(fromPrimitives.includes("mg sinθ")).toBe(true);
       if (short) expect(converted.primitives.some((shape) => shape.type === "arrow"
-        && shape.label === SHORT_FORCE_SCALE_NOTE)).toBe(true);
+        && shape.callout === SHORT_FORCE_CALLOUT)).toBe(true);
     }
   });
 
@@ -516,5 +517,120 @@ describe("template math regressions (review fixes)", () => {
         }
       }
     }
+  });
+});
+
+describe("diagram polish: ground reference and regular number labels", () => {
+  it("draws a horizontal ground reference from the incline vertex for supported angles", () => {
+    for (const thetaDeg of [5, 15, 30, 60]) {
+      for (const friction of [false, true]) {
+        const block: DiagramBlock = { afterSection: 0, template: "inclined-plane",
+          params: { thetaDeg, friction } };
+        const shapes = expandDiagram(block);
+        const ground = shapes.find((shape) => shape.type === "line"
+          && shape.from[0] === 170 && shape.from[1] === 620
+          && shape.to[1] === 620 && shape.to[0] > shape.from[0]);
+        expect(ground, `ground at ${thetaDeg}° friction=${friction}`).toBeDefined();
+        const arc = shapes.find((shape) => shape.type === "arc");
+        expect(arc).toMatchObject({ center: [170, 620], startDeg: -thetaDeg, sweepDeg: thetaDeg });
+        expect(validDiagramBlocks([{ afterSection: 0, primitives: shapes }], 1)).toBe(true);
+      }
+    }
+  });
+
+  it("places the 30-degree label close to the angle reference", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "inclined-plane",
+      params: { thetaDeg: 30, friction: false } });
+    const theta = shapes.find((shape) => shape.type === "label" && shape.text === "θ = 30°");
+    expect(theta?.type).toBe("label");
+    if (theta?.type !== "label") return;
+    const arcMid: [number, number] = [170 + 65 * Math.cos(Math.PI / 12), 620 - 65 * Math.sin(Math.PI / 12)];
+    expect(Math.hypot(theta.at[0] - arcMid[0], theta.at[1] - arcMid[1])).toBeLessThan(110);
+  });
+
+  it("uses a constant index stride for internal number-line labels and preserves all tick strokes", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "number-line",
+      params: { start: 0, end: 1.8, step: 0.1 } });
+    const tickLines = shapes.filter((shape) => shape.type === "line");
+    expect(tickLines).toHaveLength(19);
+    const visibleLabels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label");
+    const indices = visibleLabels.map((label) =>
+      tickLines.findIndex((tick) => tick.type === "line" && Math.abs(tick.from[0] - label.at[0]) < 0.001));
+    expect(indices[0]).toBe(0);
+    expect(indices[indices.length - 1]).toBe(18);
+    expect(indices.every((index) => index >= 0)).toBe(true);
+    const gaps = indices.slice(1).map((value, index) => value - indices[index]);
+    expect(new Set(gaps).size).toBe(1);
+  });
+
+  it("prioritizes a true zero on a symmetric number line", () => {
+    const shapes = expandDiagram({ afterSection: 0, template: "number-line",
+      params: { start: -0.9, end: 0.9, step: 0.1 } });
+    const labels = shapes.filter((shape): shape is Extract<DiagramPrimitive, { type: "label" }> =>
+      shape.type === "label").map((shape) => shape.text);
+    expect(labels).toContain("0");
+    expect(labels[0]).toBe("-0.9");
+    expect(labels[labels.length - 1]).toBe("0.9");
+    expect(shapes.filter((shape) => shape.type === "line")).toHaveLength(19);
+  });
+});
+
+describe("diagram callout metadata and jitter import compatibility", () => {
+  const shortArrow = { type: "arrow" as const, from: [100, 100] as [number, number],
+    to: [170, 100] as [number, number] };
+  it("stores scale metadata separate from user text and publishes the new format", () => {
+    const block: DiagramBlock = { afterSection: 0,
+      primitives: [{ ...shortArrow, callout: SHORT_FORCE_CALLOUT }] };
+    expect(validDiagramBlocks([block], 1)).toBe(true);
+    expect(validatePublishRequest(request([block])).ok).toBe(true);
+    const html = renderToStaticMarkup(createElement(DiagramBlockView, { block, seed: 41 }));
+    expect(html).toContain('class="diagram-scale-note"');
+    expect(html).not.toContain("Short force arrow not to scale.</text>");
+  });
+
+  it("still shows legacy scale notes and migrates their marker on shape editing", () => {
+    const legacy: DiagramBlock = { afterSection: 0,
+      primitives: [{ ...shortArrow, label: SHORT_FORCE_SCALE_NOTE }] };
+    expect(validatePublishRequest(request([legacy])).toMatchObject({ ok: true });
+    expect(renderToStaticMarkup(createElement(DiagramBlockView, { block: legacy, seed: 9 })))
+      .toContain('class="diagram-scale-note"');
+    const converted = materializeDiagram(legacy);
+    const first = converted.primitives[0];
+    expect(first.type).toBe("arrow");
+    if (first.type !== "arrow") return;
+    expect(first.label).toBeUndefined();
+    expect(first.callout).toBe(SHORT_FORCE_CALLOUT);
+    expect(validatePublishRequest(request([converted])).ok).toBe(true);
+    // A move carries the old arrow object as its source. It must not overwrite
+    // the migrated field with the legacy English sentinel again.
+    const dragged = editShape(legacy, 0, moveShape(legacy.primitives[0], 25, 0));
+    expect(dragged.primitives?.[0].type).toBe("arrow");
+    const draggedArrow = dragged.primitives?.[0];
+    if (draggedArrow?.type !== "arrow") throw new Error("Expected arrow after edit");
+    expect(draggedArrow.label).toBeUndefined();
+    expect(draggedArrow.callout).toBe(SHORT_FORCE_CALLOUT);
+    expect(validatePublishRequest(request([dragged])).ok).toBe(true);
+  });
+
+  it("applies the same 0.1 precision rule to local JSON drafts and API publication", () => {
+    for (const jitterPx of [0, 0.1, 1.2, 3]) {
+      const block: DiagramBlock = { ...template, jitterPx };
+      expect(validJitterPx(jitterPx)).toBe(true);
+      expect(validDiagramBlocks([block], 1)).toBe(true);
+      expect(validatePublishRequest(request([block])).ok).toBe(true);
+    }
+    for (const jitterPx of [-0.1, 1.25, 3.1, NaN]) {
+      const block: DiagramBlock = { ...template, jitterPx };
+      expect(validJitterPx(jitterPx)).toBe(false);
+      expect(validDiagramBlocks([block], 1)).toBe(false);
+      expect(validatePublishRequest(request([block])).ok).toBe(false);
+      const document = { input: { text: "physics", template: "general", language: "auto", detail: "standard" },
+        note: note([block]), settings: DEFAULT_SETTINGS, stickers: [], aiDoodle: null, source: "local" };
+      expect(() => readDocument(document)).toThrow("Invalid draft note");
+    }
+    expect(errors(request([{ ...template, jitterPx: 1.25 }]))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "note.diagrams[0].jitterPx", code: "INVALID_PRECISION" }),
+    ]));
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { DIAGRAM_LIMITS, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive } from "../../shared/diagram.ts";
+import { DIAGRAM_LIMITS, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE, expandDiagram, type DiagramBlock, type DiagramPoint, type DiagramPrimitive } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import {
   addShape, defaultShape, deleteShape, DIAGRAM_GRID, editShape,
@@ -10,6 +10,7 @@ import { diagramArcPath, diagramLabelFontSize, diagramLabelLayout, diagramViewpo
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
+import { DiagramHistoryButtons } from "./DiagramHistoryButtons.tsx";
 
 type P = DiagramPoint;
 type Primitive = DiagramPrimitive;
@@ -34,8 +35,8 @@ function labelText(shape: Primitive): string | null {
   switch (shape.type) {
     case "label": return shape.text;
     case "line":
-    case "arrow":
     case "arc": return shape.label ?? "";
+    case "arrow": return shape.label === SHORT_FORCE_SCALE_NOTE ? "" : shape.label ?? "";
     default: return null;
   }
 }
@@ -47,7 +48,9 @@ function setLabelText(shape: Primitive, text: string): Primitive {
     case "arrow":
     case "arc": {
       const { label: _prior, ...rest } = shape;
-      return value ? { ...rest, label: value } as Primitive : rest as Primitive;
+      const migrated = shape.type === "arrow" && _prior === SHORT_FORCE_SCALE_NOTE
+        ? { ...rest, callout: SHORT_FORCE_CALLOUT } : rest;
+      return value ? { ...migrated, label: value } as Primitive : migrated as Primitive;
     }
     default: return shape;
   }
@@ -147,8 +150,6 @@ function Selector({
 export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: number }) {
   const t = useT().content.diagrams;
   const updateDiagram = useNoteStore((s) => s.updateDiagram);
-  const undo = useNoteStore((s) => s.diagramUndo.length);
-  const redo = useNoteStore((s) => s.diagramRedo.length);
   const undoDiagram = useNoteStore((s) => s.undoDiagram);
   const redoDiagram = useNoteStore((s) => s.redoDiagram);
   const [working, setWorking] = useState(block);
@@ -337,8 +338,7 @@ export function PrimitiveEditor({ block, index }: { block: DiagramBlock; index: 
       </button>
     </div> : null}
     <div className="diagram-edit-toolbar" role="toolbar" aria-label={t.shapeTools}>
-      <button type="button" className="btn btn-link" disabled={!undo} onClick={undoDiagram}>{t.undo}</button>
-      <button type="button" className="btn btn-link" disabled={!redo} onClick={redoDiagram}>{t.redo}</button>
+      <DiagramHistoryButtons />
       <label className="diagram-grid-toggle"><input type="checkbox" checked={showGrid}
         onChange={(event) => setShowGrid(event.target.checked)} />{t.snapGrid}</label>
     </div>

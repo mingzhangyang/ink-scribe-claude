@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from "react";
 import {
-  expandDiagram, SHORT_FORCE_SCALE_NOTE, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
+  expandDiagram, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE, type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../../shared/diagram.ts";
 import { hashString, signedRandom } from "../../lib/random.ts";
 import { useT } from "../../i18n/index.ts";
@@ -114,7 +114,8 @@ export const DiagramBlockView = memo(function DiagramBlockView({ block, seed, vi
   const t = useT().content.diagrams;
   const unapplied = pending ?? pendingBlocks.includes(block);
   const elements = expandDiagram(block);
-  const hasShortForceNote = elements.some((shape) => shape.type === "arrow" && shape.label === SHORT_FORCE_SCALE_NOTE);
+  const hasShortForceNote = elements.some((shape) => shape.type === "arrow"
+    && (shape.callout === SHORT_FORCE_CALLOUT || shape.label === SHORT_FORCE_SCALE_NOTE));
   const view = viewport ?? diagramViewport(block);
   const jitter = block.handDrawn === false ? 0 : block.jitterPx ?? 1.2;
   const caption = block.caption || "";

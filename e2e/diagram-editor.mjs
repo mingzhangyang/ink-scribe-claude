@@ -45,10 +45,35 @@ export async function verifyDiagramEditor({ newPage, check, url, outputDir }) {
         await angle.locator("strong").innerText() === "60°");
       const caption = first.locator(".diagram-caption input");
       await caption.fill(cn ? "斜面力分解" : "Slope vectors");
+      check("D2-" + viewport + "-caption-draft", "Typing a caption stays local until blur",
+        await page.locator(".note-page .diagram-block figcaption").count() === 0);
       await caption.blur();
       check("D2-" + viewport + "-caption", "Caption propagates to live note SVG",
         (await page.locator(".note-page .diagram-block figcaption").allInnerTexts())
           .includes(cn ? "斜面力分解" : "Slope vectors"));
+      const d2History = first.locator(".diagram-edit-toolbar");
+      const undo = d2History.getByRole("button", { name: cn ? "撤销" : "Undo", exact: true });
+      const redo = d2History.getByRole("button", { name: cn ? "重做" : "Redo", exact: true });
+      await undo.click();
+      check("D2-" + viewport + "-caption-undo", "D2 toolbar undoes a completed caption edit",
+        await page.locator(".note-page .diagram-block figcaption").count() === 0);
+      await redo.click();
+      check("D2-" + viewport + "-caption-redo", "D2 toolbar redoes the caption edit",
+        await page.locator(".note-page .diagram-block figcaption").count() === 1);
+      await undo.click(); // caption
+      await undo.click(); // slider angle (one gesture)
+      check("D2-" + viewport + "-angle-undo", "D2 toolbar restores the previous angle",
+        await angle.locator("strong").innerText() === "30°");
+      await redo.click();
+      await redo.click();
+      check("D2-" + viewport + "-angle-redo", "D2 toolbar restores angle and caption",
+        await angle.locator("strong").innerText() === "60°"
+        && await page.locator(".note-page .diagram-block figcaption").count() === 1);
+      await caption.fill("Escape me");
+      await caption.press("Escape");
+      check("D2-" + viewport + "-caption-escape", "Escape cancels uncommitted caption text",
+        await page.locator(".note-page .diagram-block figcaption").innerText()
+          === (cn ? "斜面力分解" : "Slope vectors"));
 
       const second = page.locator(".section-editor").nth(1);
       // Quick entry allows selecting the exact section instead of always

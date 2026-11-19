@@ -1,5 +1,6 @@
 import {
-  DIAGRAM_LIMITS, expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramPrimitive,
+  DIAGRAM_LIMITS, SHORT_FORCE_CALLOUT, SHORT_FORCE_SCALE_NOTE,
+  expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramPrimitive,
   type DiagramBlock, type DiagramPoint, type DiagramPrimitive,
 } from "../../shared/diagram.ts";
 import { diagramLabelLayout } from "./svg-geometry.ts";
@@ -57,9 +58,22 @@ export const snapToGrid = (at: Point): Point => point(
   Math.round(at[1] / DIAGRAM_GRID) * DIAGRAM_GRID,
 );
 
+/** Unwrap the legacy note so edited arrow geometry never reintroduces English label text. */
+function normalizeShortForceArrow(shape: Shape): Shape {
+  if (shape.type !== "arrow" || shape.label !== SHORT_FORCE_SCALE_NOTE) return shape;
+  const { label: _legacy, ...arrow } = shape;
+  return { ...arrow, callout: SHORT_FORCE_CALLOUT };
+}
+
 /** Converting on first *actual* edit protects the original parameterized template. */
 export function materializeDiagram(block: DiagramBlock): PrimitiveDiagram {
-  if (block.primitives) return block as PrimitiveDiagram;
+  if (block.primitives) {
+    // Normalize old persisted English marker only when a real D3 edit asks to
+    // materialize the block; unchanged legacy published notes remain readable.
+    if (!block.primitives.some((shape) => shape.type === "arrow" && shape.label === SHORT_FORCE_SCALE_NOTE))
+      return block as PrimitiveDiagram;
+    return { ...block, primitives: block.primitives.map(normalizeShortForceArrow) } as PrimitiveDiagram;
+  }
   const { afterSection, caption, handDrawn, jitterPx } = block;
   return {
     afterSection,
@@ -311,7 +325,7 @@ export function editShape(block: DiagramBlock, index: number, next: Shape): Diag
   const editable = materializeDiagram(block);
   const primitives = editable.primitives!;
   if (index < 0 || index >= primitives.length) return block;
-  const adapted = clearLabel(next, primitives.filter((_, i) => i !== index));
+  const adapted = clearLabel(normalizeShortForceArrow(next), primitives.filter((_, i) => i !== index));
   if (JSON.stringify(primitives[index]) === JSON.stringify(adapted)) return block;
   const changed = primitives.map((shape, i) => i === index ? adapted : shape);
   // Preserve intentional template spacing (notably number-line tick values).

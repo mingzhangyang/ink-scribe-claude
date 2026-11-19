@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DIAGRAM_LIMITS, FUNCTION_PRESETS, type DiagramBlock, type DiagramTemplate, type FunctionPreset } from "../../shared/diagram.ts";
 import { cleanText } from "../../shared/text.ts";
 import { editDiagram, removeDiagram, setDiagramCaption, updateTemplateParams } from "../diagrams/editor.ts";
@@ -6,6 +6,7 @@ import { activeNumberLineDraft, numberLineFields, parseNumberLineFields, useNumb
 import { useT } from "../i18n/index.ts";
 import { useNoteStore } from "../state/store.ts";
 import { DiagramBlockView } from "./note/DiagramBlock.tsx";
+import { DiagramHistoryButtons } from "./DiagramHistoryButtons.tsx";
 import { PrimitiveEditor } from "./PrimitiveEditor.tsx";
 
 export function TemplateGlyph({ template }: { template: DiagramTemplate }) {
@@ -63,8 +64,9 @@ function CaptionParameter({ caption, label, placeholder, onCommit }: {
 }) {
   const [draft, setDraft] = useState(caption);
   const [overflow, setOverflow] = useState(false);
+  const skipBlur = useRef(false);
   const t = useT().content.diagrams;
-  useEffect(() => { setDraft(caption); }, [caption]);
+  useEffect(() => { setDraft(caption); setOverflow(false); }, [caption]);
   return <label className="field diagram-caption">
     <span>{label}</span>
     <input type="text" value={draft} placeholder={placeholder} aria-label={label}
@@ -73,13 +75,25 @@ function CaptionParameter({ caption, label, placeholder, onCommit }: {
         const points = Array.from(event.target.value);
         setOverflow(points.length > DIAGRAM_LIMITS.maxCaption);
         const text = points.slice(0, DIAGRAM_LIMITS.maxCaption).join("");
-        setDraft(text);
-        if (cleanText(text, DIAGRAM_LIMITS.maxCaption) === text) onCommit(text);
+        setDraft(text); // Local text only: commit once on blur, not on every keystroke.
       }}
       onBlur={() => {
+        if (skipBlur.current) { skipBlur.current = false; return; }
         const cleaned = cleanText(draft, DIAGRAM_LIMITS.maxCaption);
         setDraft(cleaned);
-        onCommit(cleaned);
+        if (cleaned !== caption) onCommit(cleaned);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          skipBlur.current = true;
+          setDraft(caption);
+          setOverflow(false);
+          event.currentTarget.blur();
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
       }} />
     <small className="hint" role="status">{Array.from(draft).length}/{DIAGRAM_LIMITS.maxCaption}
       {overflow ? " · " + t.captionLimitNotice : ""}</small>
@@ -96,12 +110,14 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
   const apply = useNumberLineDrafts((s) => s.apply);
   const discard = useNumberLineDrafts((s) => s.discard);
   const numberPending = activeNumberLineDraft(note, noteSerial, index, drafts);
+  const rangeKey = (name: string) => `diagram-range:${noteSerial}:${index}:${name}`;
+  const finishRange = () => useNoteStore.getState().endDiagramTransaction();
   // Pass concrete discriminants to the shared editor. Generic Extract<T> at a
   // higher-order callback boundary is not reliably assignable under TypeScript 7.
-  const changeSlope = (patch: Partial<Extract<DiagramBlock, { template: "inclined-plane" }>["params"]>) =>
-    updateDiagram((note) => updateTemplateParams(note, index, "inclined-plane", patch));
-  const changeTriangle = (patch: Partial<Extract<DiagramBlock, { template: "right-triangle" }>["params"]>) =>
-    updateDiagram((note) => updateTemplateParams(note, index, "right-triangle", patch));
+  const changeSlope = (patch: Partial<Extract<DiagramBlock, { template: "inclined-plane" }>["params"]>, transactionKey?: string) =>
+    updateDiagram((note) => updateTemplateParams(note, index, "inclined-plane", patch), transactionKey);
+  const changeTriangle = (patch: Partial<Extract<DiagramBlock, { template: "right-triangle" }>["params"]>, transactionKey?: string) =>
+    updateDiagram((note) => updateTemplateParams(note, index, "right-triangle", patch), transactionKey);
   const changeAxes = (patch: Partial<Extract<DiagramBlock, { template: "coordinate-plane" }>["params"]>) =>
     updateDiagram((note) => updateTemplateParams(note, index, "coordinate-plane", patch));
 
@@ -113,7 +129,9 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
           <span>{t.angle}: <strong>{block.params.thetaDeg}°</strong></span>
           <input type="range" min={5} max={60} step={1} value={block.params.thetaDeg}
             aria-label={t.angle} onChange={(event) =>
-              changeSlope({ thetaDeg: Number(event.target.value) })} />
+              changeSlope({ thetaDeg: Number(event.target.value) }, rangeKey("theta"))}
+            onPointerUp={finishRange} onPointerCancel={finishRange}
+            onKeyUp={finishRange} onBlur={finishRange} />
         </label>
         <label className="diagram-check">
           <input type="checkbox" checked={block.params.friction}
@@ -128,7 +146,9 @@ function DiagramParameters({ block, index }: { block: DiagramBlock; index: numbe
           <span>{t.legRatio}: <strong>{block.params.legRatio.toFixed(2)}</strong></span>
           <input type="range" min={0.25} max={4} step={0.05} value={block.params.legRatio}
             aria-label={t.legRatio} onChange={(event) =>
-              changeTriangle({ legRatio: Number(Number(event.target.value).toFixed(2)) })} />
+              changeTriangle({ legRatio: Number(Number(event.target.value).toFixed(2)) }, rangeKey("legRatio"))}
+            onPointerUp={finishRange} onPointerCancel={finishRange}
+            onKeyUp={finishRange} onBlur={finishRange} />
         </label>
       </div>;
     case "number-line": {
@@ -249,6 +269,9 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
             onClick={() => setShapeMode((current) => current === index ? null : index)}>
             {shapeMode === index ? t.closeShapeEdit : t.editShapes}
           </button>
+          {shapeMode !== index ? <div className="diagram-edit-toolbar" role="toolbar" aria-label={t.shapeTools}>
+            <DiagramHistoryButtons />
+          </div> : null}
           {shapeMode === index
             ? <PrimitiveEditor block={block} index={index} />
             : <div className="diagram-edit-preview" aria-label={t.preview}>
@@ -256,9 +279,15 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
                 pending={!!activeNumberLineDraft(note, noteSerial, index, drafts)} />
             </div>}
           <DiagramParameters block={block} index={index} />
-          <CaptionParameter key={"caption-" + index} caption={block.caption ?? ""}
+          <CaptionParameter key={"caption-" + noteSerial + "-" + index} caption={block.caption ?? ""}
             label={t.caption} placeholder={t.captionPlaceholder}
-            onCommit={(value) => updateDiagram((current) => setDiagramCaption(current, index, value))} />
+            onCommit={(value) => {
+              // The input can blur while another note or diagram replaces this one.
+              // Never commit a stale caption to a different document or block.
+              if (useNoteStore.getState().noteSerial !== noteSerial) return;
+              updateDiagram((current) => current.diagrams?.[index] === block
+                ? setDiagramCaption(current, index, value) : current);
+            }} />
           <label className="diagram-check">
             <input type="checkbox" checked={block.handDrawn !== false}
               onChange={(event) => updateDiagram((current) =>
@@ -270,7 +299,12 @@ export function DiagramSectionEditor({ sectionIndex }: { sectionIndex: number })
             <input type="range" min={0} max={3} step={0.1} value={block.jitterPx ?? 1.2}
               aria-label={t.jitterLabel} disabled={block.handDrawn === false}
               onChange={(event) => updateDiagram((current) => editDiagram(current, index,
-                (existing) => ({ ...existing, jitterPx: Number(event.target.value) })))} />
+                (existing) => ({ ...existing, jitterPx: Number(event.target.value) })),
+                `diagram-range:${noteSerial}:${index}:jitter`)}
+              onPointerUp={() => useNoteStore.getState().endDiagramTransaction()}
+              onPointerCancel={() => useNoteStore.getState().endDiagramTransaction()}
+              onKeyUp={() => useNoteStore.getState().endDiagramTransaction()}
+              onBlur={() => useNoteStore.getState().endDiagramTransaction()} />
           </label>
         </div> : null}
       </div>
