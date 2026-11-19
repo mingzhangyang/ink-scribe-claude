@@ -592,7 +592,7 @@ describe("diagram callout metadata and jitter import compatibility", () => {
   it("still shows legacy scale notes and migrates their marker on shape editing", () => {
     const legacy: DiagramBlock = { afterSection: 0,
       primitives: [{ ...shortArrow, label: SHORT_FORCE_SCALE_NOTE }] };
-    expect(validatePublishRequest(request([legacy])).toMatchObject({ ok: true });
+    expect(validatePublishRequest(request([legacy]))).toMatchObject({ ok: true });
     expect(renderToStaticMarkup(createElement(DiagramBlockView, { block: legacy, seed: 9 })))
       .toContain('class="diagram-scale-note"');
     const converted = materializeDiagram(legacy);
