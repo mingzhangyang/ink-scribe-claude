@@ -4,7 +4,7 @@ import type { DoodleSpec } from "../../../shared/doodle.ts";
 import type { DiagramBlock } from "../../../shared/diagram.ts";
 import type { NoteStructure } from "../../../shared/note.ts";
 import { TEMPLATE_DEFAULT_THEME } from "../../../shared/themes.ts";
-import { ACCENTS, byId, fontStack, INKS, PAGE_SIZES, PAGE_WIDTH, PAPERS } from "../../config/appearance.ts";
+import { ACCENTS, byId, fontStack, highlightColors, INKS, PAGE_SIZES, PAGE_WIDTH, PAPERS } from "../../config/appearance.ts";
 import { builtinDoodle } from "../../doodles/library.ts";
 import type { Settings } from "../../state/store.ts";
 import { StickerLayer } from "../../stickers/StickerLayer.tsx";
@@ -96,6 +96,9 @@ export const NotePage = forwardRef<HTMLDivElement, Props>(function NotePage(
     "--paper-line": paper.lineColor,
     "--ink": byId(INKS, settings.ink).color,
     "--accent": byId(ACCENTS, settings.accent).color,
+    ...(settings.multiHighlight
+      ? Object.fromEntries(highlightColors(settings.accent, true, ACCENTS.length).map((color, i) => [`--hl-${i}`, color]))
+      : {}),
     "--hand-font": fontStack(settings.zhFont, settings.enFont),
     "--fs": `${settings.fontSize}px`,
     "--lh": settings.lineHeight,

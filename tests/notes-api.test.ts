@@ -397,7 +397,8 @@ describe("reading, gallery and management", () => {
     expect(read.response.status).toBe(200);
     expect(read.body!.schemaVersion).toBe(1);
     expect(read.body!.note).toEqual(JSON.parse(FROZEN_V1.note));
-    expect(read.body!.settings).toEqual(JSON.parse(FROZEN_V1.settings));
+    // multiHighlight postdates this snapshot; its default keeps the single-color rendering it was published with.
+    expect(read.body!.settings).toEqual({ ...JSON.parse(FROZEN_V1.settings), multiHighlight: false });
     expect(read.body!.stickers).toEqual(JSON.parse(FROZEN_V1.stickers));
 
     // Written before `overflow` existed: still lossless, and the new setting takes its default.
@@ -405,7 +406,7 @@ describe("reading, gallery and management", () => {
     await env.DB!.prepare("UPDATE notes SET settings_json = ? WHERE id = ?").bind(JSON.stringify(earlier), id).run();
     const older = await call(request("GET", `/api/notes/${id}`, { key: null }));
     expect(older.body!.schemaVersion).toBe(1);
-    expect(older.body!.settings).toEqual({ ...earlier, overflow: DEFAULT_SETTINGS.overflow });
+    expect(older.body!.settings).toEqual({ ...earlier, overflow: DEFAULT_SETTINGS.overflow, multiHighlight: false });
   });
 
   it("keeps existing notes readable when the Worker is deployed before migration 0003", async () => {

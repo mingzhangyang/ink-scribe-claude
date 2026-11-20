@@ -178,6 +178,10 @@ export function StylePanel({ doodleEnabled, onRequestAiDoodle }: { doodleEnabled
             />
           ))}
         </div>
+        <label className="check-field">
+          <input type="checkbox" checked={settings.multiHighlight} onChange={(e) => set({ multiHighlight: e.target.checked })} />
+          <span>{t.style.multiHighlight}</span>
+        </label>
       </fieldset>
 
       <Range

@@ -28,6 +28,8 @@ export type Settings = {
   letterSpacing: number;
   ink: InkId;
   accent: AccentId;
+  /** Color highlights in turn through the palette, starting from the accent and shifting by section. */
+  multiHighlight: boolean;
   /** 0–1，控制手写抖动、旋转与墨色深浅变化的幅度。 */
   naturalness: number;
   pageSize: PageSizeId;
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   letterSpacing: 0.02,
   ink: "blue",
   accent: "yellow",
+  multiHighlight: false,
   naturalness: 0.55,
   pageSize: "a4",
   overflow: "expand",
@@ -83,6 +86,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     letterSpacing: range(r.letterSpacing, -0.02, 0.15, d.letterSpacing),
     ink: pick(ids(INKS), r.ink, d.ink),
     accent: pick(ids(ACCENTS), r.accent, d.accent),
+    multiHighlight: typeof r.multiHighlight === "boolean" ? r.multiHighlight : d.multiHighlight,
     naturalness: range(r.naturalness, 0, 1, d.naturalness),
     pageSize: pick(ids(PAGE_SIZES), r.pageSize, d.pageSize),
     overflow: pick(OVERFLOW_POLICIES, r.overflow, d.overflow),

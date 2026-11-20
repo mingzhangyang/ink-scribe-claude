@@ -12,7 +12,8 @@ import {
   type StickerVariant,
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
-import { PAPERS } from "../shared/appearance.ts";
+import { ACCENTS, highlightColors, PAPERS } from "../shared/appearance.ts";
+import { NOTE_LIMITS } from "../shared/note.ts";
 import { fetchPublishedNote } from "../src/api.ts";
 import { FORMULA_TEXT, GREEK_LETTERS, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
@@ -176,6 +177,30 @@ describe("sanitizeSettings", () => {
   it("keeps valid values and clamps numbers into range", () => {
     const settings = sanitizeSettings({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 99, naturalness: -1, seed: 42 });
     expect(settings).toMatchObject({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 28, naturalness: 0, seed: 42 });
+  });
+
+  it("keeps multi-color highlights off unless explicitly enabled", () => {
+    expect(DEFAULT_SETTINGS.multiHighlight).toBe(false);
+    expect(sanitizeSettings({ multiHighlight: true }).multiHighlight).toBe(true);
+    expect(sanitizeSettings({ multiHighlight: "yes" }).multiHighlight).toBe(false);
+  });
+});
+
+describe("highlightColors", () => {
+  const color = (id: string) => ACCENTS.find((accent) => accent.id === id)!.color;
+
+  it("uses the accent for every highlight in a single-color note", () => {
+    expect(highlightColors("pink", false, 3)).toEqual([color("pink"), color("pink"), color("pink")]);
+  });
+
+  it("starts from the accent and wraps around the palette in a multi-color note", () => {
+    expect(highlightColors("blue", true, 4)).toEqual([color("blue"), color("lavender"), color("yellow"), color("green")]);
+  });
+
+  it("gives every highlight a section may hold a distinct color", () => {
+    // Colors cycle through the palette, so a section's highlights only all differ if the palette is long enough.
+    expect(ACCENTS.length).toBeGreaterThanOrEqual(NOTE_LIMITS.maxHighlights);
+    expect(new Set(highlightColors("yellow", true, NOTE_LIMITS.maxHighlights)).size).toBe(NOTE_LIMITS.maxHighlights);
   });
 });
 

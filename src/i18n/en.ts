@@ -484,6 +484,7 @@ export const en: Messages = {
     inkLabel: "Ink color",
     accent: "Highlighter",
     accentLabel: "Highlight color",
+    multiHighlight: "Use a different color for each highlight",
     naturalness: "Handwriting variation",
     reseed: "Try another handwriting",
     reseedHint: "Switch both fonts and stroke details",

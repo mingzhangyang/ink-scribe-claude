@@ -36,6 +36,15 @@ export const ACCENTS = [
 ] as const;
 export type AccentId = (typeof ACCENTS)[number]["id"];
 
+/**
+ * Highlight colors by palette position. A single-color note marks every phrase with the chosen accent; a
+ * multi-color note starts from the accent and walks the palette in order (note.css has one hl-cN rule per color).
+ */
+export function highlightColors(accent: AccentId, multi: boolean, count: number): string[] {
+  const start = Math.max(0, ACCENTS.findIndex((item) => item.id === accent));
+  return Array.from({ length: count }, (_, i) => ACCENTS[(start + (multi ? i : 0)) % ACCENTS.length].color);
+}
+
 export const ZH_FONTS = [
   { id: "lxgw", label: "霞鹜文楷", family: "LXGW WenKai Screen", note: "工整清晰" },
   { id: "long-cang", label: "龙藏体", family: "Long Cang", note: "随性手写" },

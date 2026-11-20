@@ -136,7 +136,7 @@ export function SectionBlock({
           <HandText text={section.heading} seed={s + 1} naturalness={naturalness} />
         </h2>
       ) : null}
-      <HandContent text={section.content} highlights={section.highlights} seed={s + 2} naturalness={naturalness} />
+      <HandContent text={section.content} highlights={section.highlights} colorOffset={index} seed={s + 2} naturalness={naturalness} />
       {diagrams?.map((block, i) => <DiagramBlockView key={i} block={block} seed={s + i * 271} />)}
     </section>
   );
