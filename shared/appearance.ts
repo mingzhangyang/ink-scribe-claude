@@ -30,6 +30,9 @@ export const ACCENTS = [
   { id: "yellow", label: "柠檬黄", color: "#FEF08A" },
   { id: "green", label: "薄荷绿", color: "#BBF7D0" },
   { id: "orange", label: "杏橙", color: "#FED7AA" },
+  { id: "pink", label: "樱花粉", color: "#FBCFE8" },
+  { id: "blue", label: "天空蓝", color: "#BAE6FD" },
+  { id: "lavender", label: "薰衣草紫", color: "#DDD6FE" },
 ] as const;
 export type AccentId = (typeof ACCENTS)[number]["id"];
 
