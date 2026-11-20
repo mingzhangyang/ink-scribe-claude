@@ -32,6 +32,19 @@ export function parseContentLines(content: string): ContentLine[] {
 
 export type TextRun = { text: string; highlight: number | null };
 
+/**
+ * Note-wide position of each section's first highlight phrase, so multi-color highlights advance through the
+ * palette across the whole note instead of restarting (and colliding) at every section.
+ */
+export function highlightOffsets(sections: readonly { highlights: readonly string[] }[]): number[] {
+  let next = 0;
+  return sections.map((section) => {
+    const offset = next;
+    next += section.highlights.length;
+    return offset;
+  });
+}
+
 /** Earlier phrases keep overlapping matches; later phrases only add non-overlapping ones. */
 export function splitHighlights(text: string, highlights: string[]): TextRun[] {
   const ranges: Array<{ start: number; end: number; index: number }> = [];

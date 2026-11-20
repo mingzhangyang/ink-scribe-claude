@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { hashString, mulberry32 } from "../../lib/random.ts";
 import { graphemes, parseContentLines, splitHighlights } from "../../lib/segments.ts";
-import { ACCENTS } from "../../config/appearance.ts";
+import { highlightSlot } from "../../config/appearance.ts";
 
 /** 超过该长度时按词而非按字抖动，控制 DOM 节点数量，保证拖拽与导出流畅。 */
 const PER_CHAR_LIMIT = 2_400;
@@ -27,7 +27,7 @@ function jitter(text: string, rand: () => number, perChar: boolean): ReactNode[]
 type HandTextProps = {
   text: string;
   highlights?: string[];
-  /** Shifts which palette color the first highlight takes (multi-color notes only), so sections differ. */
+  /** Note-wide index of this text's first highlight phrase, so multi-color highlights continue across sections. */
   colorOffset?: number;
   seed: number;
   naturalness: number;
@@ -46,7 +46,7 @@ export const HandText = memo(function HandText({ text, highlights = [], colorOff
         return run.highlight === null ? (
           <span key={i} data-fit-text>{content}</span>
         ) : (
-          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3} hl-c${(run.highlight + colorOffset) % ACCENTS.length}`} data-fit-text>
+          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3} hl-c${highlightSlot(colorOffset, run.highlight)}`} data-fit-text>
             {content}
           </mark>
         );

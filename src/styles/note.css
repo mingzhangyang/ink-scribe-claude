@@ -143,7 +143,7 @@
   box-decoration-break: clone;
 }
 
-/* One rule per accent color: hl-cN is (section index + highlight index) mod the palette length.
+/* One rule per accent color: hl-cN is the phrase's note-wide highlight index mod the palette length.
    NotePage sets --hl-N only for multi-color notes; otherwise every highlight falls back to the accent. */
 .note-page mark.hl-c0 { --hl: var(--hl-0, var(--accent)); }
 .note-page mark.hl-c1 { --hl: var(--hl-1, var(--accent)); }

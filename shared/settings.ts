@@ -28,7 +28,7 @@ export type Settings = {
   letterSpacing: number;
   ink: InkId;
   accent: AccentId;
-  /** Color highlights in turn through the palette, starting from the accent and shifting by section. */
+  /** Color highlights in turn through the palette across the whole note, starting from the accent. */
   multiHighlight: boolean;
   /** 0–1，控制手写抖动、旋转与墨色深浅变化的幅度。 */
   naturalness: number;

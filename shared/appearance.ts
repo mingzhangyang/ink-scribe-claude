@@ -39,7 +39,12 @@ export type AccentId = (typeof ACCENTS)[number]["id"];
 /**
  * Highlight colors by palette position. A single-color note marks every phrase with the chosen accent; a
  * multi-color note starts from the accent and walks the palette in order (note.css has one hl-cN rule per color).
+ * highlightSlot gives the hl-cN position of a section's highlight phrase from its highlightOffsets offset.
  */
+export function highlightSlot(colorOffset: number, highlight: number): number {
+  return (colorOffset + highlight) % ACCENTS.length;
+}
+
 export function highlightColors(accent: AccentId, multi: boolean, count: number): string[] {
   const start = Math.max(0, ACCENTS.findIndex((item) => item.id === accent));
   return Array.from({ length: count }, (_, i) => ACCENTS[(start + (multi ? i : 0)) % ACCENTS.length].color);

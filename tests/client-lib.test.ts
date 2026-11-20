@@ -12,14 +12,14 @@ import {
   type StickerVariant,
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
-import { ACCENTS, highlightColors, PAPERS } from "../shared/appearance.ts";
+import { ACCENTS, highlightColors, highlightSlot, PAPERS } from "../shared/appearance.ts";
 import { NOTE_LIMITS } from "../shared/note.ts";
 import { fetchPublishedNote } from "../src/api.ts";
 import { FORMULA_TEXT, GREEK_LETTERS, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
-import { parseContentLines, splitHighlights } from "../src/lib/segments.ts";
+import { highlightOffsets, parseContentLines, splitHighlights } from "../src/lib/segments.ts";
 import { sketchElements, spline } from "../src/lib/sketch.ts";
 import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } from "../src/lib/unicode-range.ts";
 import { DEFAULT_SETTINGS, sanitizeSettings } from "../src/state/settings.ts";
@@ -195,6 +195,16 @@ describe("highlightColors", () => {
 
   it("starts from the accent and wraps around the palette in a multi-color note", () => {
     expect(highlightColors("blue", true, 4)).toEqual([color("blue"), color("lavender"), color("yellow"), color("green")]);
+  });
+
+  it("continues the palette across sections instead of restarting per section", () => {
+    // Review regression: two phrases in section 0 and one in section 1 used to give the last two the same color.
+    const sections = [{ highlights: ["a", "b"] }, { highlights: ["c"] }, { highlights: [] }, { highlights: ["d", "e", "f", "g"] }];
+    const offsets = highlightOffsets(sections);
+    expect(offsets).toEqual([0, 2, 3, 3]);
+    const slots = sections.flatMap((section, s) => section.highlights.map((_, i) => highlightSlot(offsets[s], i)));
+    expect(slots).toEqual([0, 1, 2, 3, 4, 5, 0]);
+    expect(new Set(slots.slice(0, ACCENTS.length)).size).toBe(ACCENTS.length);
   });
 
   it("gives every highlight a section may hold a distinct color", () => {
