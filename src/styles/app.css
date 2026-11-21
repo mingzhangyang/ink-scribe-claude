@@ -2726,3 +2726,13 @@ a.brand {
 .diagram-selected-controls { display: flex; flex-direction: column; gap: 8px; }
 .diagram-shape-label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .diagram-shape-label input { min-height: 44px; min-width: 0; }
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.check-field input { flex: none; accent-color: var(--primary-bg); }

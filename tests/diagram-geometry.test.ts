@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DiagramBlockView } from "../src/components/note/DiagramBlock.tsx";
 import { PrimitiveEditor } from "../src/components/PrimitiveEditor.tsx";
 import { diagramArcPath, diagramLabelLayout } from "../src/diagrams/svg-geometry.ts";
-import { expandDiagram, inclineTextBounds, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
+import { expandDiagram, inclineTextBounds, segmentTouchesLabel, validDiagramBlocks, validDiagramPrimitive, type DiagramBlock, type DiagramPrimitive } from "../shared/diagram.ts";
 import { validatePublishRequest } from "../shared/publishing.ts";
 import {
   DIAGRAM_GRID, DIAGRAM_HISTORY_LIMIT, addShape, defaultShape, deleteShape,
@@ -237,24 +237,27 @@ describe("first shape edit preserves untouched template labels (review fix)", ()
   type Label = Extract<DiagramPrimitive, { type: "label" }>;
   const labels = (shapes: DiagramPrimitive[]) =>
     shapes.filter((shape): shape is Label => shape.type === "label");
-  const cases: { name: string; block: DiagramBlock; pick: (shape: DiagramPrimitive) => boolean }[] = [
+  const sine: DiagramBlock = { afterSection: 0, template: "coordinate-plane",
+    params: { grid: false, quadrants: "all", function: "sine" } };
+  // `move` must not newly cross any label: editShape deliberately reflows those (covered below).
+  const cases: { name: string; block: DiagramBlock; pick: (shape: DiagramPrimitive) => boolean; move?: [number, number] }[] = [
     { name: "number line axis", block: { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } },
       pick: (shape) => shape.type === "arrow" },
-    { name: "sine curve", block: { afterSection: 0, template: "coordinate-plane",
-      params: { grid: false, quadrants: "all", function: "sine" } }, pick: (shape) => shape.type === "polyline" },
+    // Moving the curve up would run it through "(π/2,1)" and "(π,0)"; sideways keeps every label clear.
+    { name: "sine curve", block: sine, pick: (shape) => shape.type === "polyline", move: [-25, 0] },
     { name: "axes x label", block: { afterSection: 0, template: "coordinate-plane",
       params: { grid: true, quadrants: "all" } }, pick: (shape) => shape.type === "label" && shape.text === "x" },
     { name: "inclined block", block: { afterSection: 0, template: "inclined-plane",
       params: { thetaDeg: 30, friction: true } }, pick: (shape) => shape.type === "rect" },
   ];
-  for (const { name, block, pick } of cases) {
+  for (const { name, block, pick, move = [0, -25] } of cases) {
     it(`moving the ${name} leaves every other primitive unchanged`, () => {
       const before = expandDiagram(block);
       const index = before.findIndex(pick);
       const target = before[index];
       const moved = target.type === "label"
         ? { ...target, at: [target.at[0] - 100, target.at[1] - 100] as [number, number] }
-        : moveShape(target, 0, -25);
+        : moveShape(target, move[0], move[1]);
       const result = editShape(block, index, moved);
       expect(result).not.toBe(block);
       const after = result.primitives!;
@@ -262,6 +265,22 @@ describe("first shape edit preserves untouched template labels (review fix)", ()
       before.forEach((shape, i) => { if (i !== index) expect(after[i], `${name} #${i}`).toEqual(shape); });
     });
   }
+
+  it("relocates only the labels a moved curve newly runs through, clear of the curve", () => {
+    const before = expandDiagram(sine);
+    const index = before.findIndex((shape) => shape.type === "polyline");
+    const after = editShape(sine, index, moveShape(before[index], 0, -25)).primitives!;
+    const curve = after[index];
+    if (curve.type !== "polyline") throw new Error("Expected polyline");
+    const touchesCurve = (label: Label) => curve.points.slice(1).some((to, i) =>
+      segmentTouchesLabel(curve.points[i], to, inclineTextBounds(label.text, diagramLabelLayout(label.at, label.text).at)));
+    const moved = before.flatMap((shape, i) => i !== index && JSON.stringify(shape) !== JSON.stringify(after[i])
+      ? [(shape as Label).text] : []);
+    expect(moved.sort()).toEqual(["(π,0)", "(π/2,1)"]);
+    for (const label of labels(after).filter((label) => moved.includes(label.text))) {
+      expect(touchesCurve(label), label.text).toBe(false);
+    }
+  });
 
   it("never stacks two number-line values onto one anchor after a nudge", () => {
     const block: DiagramBlock = { afterSection: 0, template: "number-line", params: { start: -5, end: 5, step: 1 } };

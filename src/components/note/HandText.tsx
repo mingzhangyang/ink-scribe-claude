@@ -1,6 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { hashString, mulberry32 } from "../../lib/random.ts";
 import { graphemes, parseContentLines, splitHighlights } from "../../lib/segments.ts";
+import { highlightSlot } from "../../config/appearance.ts";
 
 /** 超过该长度时按词而非按字抖动，控制 DOM 节点数量，保证拖拽与导出流畅。 */
 const PER_CHAR_LIMIT = 2_400;
@@ -26,12 +27,14 @@ function jitter(text: string, rand: () => number, perChar: boolean): ReactNode[]
 type HandTextProps = {
   text: string;
   highlights?: string[];
+  /** Note-wide index of this text's first highlight phrase, so multi-color highlights continue across sections. */
+  colorOffset?: number;
   seed: number;
   naturalness: number;
 };
 
 /** 单行或短文本：逐字轻微上下浮动，重点短语用荧光笔标记。 */
-export const HandText = memo(function HandText({ text, highlights = [], seed, naturalness }: HandTextProps) {
+export const HandText = memo(function HandText({ text, highlights = [], colorOffset = 0, seed, naturalness }: HandTextProps) {
   const runs = splitHighlights(text, highlights);
   const animate = naturalness > 0.02;
   const rand = mulberry32(seed ^ hashString(text));
@@ -43,7 +46,7 @@ export const HandText = memo(function HandText({ text, highlights = [], seed, na
         return run.highlight === null ? (
           <span key={i} data-fit-text>{content}</span>
         ) : (
-          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3}`} data-fit-text>
+          <mark key={i} className={`hl hl-${(run.highlight + (seed % 3)) % 3} hl-c${highlightSlot(colorOffset, run.highlight)}`} data-fit-text>
             {content}
           </mark>
         );
@@ -55,7 +58,7 @@ export const HandText = memo(function HandText({ text, highlights = [], seed, na
 type ContentProps = HandTextProps & { className?: string };
 
 /** 段落正文：识别列表行，每行独立抖动。 */
-export const HandContent = memo(function HandContent({ text, highlights = [], seed, naturalness, className }: ContentProps) {
+export const HandContent = memo(function HandContent({ text, highlights = [], colorOffset, seed, naturalness, className }: ContentProps) {
   const lines = parseContentLines(text);
   return (
     <div className={`hand-content ${className ?? ""}`}>
@@ -67,19 +70,19 @@ export const HandContent = memo(function HandContent({ text, highlights = [], se
           case "bullet":
             return (
               <p key={i} className="hand-line hand-bullet">
-                <HandText text={line.text} highlights={highlights} seed={lineSeed} naturalness={naturalness} />
+                <HandText text={line.text} highlights={highlights} colorOffset={colorOffset} seed={lineSeed} naturalness={naturalness} />
               </p>
             );
           case "numbered":
             return (
               <p key={i} className="hand-line hand-numbered" data-marker={line.marker}>
-                <HandText text={line.text} highlights={highlights} seed={lineSeed} naturalness={naturalness} />
+                <HandText text={line.text} highlights={highlights} colorOffset={colorOffset} seed={lineSeed} naturalness={naturalness} />
               </p>
             );
           default:
             return (
               <p key={i} className="hand-line">
-                <HandText text={line.text} highlights={highlights} seed={lineSeed} naturalness={naturalness} />
+                <HandText text={line.text} highlights={highlights} colorOffset={colorOffset} seed={lineSeed} naturalness={naturalness} />
               </p>
             );
         }

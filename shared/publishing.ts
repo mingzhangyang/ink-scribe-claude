@@ -164,6 +164,8 @@ const noteSchema = object({
 const appearanceProperties: Record<string, Schema> = {
   layout: choices(STYLES), paper: choices(ids(PAPERS)), zhFont: choices(ids(ZH_FONTS)), enFont: choices(ids(EN_FONTS)),
   ink: choices(ids(INKS)), accent: choices(ids(ACCENTS)), pageSize: choices(ids(PAGE_SIZES)),
+  multiHighlight: { type: "boolean",
+    description: "Color highlight phrases in note order through the accent palette, starting from accent; colors repeat only after the palette is used up. Defaults to false: every highlight uses accent." },
   fontSize: number(12, 28), lineHeight: number(1.3, 2.4), letterSpacing: number(-0.02, 0.15), naturalness: number(0, 1),
   doodleMode: { ...choices(["auto", "theme", "none"]), description: "auto uses note.doodleSpec or its built-in theme; theme uses appearance.doodleTheme; none hides illustrations." },
   doodleTheme: choices(DOODLE_THEMES),

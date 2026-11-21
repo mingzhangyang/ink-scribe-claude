@@ -205,6 +205,7 @@ export const zh = {
     inkLabel: "墨水颜色",
     accent: "荧光笔",
     accentLabel: "重点颜色",
+    multiHighlight: "每处重点用不同颜色",
     naturalness: "自然手写感",
     reseed: "换一种笔迹",
     reseedHint: "切换中英字体及笔画细节",

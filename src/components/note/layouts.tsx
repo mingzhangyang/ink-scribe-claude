@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { NoteStyle } from "../../../shared/options.ts";
+import { highlightOffsets } from "../../lib/segments.ts";
 import { blockJitter } from "./HandText.tsx";
 import {
   CueList,
@@ -20,6 +21,7 @@ import {
 
 function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   const numbers = headingNumbers(note.sections);
+  const offsets = highlightOffsets(note.sections);
   return (
     <div className="note-body layout-grid" data-fit>
       <header className="note-header" data-fit>
@@ -32,7 +34,7 @@ function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps)
       </aside>
       <main className="note-main" data-fit>
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
+          <SectionBlock key={i} section={section} index={i} colorOffset={offsets[i]} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       <footer className="note-footer">
@@ -53,6 +55,7 @@ function HybridCornell({ note, labels, seed, naturalness, doodle }: LayoutProps)
 
 function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps) {
   const numbers = headingNumbers(note.sections);
+  const offsets = highlightOffsets(note.sections);
   return (
     <div className="note-body layout-grid" data-fit>
       <header className="note-header" data-fit>
@@ -69,7 +72,7 @@ function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps
       <main className="note-main" data-fit>
         <div className="region-label">{labels.notes}</div>
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
+          <SectionBlock key={i} section={section} index={i} colorOffset={offsets[i]} number={numbers[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       <footer className="note-footer" data-fit>
@@ -84,6 +87,7 @@ function ClassicCornell({ note, labels, seed, naturalness, doodle }: LayoutProps
 }
 
 function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
+  const offsets = highlightOffsets(note.sections);
   return (
     <div className="note-body journal-body" data-fit>
       <header className="note-header journal-header" data-fit>
@@ -102,6 +106,7 @@ function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
             key={i}
             section={section}
             index={i}
+            colorOffset={offsets[i]}
             seed={seed}
             naturalness={Math.min(1, naturalness * 1.6)}
             diagrams={note.diagrams?.filter((d) => d.afterSection === i)}
@@ -125,6 +130,7 @@ function FreeJournal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
 }
 
 function Minimal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
+  const offsets = highlightOffsets(note.sections);
   return (
     <div className="note-body minimal-body" data-fit>
       <DoodleSlot doodle={doodle} seed={seed} naturalness={naturalness} className="doodle-corner" />
@@ -137,7 +143,7 @@ function Minimal({ note, labels, seed, naturalness, doodle }: LayoutProps) {
       </header>
       <main className="note-main minimal-main">
         {note.sections.map((section, i) => (
-          <SectionBlock key={i} section={section} index={i} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
+          <SectionBlock key={i} section={section} index={i} colorOffset={offsets[i]} seed={seed} naturalness={naturalness} diagrams={note.diagrams?.filter((d) => d.afterSection === i)} />
         ))}
       </main>
       {note.summary ? (

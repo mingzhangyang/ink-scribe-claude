@@ -124,6 +124,8 @@
 
 .note-page mark.hl {
   color: inherit;
+  /* Clear the browser's solid yellow <mark> fill so only the hand-drawn stroke below shows. */
+  background-color: transparent;
   padding: 0 0.1em;
   margin: 0 -0.04em;
   border-radius: 0.25em 0.1em 0.3em 0.12em;
@@ -131,8 +133,8 @@
   background-image: linear-gradient(
     100deg,
     transparent 0.12em,
-    color-mix(in srgb, var(--accent) 88%, transparent) 0.22em,
-    var(--accent) calc(100% - 0.25em),
+    color-mix(in srgb, var(--hl, var(--accent)) 88%, transparent) 0.22em,
+    var(--hl, var(--accent)) calc(100% - 0.25em),
     transparent calc(100% - 0.08em)
   );
   background-size: 100% 0.68em;
@@ -140,6 +142,15 @@
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+
+/* One rule per accent color: hl-cN is the phrase's note-wide highlight index mod the palette length.
+   NotePage sets --hl-N only for multi-color notes; otherwise every highlight falls back to the accent. */
+.note-page mark.hl-c0 { --hl: var(--hl-0, var(--accent)); }
+.note-page mark.hl-c1 { --hl: var(--hl-1, var(--accent)); }
+.note-page mark.hl-c2 { --hl: var(--hl-2, var(--accent)); }
+.note-page mark.hl-c3 { --hl: var(--hl-3, var(--accent)); }
+.note-page mark.hl-c4 { --hl: var(--hl-4, var(--accent)); }
+.note-page mark.hl-c5 { --hl: var(--hl-5, var(--accent)); }
 
 .note-page mark.hl-1 {
   background-size: 100% 0.56em;

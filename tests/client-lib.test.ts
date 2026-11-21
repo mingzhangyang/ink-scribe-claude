@@ -12,13 +12,14 @@ import {
   type StickerVariant,
 } from "../shared/stickers.ts";
 import { DOODLE_THEMES } from "../shared/themes.ts";
-import { PAPERS } from "../shared/appearance.ts";
+import { ACCENTS, highlightColors, highlightSlot, PAPERS } from "../shared/appearance.ts";
+import { NOTE_LIMITS } from "../shared/note.ts";
 import { fetchPublishedNote } from "../src/api.ts";
 import { FORMULA_TEXT, GREEK_LETTERS, layoutText, missingGlyphs } from "../src/stickers/art/glyphs.ts";
 import { effectiveScale, MAX_CANVAS_DIMENSION } from "../src/export/scale.ts";
 import { builtinDoodle } from "../src/doodles/library.ts";
 import { hashString, mulberry32, signedRandom } from "../src/lib/random.ts";
-import { parseContentLines, splitHighlights } from "../src/lib/segments.ts";
+import { highlightOffsets, parseContentLines, splitHighlights } from "../src/lib/segments.ts";
 import { sketchElements, spline } from "../src/lib/sketch.ts";
 import { codePointsOf, normalizeFamily, parseUnicodeRange, rangesIntersect } from "../src/lib/unicode-range.ts";
 import { DEFAULT_SETTINGS, sanitizeSettings } from "../src/state/settings.ts";
@@ -176,6 +177,40 @@ describe("sanitizeSettings", () => {
   it("keeps valid values and clamps numbers into range", () => {
     const settings = sanitizeSettings({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 99, naturalness: -1, seed: 42 });
     expect(settings).toMatchObject({ layout: "minimal", paper: "kraft", ink: "green", fontSize: 28, naturalness: 0, seed: 42 });
+  });
+
+  it("keeps multi-color highlights off unless explicitly enabled", () => {
+    expect(DEFAULT_SETTINGS.multiHighlight).toBe(false);
+    expect(sanitizeSettings({ multiHighlight: true }).multiHighlight).toBe(true);
+    expect(sanitizeSettings({ multiHighlight: "yes" }).multiHighlight).toBe(false);
+  });
+});
+
+describe("highlightColors", () => {
+  const color = (id: string) => ACCENTS.find((accent) => accent.id === id)!.color;
+
+  it("uses the accent for every highlight in a single-color note", () => {
+    expect(highlightColors("pink", false, 3)).toEqual([color("pink"), color("pink"), color("pink")]);
+  });
+
+  it("starts from the accent and wraps around the palette in a multi-color note", () => {
+    expect(highlightColors("blue", true, 4)).toEqual([color("blue"), color("lavender"), color("yellow"), color("green")]);
+  });
+
+  it("continues the palette across sections instead of restarting per section", () => {
+    // Review regression: two phrases in section 0 and one in section 1 used to give the last two the same color.
+    const sections = [{ highlights: ["a", "b"] }, { highlights: ["c"] }, { highlights: [] }, { highlights: ["d", "e", "f", "g"] }];
+    const offsets = highlightOffsets(sections);
+    expect(offsets).toEqual([0, 2, 3, 3]);
+    const slots = sections.flatMap((section, s) => section.highlights.map((_, i) => highlightSlot(offsets[s], i)));
+    expect(slots).toEqual([0, 1, 2, 3, 4, 5, 0]);
+    expect(new Set(slots.slice(0, ACCENTS.length)).size).toBe(ACCENTS.length);
+  });
+
+  it("gives every highlight a section may hold a distinct color", () => {
+    // Colors cycle through the palette, so a section's highlights only all differ if the palette is long enough.
+    expect(ACCENTS.length).toBeGreaterThanOrEqual(NOTE_LIMITS.maxHighlights);
+    expect(new Set(highlightColors("yellow", true, NOTE_LIMITS.maxHighlights)).size).toBe(NOTE_LIMITS.maxHighlights);
   });
 });
 

@@ -113,6 +113,7 @@ export function SectionBlock({
   section,
   index,
   number,
+  colorOffset,
   seed,
   naturalness,
   className,
@@ -122,6 +123,8 @@ export function SectionBlock({
   index: number;
   /** 小标题前的序号；不传则不显示。 */
   number?: number;
+  /** From highlightOffsets: how many highlight phrases precede this section in the note. */
+  colorOffset: number;
   seed: number;
   naturalness: number;
   className?: string;
@@ -136,7 +139,7 @@ export function SectionBlock({
           <HandText text={section.heading} seed={s + 1} naturalness={naturalness} />
         </h2>
       ) : null}
-      <HandContent text={section.content} highlights={section.highlights} seed={s + 2} naturalness={naturalness} />
+      <HandContent text={section.content} highlights={section.highlights} colorOffset={colorOffset} seed={s + 2} naturalness={naturalness} />
       {diagrams?.map((block, i) => <DiagramBlockView key={i} block={block} seed={s + i * 271} />)}
     </section>
   );
